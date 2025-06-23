@@ -6,3 +6,4 @@ lib/
 .npmrc
 .env
 .env.local
+package-lock.json
