@@ -154,7 +154,7 @@ export class AutoEventsManager {
   }
 
   /**
-   * Handle app coming to foreground
+   * Handle app coming to foreground (optimized - less noise)
    */
   async handleAppForeground(): Promise<void> {
     try {
@@ -166,12 +166,9 @@ export class AutoEventsManager {
           await this.endSession();
           await this.startSession();
         } else {
-          // Resume existing session
+          // Resume existing session - just update activity time, don't track event
           this.currentSession.lastActivity = Date.now();
-          await this.trackEvent('app_foreground', {
-            session_id: this.currentSession.sessionId,
-            time_in_background_ms: timeSinceLastActivity,
-          });
+          debugLog('Session resumed after', timeSinceLastActivity, 'ms');
         }
       } else {
         // No active session, start new one
@@ -183,15 +180,14 @@ export class AutoEventsManager {
   }
 
   /**
-   * Handle app going to background
+   * Handle app going to background (optimized - less noise)
    */
   async handleAppBackground(): Promise<void> {
     try {
       if (this.currentSession) {
-        await this.trackEvent('app_background', {
-          session_id: this.currentSession.sessionId,
-          session_duration_ms: Date.now() - this.currentSession.startTime,
-        });
+        // Just update last activity time - don't track background event
+        this.currentSession.lastActivity = Date.now();
+        debugLog('App backgrounded, session updated');
       }
     } catch (error) {
       errorLog('Error handling app background:', error as Error);

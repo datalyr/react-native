@@ -62,66 +62,71 @@ export class DatalyrSDK {
   }
 
   /**
-   * Initialize the SDK
+   * Initialize the SDK with configuration
    */
   async initialize(config: DatalyrConfig): Promise<void> {
     try {
-      debugLog('Initializing Datalyr SDK...', config);
+      debugLog('Initializing Datalyr SDK...', { workspaceId: config.workspaceId });
 
-      // Validate required config
+      // Validate configuration
       if (!config.workspaceId) {
         throw new Error('workspaceId is required');
       }
 
-      // Update configuration
+      // Set up configuration
       this.state.config = { ...this.state.config, ...config };
 
-      // Set up HTTP client with new config
-      this.httpClient = createHttpClient(this.state.config.endpoint!, {
-        maxRetries: this.state.config.maxRetries,
-        retryDelay: this.state.config.retryDelay,
-        timeout: 15000,
-      });
+      // Initialize HTTP client
+      this.httpClient = new HttpClient(this.state.config.endpoint!);
 
-      // Set up event queue
-      this.eventQueue = createEventQueue(this.httpClient, {
-        maxQueueSize: this.state.config.maxQueueSize,
-        batchSize: this.state.config.batchSize,
+      // Initialize event queue
+      this.eventQueue = new EventQueue(this.httpClient, {
+        maxSize: this.state.config.maxEventQueueSize,
         flushInterval: this.state.config.flushInterval,
-        maxRetryCount: this.state.config.maxRetries,
+        retryConfig: this.state.config.retryConfig,
       });
 
-      // Initialize identifiers
+      // Initialize visitor ID and session
       this.state.visitorId = await getOrCreateVisitorId();
       this.state.sessionId = await getOrCreateSessionId();
-
-      // Initialize attribution manager
-      await attributionManager.initialize();
-
-      // Initialize automatic events manager
-      this.autoEventsManager = createAutoEventsManager(
-        async (eventName: string, properties: Record<string, any>) => {
-          await this.track(eventName, properties);
-        },
-        {
-          trackSessions: this.state.config.autoEvents?.trackSessions ?? true,
-          trackScreenViews: this.state.config.autoEvents?.trackScreenViews ?? true,
-          trackAppUpdates: this.state.config.autoEvents?.trackAppUpdates ?? true,
-          trackPerformance: this.state.config.autoEvents?.trackPerformance ?? true,
-          sessionTimeoutMs: this.state.config.autoEvents?.sessionTimeoutMs ?? 30 * 60 * 1000,
-        }
-      );
-      await this.autoEventsManager.initialize();
 
       // Load persisted user data
       await this.loadPersistedUserData();
 
-      // Set up app state monitoring
-      this.setupAppStateMonitoring();
+      // Initialize attribution manager
+      if (this.state.config.enableAttribution) {
+        await attributionManager.initialize(this.state.config.workspaceId);
+      }
 
-      // Track initialization and install if first launch
-      if (attributionManager.isInstall()) {
-        const installData = await attributionManager.trackInstall();
+      // Initialize auto-events manager (asynchronously to avoid blocking)
+      if (this.state.config.enableAutoEvents) {
+        this.autoEventsManager = new AutoEventsManager(
+          this.track.bind(this),
+          this.state.config.autoEventConfig
+        );
+        
+        // Initialize auto-events asynchronously to prevent blocking
+        setTimeout(async () => {
+          try {
+            await this.autoEventsManager?.initialize();
+          } catch (error) {
+            errorLog('Error initializing auto-events (non-blocking):', error as Error);
+          }
+        }, 100); // Small delay to ensure main thread isn't blocked
+      }
+
+      // Set up app state monitoring (also asynchronous)
+      setTimeout(() => {
+        try {
+          this.setupAppStateMonitoring();
+        } catch (error) {
+          errorLog('Error setting up app state monitoring (non-blocking):', error as Error);
+        }
+      }, 50);
+
+      // Check for app install/update
+      const installData = await this.checkAppInstallOrUpdate();
+      if (installData.isFirstLaunch) {
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
           sdk_version: '1.0.0',
@@ -129,11 +134,7 @@ export class DatalyrSDK {
         });
       }
 
-      // Track initialization
-      await this.track('sdk_initialized', {
-        platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-        sdk_version: '1.0.0',
-      });
+      // SDK initialized successfully (no need to track this event)
 
       this.state.initialized = true;
       debugLog('Datalyr SDK initialized successfully', {
@@ -463,30 +464,29 @@ export class DatalyrSDK {
   }
 
   /**
-   * Set up app state monitoring for lifecycle events
+   * Set up app state monitoring for lifecycle events (optimized)
    */
   private setupAppStateMonitoring(): void {
     try {
-      // Track current app state
-      this.track('app_state_change', {
-        app_state: AppState.currentState,
-      });
-
-      // Listen for app state changes
+      // Listen for app state changes (without tracking every change)
       this.appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
         debugLog('App state changed:', nextAppState);
         
-        this.track('app_state_change', {
-          app_state: nextAppState,
-        });
-
-        // Handle app backgrounding/foregrounding
+        // Only handle meaningful state changes for session management
         if (nextAppState === 'background') {
           // Flush events before going to background
           this.flush();
+          // Notify auto-events manager for session handling
+          if (this.autoEventsManager) {
+            this.autoEventsManager.handleAppBackground();
+          }
         } else if (nextAppState === 'active') {
           // App became active, ensure we have fresh session if needed
           this.refreshSession();
+          // Notify auto-events manager for session handling
+          if (this.autoEventsManager) {
+            this.autoEventsManager.handleAppForeground();
+          }
         }
       });
 
