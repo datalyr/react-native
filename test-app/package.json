@@ -1,0 +1,30 @@
+{
+  "name": "datalyr-sdk-test",
+  "version": "1.0.11",
+  "description": "Test application for the Datalyr React Native SDK - demonstrates attribution tracking + automatic events",
+  "main": "index.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/datalyr/react-native-sdk.git",
+    "directory": "datalyr-sdk-test"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@datalyr/react-native-sdk": "^1.0.11",
+    "expo": "~53.0.12",
+    "expo-status-bar": "~2.2.3",
+    "react": "19.0.0",
+    "react-native": "0.79.4"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "~19.0.10",
+    "typescript": "~5.8.3"
+  },
+  "private": true
+}
