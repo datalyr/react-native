@@ -1,7 +1,12 @@
 // Main entry point for React Native CLI
 // Import this with: import { datalyr } from '@datalyr/react-native-sdk';
 
-export { DatalyrSDK as datalyr } from './datalyr-sdk';
+import { DatalyrSDK } from './datalyr-sdk';
+
+// Create singleton instance for easy usage
+export const datalyr = new DatalyrSDK();
+
+// Export types and utilities
 export * from './types';
 export { attributionManager } from './attribution';
 export { createAutoEventsManager, AutoEventsManager } from './auto-events';
@@ -11,6 +16,8 @@ export * from './utils';
 export * from './http-client';
 export * from './event-queue';
 
-// Default export for compatibility
-import { DatalyrSDK } from './datalyr-sdk';
+// Also export the class for advanced usage
+export { DatalyrSDK };
+
+// Default export for compatibility  
 export default DatalyrSDK; 

@@ -15,7 +15,7 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
-import Datalyr from '@datalyr/react-native-sdk';
+import { datalyr } from '@datalyr/react-native-sdk';
 
 const App: React.FC = () => {
   const [sdkStatus, setSdkStatus] = useState<any>(null);
@@ -28,7 +28,7 @@ const App: React.FC = () => {
   const initializeDatalyr = async () => {
     try {
       // Initialize with your workspace ID
-      await Datalyr.initialize({
+      await datalyr.initialize({
         workspaceId: 'ozLZblQ8hN', // Replace with your actual workspace ID
         debug: true, // Enable debug logging
       });
@@ -37,7 +37,7 @@ const App: React.FC = () => {
       updateStatus();
       
       // Track app launch
-      await Datalyr.track('app_launch', {
+      await datalyr.track('app_launch', {
         app_version: '1.0.0',
         platform: 'react-native',
       });
@@ -50,13 +50,13 @@ const App: React.FC = () => {
   };
 
   const updateStatus = () => {
-    const status = Datalyr.getStatus();
+    const status = datalyr.getStatus();
     setSdkStatus(status);
   };
 
   const trackPurchase = async () => {
     try {
-      await Datalyr.track('purchase', {
+      await datalyr.track('purchase', {
         value: 29.99,
         currency: 'USD',
         item_id: 'product_123',
@@ -79,11 +79,11 @@ const App: React.FC = () => {
         user_type: 'premium',
       });
       
-      Alert.alert('Success', 'Screen view tracked!');
+      Alert.alert('Success', 'Pageview tracked!');
       updateStatus();
     } catch (error) {
-      console.error('Error tracking screen view:', error);
-      Alert.alert('Error', 'Failed to track screen view');
+      console.error('Error tracking pageview:', error);
+      Alert.alert('Error', 'Failed to track pageview');
     }
   };
 
@@ -166,7 +166,7 @@ const App: React.FC = () => {
           />
           
           <Button
-            title="Track Screen View"
+            title="Track Pageview"
             onPress={trackScreenView}
             disabled={!isInitialized}
           />

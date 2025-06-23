@@ -45,7 +45,7 @@ export declare class AutoEventsManager {
      */
     handleAppBackground(): Promise<void>;
     /**
-     * Track automatic screen view
+     * Track automatic pageview
      */
     trackScreenView(screenName: string, properties?: Record<string, any>): Promise<void>;
     /**

@@ -43,7 +43,7 @@
 ### **📊 Automatic Events (Like Mixpanel)**
 - ✅ **Session Tracking** (`session_start`, `session_end`)
 - ✅ **App Lifecycle** (`app_foreground`, `app_background`)
-- ✅ **Screen Views** (Automatic `screen_view` events)
+- ✅ **Screen Views** (Automatic `pageviews` events)
 - ✅ **App Install** (First launch detection)
 - ✅ **App Updates** (Version change detection)
 - ✅ **Performance** (`app_launch_performance`)
@@ -102,7 +102,7 @@ await datalyr.track('purchase', {
 // Automatic events happen behind the scenes:
 // ✅ session_start (automatic)
 // ✅ app_install (automatic)
-// ✅ screen_view (automatic)
+// ✅ pageviews (automatic)
 // ✅ app_foreground (automatic)
 // ✅ session_end (automatic)
 ```
@@ -124,7 +124,7 @@ await datalyr.track('app_foreground', { /* manual data */ });
 ```typescript
 // SDK tracks automatically
 // ✅ session_start (automatic)
-// ✅ screen_view: Home (automatic)  
+// ✅ pageviews: Home (automatic)  
 // ✅ app_foreground (automatic)
 // 😎 Consistent, complete data out-of-the-box
 ```

@@ -112,7 +112,7 @@ export class AutoEventsManager {
         session_id: this.currentSession.sessionId,
         duration_ms: duration,
         duration_seconds: Math.round(duration / 1000),
-        screen_views: this.currentSession.screenViews,
+        pageviews: this.currentSession.screenViews,
         events: this.currentSession.events,
         timestamp: now,
       });
@@ -195,7 +195,7 @@ export class AutoEventsManager {
   }
 
   /**
-   * Track automatic screen view
+   * Track automatic pageview
    */
   async trackScreenView(screenName: string, properties?: Record<string, any>): Promise<void> {
     try {
@@ -215,13 +215,13 @@ export class AutoEventsManager {
       if (this.currentSession) {
         this.currentSession.screenViews++;
         screenProperties.session_id = this.currentSession.sessionId;
-        screenProperties.screen_views_in_session = this.currentSession.screenViews;
+        screenProperties.pageviews_in_session = this.currentSession.screenViews;
       }
 
-      await this.trackEvent('screen_view', screenProperties);
+      await this.trackEvent('pageviews', screenProperties);
       
       this.lastScreenName = screenName;
-      debugLog('Screen view tracked:', screenName);
+      debugLog('Pageview tracked:', screenName);
 
     } catch (error) {
       errorLog('Error tracking screen view:', error as Error);

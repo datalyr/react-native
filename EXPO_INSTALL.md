@@ -96,7 +96,7 @@ mkdir -p src/datalyr-sdk
 // App.tsx
 import React, { useEffect } from 'react';
 import 'react-native-get-random-values'; // Important: Must be imported first
-import DatalyrExpoSDK from './src/datalyr-sdk';
+import { datalyr } from '@datalyr/react-native-sdk';
 
 const App: React.FC = () => {
   useEffect(() => {
@@ -260,7 +260,7 @@ Events will appear in your Datalyr dashboard with `source: 'mobile_app'`:
 **🔥 Automatic Events:**
 - `session_start` - New user session (automatic)
 - `session_end` - Session ended with stats (automatic)  
-- `screen_view` - Screen navigation (automatic)
+- `pageviews` - Screen navigation (automatic)
 - `app_install` - First app launch with attribution (automatic)
 - `app_update` - App version changes (automatic)
 - `app_foreground`/`app_background` - App lifecycle (automatic)

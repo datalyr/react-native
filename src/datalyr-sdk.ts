@@ -193,7 +193,7 @@ export class DatalyrSDK {
       ...properties,
     };
 
-    await this.track('screen_view', screenData);
+    await this.track('pageviews', screenData);
 
     // Also notify auto-events manager for automatic screen tracking
     if (this.autoEventsManager) {

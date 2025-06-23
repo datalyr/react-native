@@ -93,7 +93,7 @@ export default function AutoEventsExample() {
       navigation_method: 'button_press',
     });
     
-    addAutoEvent(`📺 Screen View: ${screenName} (automatic)`);
+    addAutoEvent(`📺 Pageview: ${screenName} (automatic)`);
     updateSessionInfo();
   };
 
@@ -179,7 +179,7 @@ export default function AutoEventsExample() {
                   Duration: {Math.round((Date.now() - sessionInfo.startTime) / 1000)}s
                 </Text>
                 <Text style={styles.infoText}>
-                  Screen Views: {sessionInfo.screenViews}
+                  Pageviews: {sessionInfo.screenViews}
                 </Text>
                 <Text style={styles.infoText}>
                   Events: {sessionInfo.events}
@@ -267,7 +267,7 @@ export default function AutoEventsExample() {
           <View style={styles.featureList}>
             <Text style={styles.featureItem}>✅ Session Start/End</Text>
             <Text style={styles.featureItem}>✅ App Foreground/Background</Text>
-            <Text style={styles.featureItem}>✅ Screen Views</Text>
+            <Text style={styles.featureItem}>✅ Pageviews</Text>
             <Text style={styles.featureItem}>✅ App Install Detection</Text>
             <Text style={styles.featureItem}>✅ App Updates</Text>
             <Text style={styles.featureItem}>✅ App Launch Performance</Text>

@@ -52,7 +52,7 @@ cp -r docs/mobile/react-native/src/* src/datalyr-sdk/
 ```typescript
 // App.tsx or your main component
 import React, { useEffect } from 'react';
-import Datalyr from './src/datalyr-sdk';
+import { datalyr } from '@datalyr/react-native-sdk';
 
 const App: React.FC = () => {
   useEffect(() => {
@@ -61,7 +61,7 @@ const App: React.FC = () => {
 
   const initializeDatalyr = async () => {
     try {
-      await Datalyr.initialize({
+      await datalyr.initialize({
         workspaceId: 'ozLZblQ8hN', // Your workspace ID
         debug: true,
         autoEvents: {
@@ -74,7 +74,7 @@ const App: React.FC = () => {
       });
       
       // Manual events still work (but many are now automatic!)
-      await Datalyr.track('app_launch');
+      await datalyr.track('app_launch');
       
       console.log('Datalyr SDK initialized with auto-events!');
     } catch (error) {
@@ -92,27 +92,27 @@ const App: React.FC = () => {
 // Test tracking events
 const testTracking = async () => {
   // Track a purchase
-  await Datalyr.track('purchase', {
+  await datalyr.track('purchase', {
     value: 29.99,
     currency: 'USD',
     item_id: 'test_product'
   });
 
   // Identify a user
-  await Datalyr.identify('user_123', {
+  await datalyr.identify('user_123', {
     email: 'test@example.com',
     name: 'Test User'
   });
 
   // Track screen view
-  await Datalyr.screen('home_screen');
+  await datalyr.screen('home_screen');
 };
 ```
 
 ## 🔧 Configuration Options
 
 ```typescript
-await Datalyr.initialize({
+await datalyr.initialize({
   workspaceId: 'your-workspace-id',     // Required
   debug: true,                          // Enable debug logs
   endpoint: 'custom-endpoint',          // Optional custom endpoint
@@ -208,7 +208,7 @@ const googleUrl = 'yourappscheme://open?utm_source=google&utm_medium=search&utm_
 const partnerUrl = 'yourappscheme://open?utm_source=partner&partner_id=partner123&affiliate_id=aff456&lyr=partner_campaign_q4';
 
 // Get attribution data
-const attributionData = Datalyr.getAttributionData();
+const attributionData = datalyr.getAttributionData();
 console.log('Attribution:', attributionData);
 /*
 Expected output:
@@ -236,7 +236,7 @@ Look for events with `source: 'mobile_app'` to confirm mobile tracking is workin
 **🔥 Automatic Events (No Code Required!):**
 - `session_start` - User starts a new session (automatic)
 - `session_end` - User ends session with duration/stats (automatic)
-- `screen_view` - User navigates between screens (automatic)
+- `pageviews` - User navigates between screens (automatic)
 - `app_install` - First time app opens with attribution (automatic)
 - `app_update` - App version changes (automatic)
 - `app_foreground` - App becomes active (automatic)
@@ -253,14 +253,14 @@ Look for events with `source: 'mobile_app'` to confirm mobile tracking is workin
 
 ```typescript
 // Check SDK status
-const status = Datalyr.getStatus();
+const status = datalyr.getStatus();
 console.log('SDK Status:', status);
 
 // Manually flush events
-await Datalyr.flush();
+await datalyr.flush();
 
 // Enable debug mode
-await Datalyr.initialize({
+await datalyr.initialize({
   workspaceId: 'your-workspace-id',
   debug: true  // This will show detailed logs
 });

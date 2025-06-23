@@ -6,6 +6,15 @@
 
 ---
 
+## 🚨 Migration Notice (v1.0.3)
+
+**Important Update**: Screen tracking events have been renamed for web analytics consistency:
+- `screen_view` → `pageviews` 
+- This ensures mobile and web analytics use the same event names
+- **Action Required**: Update any custom analytics queries or dashboards that reference `screen_view` events
+
+---
+
 ## 🚀 Quick Start
 
 **Choose your framework:**
@@ -38,7 +47,7 @@
 ```typescript
 // No manual tracking required - events happen automatically!
 // ✅ session_start / session_end
-// ✅ screen_view (automatic screen tracking)
+// ✅ pageviews (automatic screen tracking)
 // ✅ app_foreground / app_background  
 // ✅ app_install (with attribution data)
 // ✅ app_update (version changes)
@@ -110,7 +119,7 @@ Events appear in your Datalyr dashboard with `source: 'mobile_app'`:
 ### **🔥 Automatic Events (Zero Code)**
 - `session_start` - User starts new session with attribution
 - `session_end` - Session ends with duration and screen count  
-- `screen_view` - User navigates between screens
+- `pageviews` - User navigates between screens
 - `app_install` - First app launch with full attribution
 - `app_update` - App version changes
 - `app_foreground` - App becomes active
