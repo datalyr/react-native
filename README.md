@@ -146,7 +146,7 @@ Events appear in your Datalyr dashboard with `source: 'mobile_app'`:
 ### **🔥 Automatic Events (Zero Code)**
 - `session_start` - User starts new session with attribution
 - `session_end` - Session ends with duration and screen count  
-- `pageviews` - User navigates between screens
+- `pageview` - User navigates between screens
 - `app_install` - First app launch with full attribution
 - `app_update` - App version changes
 - `app_foreground` - App becomes active
