@@ -1,0 +1,248 @@
+/**
+ * Datalyr React Native SDK Example
+ * 
+ * This example shows how to integrate the Datalyr SDK into a React Native app
+ * for mobile attribution and event tracking.
+ */
+
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Button,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  StatusBar,
+} from 'react-native';
+import Datalyr from '@datalyr/react-native-sdk';
+
+const App: React.FC = () => {
+  const [sdkStatus, setSdkStatus] = useState<any>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  useEffect(() => {
+    initializeDatalyr();
+  }, []);
+
+  const initializeDatalyr = async () => {
+    try {
+      // Initialize with your workspace ID
+      await Datalyr.initialize({
+        workspaceId: 'ozLZblQ8hN', // Replace with your actual workspace ID
+        debug: true, // Enable debug logging
+      });
+      
+      setIsInitialized(true);
+      updateStatus();
+      
+      // Track app launch
+      await Datalyr.track('app_launch', {
+        app_version: '1.0.0',
+        platform: 'react-native',
+      });
+      
+      console.log('Datalyr SDK initialized successfully!');
+    } catch (error) {
+      console.error('Failed to initialize Datalyr SDK:', error);
+      Alert.alert('Error', 'Failed to initialize Datalyr SDK');
+    }
+  };
+
+  const updateStatus = () => {
+    const status = Datalyr.getStatus();
+    setSdkStatus(status);
+  };
+
+  const trackPurchase = async () => {
+    try {
+      await Datalyr.track('purchase', {
+        value: 29.99,
+        currency: 'USD',
+        item_id: 'product_123',
+        item_name: 'Premium Subscription',
+        category: 'subscription',
+      });
+      
+      Alert.alert('Success', 'Purchase event tracked!');
+      updateStatus();
+    } catch (error) {
+      console.error('Error tracking purchase:', error);
+      Alert.alert('Error', 'Failed to track purchase');
+    }
+  };
+
+  const trackScreenView = async () => {
+    try {
+      await Datalyr.screen('home_screen', {
+        section: 'main',
+        user_type: 'premium',
+      });
+      
+      Alert.alert('Success', 'Screen view tracked!');
+      updateStatus();
+    } catch (error) {
+      console.error('Error tracking screen view:', error);
+      Alert.alert('Error', 'Failed to track screen view');
+    }
+  };
+
+  const identifyUser = async () => {
+    try {
+      await Datalyr.identify('user_12345', {
+        email: 'user@example.com',
+        name: 'John Doe',
+        plan: 'premium',
+        signup_date: new Date().toISOString(),
+      });
+      
+      Alert.alert('Success', 'User identified!');
+      updateStatus();
+    } catch (error) {
+      console.error('Error identifying user:', error);
+      Alert.alert('Error', 'Failed to identify user');
+    }
+  };
+
+  const flushEvents = async () => {
+    try {
+      await Datalyr.flush();
+      Alert.alert('Success', 'Events flushed!');
+      updateStatus();
+    } catch (error) {
+      console.error('Error flushing events:', error);
+      Alert.alert('Error', 'Failed to flush events');
+    }
+  };
+
+  const resetUser = async () => {
+    try {
+      await Datalyr.reset();
+      Alert.alert('Success', 'User data reset!');
+      updateStatus();
+    } catch (error) {
+      console.error('Error resetting user:', error);
+      Alert.alert('Error', 'Failed to reset user');
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Datalyr SDK Example</Text>
+        
+        <View style={styles.statusContainer}>
+          <Text style={styles.statusTitle}>SDK Status:</Text>
+          <Text style={styles.statusText}>
+            Initialized: {isInitialized ? '✅' : '❌'}
+          </Text>
+          {sdkStatus && (
+            <>
+              <Text style={styles.statusText}>
+                Workspace: {sdkStatus.workspaceId}
+              </Text>
+              <Text style={styles.statusText}>
+                Visitor ID: {sdkStatus.visitorId.substring(0, 8)}...
+              </Text>
+              <Text style={styles.statusText}>
+                Session ID: {sdkStatus.sessionId.substring(0, 12)}...
+              </Text>
+              <Text style={styles.statusText}>
+                User ID: {sdkStatus.currentUserId || 'Not set'}
+              </Text>
+              <Text style={styles.statusText}>
+                Queue Size: {sdkStatus.queueStats?.queueSize || 0}
+              </Text>
+            </>
+          )}
+        </View>
+
+        <View style={styles.buttonContainer}>
+          <Button
+            title="Track Purchase Event"
+            onPress={trackPurchase}
+            disabled={!isInitialized}
+          />
+          
+          <Button
+            title="Track Screen View"
+            onPress={trackScreenView}
+            disabled={!isInitialized}
+          />
+          
+          <Button
+            title="Identify User"
+            onPress={identifyUser}
+            disabled={!isInitialized}
+          />
+          
+          <Button
+            title="Flush Events"
+            onPress={flushEvents}
+            disabled={!isInitialized}
+          />
+          
+          <Button
+            title="Reset User Data"
+            onPress={resetUser}
+            disabled={!isInitialized}
+          />
+          
+          <Button
+            title="Refresh Status"
+            onPress={updateStatus}
+            disabled={!isInitialized}
+          />
+        </View>
+      </ScrollView>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 30,
+    color: '#333',
+  },
+  statusContainer: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  statusTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  statusText: {
+    fontSize: 14,
+    marginBottom: 5,
+    color: '#666',
+    fontFamily: 'monospace',
+  },
+  buttonContainer: {
+    gap: 10,
+  },
+});
+
+export default App; 

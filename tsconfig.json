@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "lib": ["ES2018"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "lib",
+    "rootDir": "src",
+    "jsx": "react-native",
+    "typeRoots": [
+      "node_modules/@types",
+      "src/types"
+    ]
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "lib",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "src/utils-expo.ts",
+    "src/expo.ts"
+  ]
+} 

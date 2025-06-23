@@ -1,0 +1,89 @@
+{
+  "name": "@datalyr/react-native-sdk",
+  "version": "1.0.0",
+  "description": "Mobile attribution + automatic events for React Native & Expo - Like Mixpanel's automatic events + better attribution than any competitor",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest",
+    "lint": "eslint src --ext .ts,.tsx",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "lib/",
+    "src/",
+    "*.md",
+    "examples/"
+  ],
+  "keywords": [
+    "react-native",
+    "expo",
+    "analytics",
+    "attribution",
+    "tracking",
+    "mobile",
+    "datalyr",
+    "mixpanel",
+    "automatic-events",
+    "session-tracking",
+    "utm-tracking",
+    "facebook-attribution",
+    "tiktok-attribution",
+    "google-attribution"
+  ],
+  "author": "Datalyr",
+  "license": "MIT",
+  "homepage": "https://datalyr.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/datalyr/datalyr-mobile-sdk.git"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0",
+    "react-native": ">=0.80.0"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "react-native-get-random-values": "^1.11.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "jest": "^30.0.0",
+    "typescript": "^5.7.0"
+  },
+  "react-native": "src/index.ts",
+  "exports": {
+    ".": {
+      "react-native": "./src/index.ts",
+      "default": "./lib/index.js"
+    },
+    "./expo": {
+      "react-native": "./src/expo.ts",
+      "default": "./lib/expo.js"
+    }
+  },
+  "peerDependenciesMeta": {
+    "expo": {
+      "optional": true
+    },
+    "expo-device": {
+      "optional": true
+    },
+    "expo-application": {
+      "optional": true
+    },
+    "expo-network": {
+      "optional": true
+    },
+    "expo-tracking-transparency": {
+      "optional": true
+    }
+  }
+}
