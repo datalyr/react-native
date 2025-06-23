@@ -37,11 +37,11 @@ export declare class AutoEventsManager {
      */
     private setupSessionMonitoring;
     /**
-     * Handle app coming to foreground
+     * Handle app coming to foreground (optimized - less noise)
      */
     handleAppForeground(): Promise<void>;
     /**
-     * Handle app going to background
+     * Handle app going to background (optimized - less noise)
      */
     handleAppBackground(): Promise<void>;
     /**

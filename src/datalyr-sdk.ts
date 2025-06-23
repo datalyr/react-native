@@ -77,13 +77,18 @@ export class DatalyrSDK {
       this.state.config = { ...this.state.config, ...config };
 
       // Initialize HTTP client
-      this.httpClient = new HttpClient(this.state.config.endpoint!);
+      this.httpClient = new HttpClient(this.state.config.endpoint!, {
+        maxRetries: this.state.config.maxRetries || 3,
+        retryDelay: this.state.config.retryDelay || 1000,
+        timeout: 15000,
+      });
 
       // Initialize event queue
       this.eventQueue = new EventQueue(this.httpClient, {
-        maxSize: this.state.config.maxEventQueueSize,
-        flushInterval: this.state.config.flushInterval,
-        retryConfig: this.state.config.retryConfig,
+        maxQueueSize: this.state.config.maxQueueSize || 100,
+        batchSize: this.state.config.batchSize || 10,
+        flushInterval: this.state.config.flushInterval || 30000,
+        maxRetryCount: this.state.config.maxRetries || 3,
       });
 
       // Initialize visitor ID and session
@@ -95,7 +100,7 @@ export class DatalyrSDK {
 
       // Initialize attribution manager
       if (this.state.config.enableAttribution) {
-        await attributionManager.initialize(this.state.config.workspaceId);
+        await attributionManager.initialize();
       }
 
       // Initialize auto-events manager (asynchronously to avoid blocking)
@@ -124,9 +129,9 @@ export class DatalyrSDK {
         }
       }, 50);
 
-      // Check for app install/update
-      const installData = await this.checkAppInstallOrUpdate();
-      if (installData.isFirstLaunch) {
+      // Check for app install
+      if (attributionManager.isInstall()) {
+        const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
           sdk_version: '1.0.0',

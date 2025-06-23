@@ -9,7 +9,7 @@ export declare class DatalyrSDK {
     private appStateSubscription;
     constructor();
     /**
-     * Initialize the SDK
+     * Initialize the SDK with configuration
      */
     initialize(config: DatalyrConfig): Promise<void>;
     /**
@@ -89,7 +89,7 @@ export declare class DatalyrSDK {
      */
     private persistUserData;
     /**
-     * Set up app state monitoring for lifecycle events
+     * Set up app state monitoring for lifecycle events (optimized)
      */
     private setupAppStateMonitoring;
     /**

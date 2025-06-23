@@ -8,14 +8,23 @@ export interface AutoEventConfig {
 export interface DatalyrConfig {
     workspaceId: string;
     debug?: boolean;
+    apiUrl?: string;
     endpoint?: string;
     maxRetries?: number;
     retryDelay?: number;
     batchSize?: number;
     flushInterval?: number;
     maxQueueSize?: number;
+    maxEventQueueSize?: number;
     respectDoNotTrack?: boolean;
+    enableAutoEvents?: boolean;
+    enableAttribution?: boolean;
     autoEvents?: AutoEventConfig;
+    autoEventConfig?: AutoEventConfig;
+    retryConfig?: {
+        maxRetries: number;
+        retryDelay: number;
+    };
 }
 export interface EventData {
     [key: string]: any;
