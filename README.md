@@ -84,6 +84,7 @@
 
 ### **📊 Feature Documentation**
 - **[SDK_COMPLETION_STATUS.md](https://github.com/datalyr/react-native-sdk/blob/main/SDK_COMPLETION_STATUS.md)** - What's included vs competitors
+- **[test-app/](https://github.com/datalyr/react-native-sdk/tree/main/test-app)** - 🧪 **Complete test app** - Ready-to-run Expo app demonstrating all features
 - **[examples/auto-events-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/auto-events-example.tsx)** - Live demo of automatic events
 - **[examples/attribution-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/attribution-example.tsx)** - Attribution testing interface
 - **[examples/example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/example.tsx)** - Basic SDK usage example
@@ -119,6 +120,22 @@ await datalyr.screen('home_screen');
 
 // 🎉 That's it! Automatic events happen behind the scenes
 ```
+
+## 🧪 **Want to Test First?**
+
+Try our complete test app before integrating:
+
+```bash
+# Clone the repository
+git clone https://github.com/datalyr/react-native-sdk.git
+cd react-native-sdk/test-app
+
+# Install and run
+npm install
+npx expo start
+```
+
+The test app demonstrates all SDK features with real-time logging!
 
 ---
 
@@ -163,9 +180,10 @@ Events appear in your Datalyr dashboard with `source: 'mobile_app'`:
 
 Want to see all features in action?
 
-1. **Basic Integration:** Check out [examples/example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/example.tsx)
-2. **Auto Events Demo:** Run [examples/auto-events-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/auto-events-example.tsx)  
-3. **Attribution Testing:** Use [examples/attribution-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/attribution-example.tsx)
+1. **🧪 Complete Test App:** Run the [test-app/](https://github.com/datalyr/react-native-sdk/tree/main/test-app) - Full Expo app with all features
+2. **Basic Integration:** Check out [examples/example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/example.tsx)
+3. **Auto Events Demo:** Run [examples/auto-events-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/auto-events-example.tsx)  
+4. **Attribution Testing:** Use [examples/attribution-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/attribution-example.tsx)
 
 ---
 
