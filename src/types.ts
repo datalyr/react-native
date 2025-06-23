@@ -16,6 +16,7 @@ export interface DatalyrConfig {
   endpoint?: string;
   maxRetries?: number;
   retryDelay?: number;
+  timeout?: number;
   batchSize?: number;
   flushInterval?: number;
   maxQueueSize?: number;

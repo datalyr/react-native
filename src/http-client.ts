@@ -6,6 +6,8 @@ interface HttpClientConfig {
   retryDelay: number;
   timeout: number;
   apiKey?: string;
+  workspaceId: string;
+  debug: boolean;
 }
 
 interface HttpResponse {
@@ -18,6 +20,8 @@ interface HttpResponse {
 export class HttpClient {
   private config: HttpClientConfig;
   private endpoint: string;
+  private lastRequestTime = 0;
+  private requestCount = 0;
 
   constructor(endpoint: string, config: HttpClientConfig) {
     this.endpoint = endpoint;
@@ -45,6 +49,18 @@ export class HttpClient {
    */
   private async sendWithRetry(payload: EventPayload, retryCount: number): Promise<HttpResponse> {
     try {
+      // Basic rate limiting: max 100 requests per minute
+      const now = Date.now();
+      if (now - this.lastRequestTime < 60000) {
+        this.requestCount++;
+        if (this.requestCount > 100) {
+          throw new Error('Rate limit exceeded: max 100 requests per minute');
+        }
+      } else {
+        this.requestCount = 1;
+        this.lastRequestTime = now;
+      }
+
       debugLog(`Sending event: ${payload.eventName} (attempt ${retryCount + 1})`);
       
       const controller = new AbortController();
@@ -52,12 +68,17 @@ export class HttpClient {
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': `datalyr-react-native-sdk/1.0.5`,
+        'User-Agent': `datalyr-react-native-sdk/1.0.11`,
       };
 
-      // Add API key if provided
+      // Use workspace ID as Bearer token if no API key provided (matching web script)
+      const authToken = this.config.apiKey || this.config.workspaceId;
+      headers['Authorization'] = `Bearer ${authToken}`;
+
+      // Add multiple auth methods for compatibility
       if (this.config.apiKey) {
-        headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+        headers['X-API-Key'] = this.config.apiKey;
+        headers['X-Datalyr-API-Key'] = this.config.apiKey;
       }
       
       const response = await fetch(this.endpoint, {
@@ -70,6 +91,9 @@ export class HttpClient {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error(`HTTP 401: Authentication failed. Check your API key and workspace ID.`);
+        }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
@@ -112,6 +136,16 @@ export class HttpClient {
       'AbortError',
       'fetch is not defined', // Fallback for environments without fetch
     ];
+
+    // Don't retry authentication errors (401) or client errors (4xx)
+    if (error.message.includes('HTTP 401') || error.message.includes('HTTP 4')) {
+      return false;
+    }
+
+    // Retry on server errors (5xx) and network issues
+    if (error.message.includes('HTTP 5')) {
+      return true;
+    }
 
     return retryableErrors.some(retryableError => 
       error.message.includes(retryableError) || error.name === retryableError
@@ -184,6 +218,8 @@ export const createHttpClient = (endpoint: string, config?: Partial<HttpClientCo
     retryDelay: 1000, // 1 second base delay
     timeout: 15000, // 15 seconds
     apiKey: undefined,
+    workspaceId: '',
+    debug: false,
   };
 
   return new HttpClient(endpoint, { ...defaultConfig, ...config });

@@ -23,6 +23,7 @@ const App: React.FC = () => {
           apiKey: 'dk_KCrEZT9saU4ZlTwr2HHnuaia3jKDHcuf',
           debug: true,
           enableAutoEvents: true,
+          enableAttribution: true, // ✅ Deep link attribution tracking
           autoEvents: {
             trackSessions: true,
             trackScreenViews: true,
@@ -89,7 +90,7 @@ const App: React.FC = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🔑 Datalyr SDK API Key Test</Text>
-      <Text style={styles.subtitle}>v1.0.6 - API Authentication</Text>
+      <Text style={styles.subtitle}>v1.0.10 - Production Ready</Text>
       
       <View style={styles.statusContainer}>
         <Text style={styles.statusText}>

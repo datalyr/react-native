@@ -63,7 +63,9 @@ const App: React.FC = () => {
     try {
       await datalyr.initialize({
         workspaceId: 'ozLZblQ8hN', // Your workspace ID
+        apiKey: 'dk_your_api_key', // Required for authentication
         debug: true,
+        enableAttribution: true,    // ✅ Deep link attribution tracking
         autoEvents: {
           trackSessions: true,          // ✅ Automatic session tracking
           trackScreenViews: true,       // ✅ Automatic screen tracking  

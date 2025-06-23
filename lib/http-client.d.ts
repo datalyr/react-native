@@ -4,6 +4,8 @@ interface HttpClientConfig {
     retryDelay: number;
     timeout: number;
     apiKey?: string;
+    workspaceId: string;
+    debug: boolean;
 }
 interface HttpResponse {
     success: boolean;
@@ -14,6 +16,8 @@ interface HttpResponse {
 export declare class HttpClient {
     private config;
     private endpoint;
+    private lastRequestTime;
+    private requestCount;
     constructor(endpoint: string, config: HttpClientConfig);
     /**
      * Send a single event with retry logic

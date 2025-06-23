@@ -27,10 +27,12 @@ const App: React.FC = () => {
 
   const initializeDatalyr = async () => {
     try {
-      // Initialize with your workspace ID
+      // Initialize with your workspace ID and API key
       await datalyr.initialize({
         workspaceId: 'ozLZblQ8hN', // Replace with your actual workspace ID
+        apiKey: 'dk_your_api_key', // Required for authentication
         debug: true, // Enable debug logging
+        enableAttribution: true, // ✅ Deep link attribution tracking
       });
       
       setIsInitialized(true);
@@ -39,7 +41,7 @@ const App: React.FC = () => {
       // Track app launch
       await datalyr.track('app_launch', {
         app_version: '1.0.0',
-        platform: 'react-native',
+        platform: 'ios', // or 'android'
       });
       
       console.log('Datalyr SDK initialized successfully!');
@@ -74,7 +76,7 @@ const App: React.FC = () => {
 
   const trackScreenView = async () => {
     try {
-      await Datalyr.screen('home_screen', {
+      await datalyr.screen('home_screen', {
         section: 'main',
         user_type: 'premium',
       });
@@ -89,7 +91,7 @@ const App: React.FC = () => {
 
   const identifyUser = async () => {
     try {
-      await Datalyr.identify('user_12345', {
+      await datalyr.identify('user_12345', {
         email: 'user@example.com',
         name: 'John Doe',
         plan: 'premium',
@@ -106,7 +108,7 @@ const App: React.FC = () => {
 
   const flushEvents = async () => {
     try {
-      await Datalyr.flush();
+      await datalyr.flush();
       Alert.alert('Success', 'Events flushed!');
       updateStatus();
     } catch (error) {
@@ -117,7 +119,7 @@ const App: React.FC = () => {
 
   const resetUser = async () => {
     try {
-      await Datalyr.reset();
+      await datalyr.reset();
       Alert.alert('Success', 'User data reset!');
       updateStatus();
     } catch (error) {

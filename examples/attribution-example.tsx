@@ -16,7 +16,7 @@ import {
   TextInput,
   Linking,
 } from 'react-native';
-import Datalyr from '@datalyr/react-native-sdk';
+import { datalyr } from '@datalyr/react-native-sdk';
 
 const AttributionExample: React.FC = () => {
   const [attributionData, setAttributionData] = useState<any>(null);
@@ -29,9 +29,11 @@ const AttributionExample: React.FC = () => {
 
   const initializeSDK = async () => {
     try {
-      await Datalyr.initialize({
+      await datalyr.initialize({
         workspaceId: 'ozLZblQ8hN',
+        apiKey: 'dk_your_api_key', // Required for authentication
         debug: true,
+        enableAttribution: true, // ✅ Enable deep link attribution tracking
       });
       
       setIsInitialized(true);
@@ -45,8 +47,8 @@ const AttributionExample: React.FC = () => {
 
   const refreshAttributionData = () => {
     if (isInitialized) {
-      const data = Datalyr.getAttributionData();
-      const status = Datalyr.getStatus();
+      const data = datalyr.getAttributionData();
+      const status = datalyr.getStatus();
       setAttributionData({
         ...data,
         summary: status.attribution,
@@ -77,7 +79,7 @@ const AttributionExample: React.FC = () => {
   const simulateInstall = async () => {
     try {
       // Clear existing attribution data to simulate fresh install
-      await Datalyr.setAttributionData({});
+      await datalyr.setAttributionData({});
       
       Alert.alert(
         'Install Simulation', 
@@ -93,7 +95,7 @@ const AttributionExample: React.FC = () => {
 
   const setCustomAttribution = async () => {
     try {
-      await Datalyr.setAttributionData({
+      await datalyr.setAttributionData({
         campaign_source: 'facebook',
         campaign_medium: 'paid_social',
         campaign_name: 'summer_sale_2024',

@@ -42,7 +42,7 @@ export class DatalyrSDK {
         workspaceId: '',
         apiKey: '',
         debug: false,
-        endpoint: 'https://app.datalyr.com/api/ingest',
+        endpoint: 'https://datalyr-ingest.datalyr-ingest.workers.dev',
         maxRetries: 3,
         retryDelay: 1000,
         batchSize: 10,
@@ -82,11 +82,13 @@ export class DatalyrSDK {
       this.state.config = { ...this.state.config, ...config };
 
       // Initialize HTTP client
-      this.httpClient = new HttpClient(this.state.config.endpoint!, {
+      this.httpClient = new HttpClient(this.state.config.endpoint || 'https://datalyr-ingest.datalyr-ingest.workers.dev', {
         maxRetries: this.state.config.maxRetries || 3,
         retryDelay: this.state.config.retryDelay || 1000,
-        timeout: 15000,
+        timeout: this.state.config.timeout || 15000,
         apiKey: this.state.config.apiKey,
+        workspaceId: this.state.config.workspaceId,
+        debug: this.state.config.debug || false,
       });
 
       // Initialize event queue
@@ -135,19 +137,18 @@ export class DatalyrSDK {
         }
       }, 50);
 
-      // Check for app install
+      // SDK initialized successfully - set state before tracking install event
+      this.state.initialized = true;
+
+      // Check for app install (after SDK is marked as initialized)
       if (attributionManager.isInstall()) {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.0.0',
+          sdk_version: '1.0.11',
           ...installData,
         });
       }
-
-      // SDK initialized successfully (no need to track this event)
-
-      this.state.initialized = true;
       debugLog('Datalyr SDK initialized successfully', {
         workspaceId: this.state.config.workspaceId,
         visitorId: this.state.visitorId,
@@ -199,7 +200,7 @@ export class DatalyrSDK {
       ...properties,
     };
 
-    await this.track('pageviews', screenData);
+    await this.track('pageview', screenData);
 
     // Also notify auto-events manager for automatic screen tracking
     if (this.autoEventsManager) {

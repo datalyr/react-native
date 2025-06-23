@@ -5,6 +5,65 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2025-06-23
+
+### Fixed
+- **Race Condition Fix**: Resolved initialization race condition where install event was tracked before SDK was fully initialized
+- **Error Elimination**: Fixed "SDK not initialized. Call initialize() first" error during app install tracking
+- **Improved Reliability**: SDK now properly sets initialized state before tracking any events
+
+## [1.0.10] - 2025-06-23
+
+### Fixed
+- **Event Name Consistency**: Fixed screen view events to use `pageview` (singular) instead of `pageviews` (plural) to match web script
+- **Cross-Platform Alignment**: Both React Native SDK and web script now use identical event names
+
+## [1.0.9] - 2025-06-23
+
+### Fixed
+- **Authentication Issue Resolved**: Fixed "Invalid JWT" errors by identifying that Supabase Edge Function had JWT verification enabled
+- **Correct Endpoint**: Confirmed React Native SDK uses correct Cloudflare Worker endpoint (`https://datalyr-ingest.datalyr-ingest.workers.dev`)
+- **Architecture Alignment**: Both web script and React Native SDK now use the same authentication flow: SDK → Cloudflare Worker → Supabase Edge Function
+
+### Technical Details
+- Root cause was Supabase Edge Function JWT setting, not SDK authentication logic
+- SDK correctly sends `Authorization: Bearer {apiKey}` header
+- Cloudflare Worker acts as transparent proxy to Supabase
+- Supabase Edge Function now uses custom API key validation instead of JWT verification
+
+## [1.0.8] - 2025-06-23
+
+### 🔧 ENDPOINT FIX - Resolves 401 Authentication Errors
+
+#### Changed
+- **Endpoint Update**: Changed default endpoint from `https://datalyr-ingest.datalyr-ingest.workers.dev` to `https://app.datalyr.com/api/ingest`
+- **Web Script Alignment**: SDK now uses the same endpoint as the web tracking script for consistency
+
+#### Fixed
+- **401 Unauthorized Errors**: Resolves authentication issues by using the correct production endpoint
+- **Infrastructure Alignment**: Mobile SDK now matches web infrastructure setup
+
+#### Technical Details
+- No breaking changes to the API
+- Existing API keys continue to work
+- Automatic retry logic remains unchanged
+- All other functionality preserved
+
+---
+
+## [1.0.7] - 2025-06-23
+
+### 🔄 Changed
+- **BREAKING**: Changed automatic screen tracking event name from `screen_view` to `pageviews` for consistency with web analytics
+- Updated session tracking to report `pageviews` instead of `screen_views` in session end events
+- Updated session property names: `screen_views_in_session` → `pageviews_in_session`
+
+### 🐛 Fixed  
+- Fixed session end event payload structure
+- Improved session duration calculations
+
+---
+
 ## [1.0.6] - 2025-06-23
 
 ### 🔑 CRITICAL FIX - API Authentication Added

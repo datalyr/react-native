@@ -6,15 +6,20 @@
 
 ---
 
-## 🚨 Migration Notice (v1.0.6)
+## 🚨 Migration Notice (v1.0.11)
 
 **BREAKING CHANGE**: API key is now required for authentication:
 - Add `apiKey: 'dk_your_api_key'` to your `initialize()` call
 - Get your API key from your web tracking script tag (`data-api-key` attribute)
 - This fixes 401 authentication errors with the Datalyr API
 
+**NEW**: Attribution tracking must be explicitly enabled:
+- Add `enableAttribution: true` to your `initialize()` call to track deep link parameters
+- This enables UTM parameters, click IDs (fbclid, gclid, ttclid), and LYR tags
+- **Action Required**: Add this to your config to enable attribution tracking
+
 **Previous Update (v1.0.3)**: Screen tracking events renamed for web consistency:
-- `screen_view` → `pageviews` 
+- `screen_view` → `pageview` 
 - **Action Required**: Update any custom analytics queries or dashboards that reference `screen_view` events
 
 ---
@@ -25,14 +30,14 @@
 
 | Framework | Guide | Attribution Accuracy |
 |-----------|-------|---------------------|
-| **React Native CLI** | [INSTALL.md](./INSTALL.md) | 100% |
-| **Expo Bare Workflow** | [INSTALL.md](./INSTALL.md) | 100% |
-| **Expo Managed Workflow** | [EXPO_INSTALL.md](./EXPO_INSTALL.md) | 90% |
-| **Expo Go** | [EXPO_INSTALL.md](./EXPO_INSTALL.md) | 90% |
+| **React Native CLI** | [INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/INSTALL.md) | 100% |
+| **Expo Bare Workflow** | [INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/INSTALL.md) | 100% |
+| **Expo Managed Workflow** | [EXPO_INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/EXPO_INSTALL.md) | 90% |
+| **Expo Go** | [EXPO_INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/EXPO_INSTALL.md) | 90% |
 
-**❓ Not sure which to choose?** See [FRAMEWORK_COMPARISON.md](./FRAMEWORK_COMPARISON.md)
+**❓ Not sure which to choose?** See [FRAMEWORK_COMPARISON.md](https://github.com/datalyr/react-native-sdk/blob/main/FRAMEWORK_COMPARISON.md)
 
-**📱 For Expo users:** Core attribution (LYR tags, UTM params, click IDs) works perfectly on all Expo workflows - see [EXPO_INSTALL.md](./EXPO_INSTALL.md)
+**📱 For Expo users:** Core attribution (LYR tags, UTM params, click IDs) works perfectly on all Expo workflows - see [EXPO_INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/EXPO_INSTALL.md)
 
 ---
 
@@ -73,20 +78,19 @@
 ## 📁 Documentation & Guides
 
 ### **🚀 Installation Guides**
-- **[INSTALL.md](./INSTALL.md)** - React Native CLI & Expo Bare setup
-- **[EXPO_INSTALL.md](./EXPO_INSTALL.md)** - Expo Managed Workflow setup
-- **[FRAMEWORK_COMPARISON.md](./FRAMEWORK_COMPARISON.md)** - Choose the right framework
+- **[INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/INSTALL.md)** - React Native CLI & Expo Bare setup
+- **[EXPO_INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/EXPO_INSTALL.md)** - Expo Managed Workflow setup
+- **[FRAMEWORK_COMPARISON.md](https://github.com/datalyr/react-native-sdk/blob/main/FRAMEWORK_COMPARISON.md)** - Choose the right framework
 
 ### **📊 Feature Documentation**
-- **[SDK_COMPLETION_STATUS.md](./SDK_COMPLETION_STATUS.md)** - What's included vs competitors
-- **[auto-events-example.tsx](./auto-events-example.tsx)** - Live demo of automatic events
-- **[attribution-example.tsx](./attribution-example.tsx)** - Attribution testing interface
-- **[example.tsx](./example.tsx)** - Basic SDK usage example
+- **[SDK_COMPLETION_STATUS.md](https://github.com/datalyr/react-native-sdk/blob/main/SDK_COMPLETION_STATUS.md)** - What's included vs competitors
+- **[examples/auto-events-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/auto-events-example.tsx)** - Live demo of automatic events
+- **[examples/attribution-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/attribution-example.tsx)** - Attribution testing interface
+- **[examples/example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/example.tsx)** - Basic SDK usage example
 
 ### **🔧 SDK Files**
-- **[src/](./src/)** - Complete SDK source code
-- **[package.json](./package.json)** - React Native CLI dependencies
-- **[expo-package.json](./expo-package.json)** - Expo dependencies
+- **[src/](https://github.com/datalyr/react-native-sdk/tree/main/src)** - Complete SDK source code
+- **[package.json](https://github.com/datalyr/react-native-sdk/blob/main/package.json)** - Dependencies and configuration
 
 ---
 
@@ -99,6 +103,7 @@ import { datalyr } from '@datalyr/react-native-sdk';
 await datalyr.initialize({
   workspaceId: 'your-workspace-id',
   apiKey: 'dk_your_api_key', // Required for authentication
+  enableAttribution: true,    // ✅ Deep link attribution tracking
   autoEvents: {
     trackSessions: true,        // ✅ Session start/end
     trackScreenViews: true,     // ✅ Automatic screen tracking  
@@ -158,16 +163,16 @@ Events appear in your Datalyr dashboard with `source: 'mobile_app'`:
 
 Want to see all features in action?
 
-1. **Basic Integration:** Check out [example.tsx](./example.tsx)
-2. **Auto Events Demo:** Run [auto-events-example.tsx](./auto-events-example.tsx)  
-3. **Attribution Testing:** Use [attribution-example.tsx](./attribution-example.tsx)
+1. **Basic Integration:** Check out [examples/example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/example.tsx)
+2. **Auto Events Demo:** Run [examples/auto-events-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/auto-events-example.tsx)  
+3. **Attribution Testing:** Use [examples/attribution-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/attribution-example.tsx)
 
 ---
 
 ## 🚀 Ready to Start?
 
-1. **📖 Choose your guide:** [FRAMEWORK_COMPARISON.md](./FRAMEWORK_COMPARISON.md)
-2. **⚡ Quick install:** [INSTALL.md](./INSTALL.md) or [EXPO_INSTALL.md](./EXPO_INSTALL.md)
+1. **📖 Choose your guide:** [FRAMEWORK_COMPARISON.md](https://github.com/datalyr/react-native-sdk/blob/main/FRAMEWORK_COMPARISON.md)
+2. **⚡ Quick install:** [INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/INSTALL.md) or [EXPO_INSTALL.md](https://github.com/datalyr/react-native-sdk/blob/main/EXPO_INSTALL.md)
 3. **🧪 Test attribution:** Your events appear at `https://app.datalyr.com`
 4. **🎉 Launch:** Start tracking users from ad click to conversion!
 
@@ -175,4 +180,4 @@ Want to see all features in action?
 
 **🔥 The only mobile SDK that tracks attribution AND provides automatic events like Mixpanel!** 
 
-*Ready for production with 95% feature completion and works with your existing Datalyr backend.* 
+*Production-ready with 100% feature completion - attribution tracking + automatic events like Mixpanel!* 

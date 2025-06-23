@@ -9,7 +9,7 @@ export * from './types';
 export { attributionManager } from './attribution';
 export { createAutoEventsManager, AutoEventsManager } from './auto-events';
 
-// Re-export Expo-specific utilities (avoiding conflicts)
+// Re-export Expo-specific utilities
 export { 
   debugLog, 
   errorLog, 

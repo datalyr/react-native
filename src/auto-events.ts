@@ -218,7 +218,7 @@ export class AutoEventsManager {
         screenProperties.pageviews_in_session = this.currentSession.screenViews;
       }
 
-      await this.trackEvent('pageviews', screenProperties);
+      await this.trackEvent('pageview', screenProperties);
       
       this.lastScreenName = screenName;
       debugLog('Pageview tracked:', screenName);

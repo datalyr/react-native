@@ -9,10 +9,10 @@ First, verify you're using the latest version:
 npm list @datalyr/react-native-sdk
 
 # Update to latest version
-npm install @datalyr/react-native-sdk@1.0.3
+npm install @datalyr/react-native-sdk@1.0.10
 
 # Or with yarn
-yarn add @datalyr/react-native-sdk@1.0.3
+yarn add @datalyr/react-native-sdk@1.0.10
 ```
 
 ## Step 2: Check Import Pattern
@@ -20,7 +20,7 @@ yarn add @datalyr/react-native-sdk@1.0.3
 Make sure you're using the correct import:
 
 ```typescript
-// ✅ CORRECT (v1.0.3+)
+// ✅ CORRECT (v1.0.10+)
 import { datalyr } from '@datalyr/react-native-sdk';
 
 // ❌ WRONG (causes white screen)
@@ -228,7 +228,7 @@ Verify your package.json has the correct version:
 ```json
 {
   "dependencies": {
-    "@datalyr/react-native-sdk": "^1.0.3"
+    "@datalyr/react-native-sdk": "^1.0.10"
   }
 }
 ``` 

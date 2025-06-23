@@ -32,7 +32,9 @@ export default function AutoEventsExample() {
       
       await datalyr.initialize({
         workspaceId: 'your-workspace-id',
+        apiKey: 'dk_your_api_key', // Required for authentication
         debug: true,
+        enableAttribution: true,    // ✅ Deep link attribution tracking
         autoEvents: {
           trackSessions: true,          // ✅ Automatic session tracking
           trackScreenViews: true,       // ✅ Automatic screen tracking  

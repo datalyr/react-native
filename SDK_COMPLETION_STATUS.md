@@ -182,8 +182,10 @@ await datalyr.track('app_foreground', { /* manual data */ });
 ### **SDK Completion: 95% ✅**
 
 **Core Attribution:** 100% Complete ✅  
-**Automatic Events:** 95% Complete ✅  
+**Automatic Events:** 100% Complete ✅  
 **Advanced Features:** 60% Complete (optional)
+
+**Latest Version:** v1.0.10 - Production Ready 🚀
 
 ### **Ready for Production?** 
 
