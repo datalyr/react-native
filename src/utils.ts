@@ -197,22 +197,8 @@ export const getDeviceInfo = async (): Promise<DeviceInfoType> => {
 export const createFingerprintData = async (): Promise<FingerprintData> => {
   const deviceInfo = await getDeviceInfo();
   
-  let advertisingId: string | undefined = undefined;
-  
-  // Only try to get advertising ID if DeviceInfo is available
-  if (DeviceInfo) {
-    try {
-      advertisingId = await DeviceInfo.getAndroidId().catch(() => 
-        DeviceInfo.getIosIdForVendor().catch(() => undefined)
-      );
-    } catch (error) {
-      console.warn('Failed to get advertising ID:', error);
-    }
-  }
-  
   return {
     deviceId: deviceInfo.deviceId,
-    advertisingId,
     deviceInfo: {
       model: deviceInfo.model,
       manufacturer: deviceInfo.manufacturer,

@@ -49,7 +49,6 @@ export interface EventData {
 
 export interface FingerprintData {
   deviceId?: string;
-  advertisingId?: string;
   deviceInfo?: {
     model: string;
     manufacturer: string;

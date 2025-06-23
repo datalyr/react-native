@@ -3,7 +3,6 @@ import { Platform } from 'react-native';
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as Network from 'expo-network';
-import * as TrackingTransparency from 'expo-tracking-transparency';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -191,31 +190,8 @@ export const createFingerprintData = async () => {
   try {
     const deviceInfo = await getDeviceInfo();
     
-    // Try to get IDFA/GAID with proper permission handling
-    let advertisingId: string | undefined;
-    
-    if (Platform.OS === 'ios') {
-      try {
-        const { status } = await TrackingTransparency.requestTrackingPermissionsAsync();
-        
-        if (status === TrackingTransparency.PermissionStatus.GRANTED) {
-          // Note: expo-tracking-transparency doesn't directly provide IDFA
-          // You would need additional setup or use expo-ads-admob
-          advertisingId = await getIDFA();
-        } else {
-          debugLog('IDFA permission denied or restricted');
-        }
-      } catch (error) {
-        debugLog('Error requesting tracking permission:', error);
-      }
-    } else {
-      // For Android, would need additional setup for GAID
-      advertisingId = await getGAID();
-    }
-    
     return {
       deviceId: deviceInfo.deviceId,
-      advertisingId,
       deviceInfo: {
         model: deviceInfo.model,
         manufacturer: deviceInfo.manufacturer,
@@ -245,20 +221,8 @@ export const createFingerprintData = async () => {
   }
 };
 
-// Placeholder functions for IDFA/GAID (would need additional Expo setup)
-const getIDFA = async (): Promise<string | undefined> => {
-  // In a real Expo app, you might use:
-  // - expo-ads-admob for advertising ID
-  // - or implement a custom native module
-  // For now, return undefined as it requires additional setup
-  return undefined;
-};
-
-const getGAID = async (): Promise<string | undefined> => {
-  // In a real Expo app, you would use expo-ads-admob or similar
-  // For now, return undefined as it requires additional setup  
-  return undefined;
-};
+// IDFA/GAID collection has been removed for privacy compliance
+// Modern attribution tracking relies on privacy-safe methods:
 
 // Network type detection using Expo Network
 export const getNetworkType = async (): Promise<string> => {
