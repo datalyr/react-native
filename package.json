@@ -1,6 +1,6 @@
 {
   "name": "@datalyr/react-native-sdk",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Mobile attribution + automatic events for React Native & Expo - Like Mixpanel's automatic events + better attribution than any competitor",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
