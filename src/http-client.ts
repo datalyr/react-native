@@ -5,6 +5,7 @@ interface HttpClientConfig {
   maxRetries: number;
   retryDelay: number;
   timeout: number;
+  apiKey?: string;
 }
 
 interface HttpResponse {
@@ -49,12 +50,19 @@ export class HttpClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
       
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'User-Agent': `datalyr-react-native-sdk/1.0.5`,
+      };
+
+      // Add API key if provided
+      if (this.config.apiKey) {
+        headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+      }
+      
       const response = await fetch(this.endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': `datalyr-react-native-sdk/1.0.0`,
-        },
+        headers,
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
@@ -175,6 +183,7 @@ export const createHttpClient = (endpoint: string, config?: Partial<HttpClientCo
     maxRetries: 3,
     retryDelay: 1000, // 1 second base delay
     timeout: 15000, // 15 seconds
+    apiKey: undefined,
   };
 
   return new HttpClient(endpoint, { ...defaultConfig, ...config });

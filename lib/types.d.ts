@@ -7,6 +7,7 @@ export interface AutoEventConfig {
 }
 export interface DatalyrConfig {
     workspaceId: string;
+    apiKey: string;
     debug?: boolean;
     apiUrl?: string;
     endpoint?: string;

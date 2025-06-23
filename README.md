@@ -6,11 +6,15 @@
 
 ---
 
-## 🚨 Migration Notice (v1.0.3)
+## 🚨 Migration Notice (v1.0.6)
 
-**Important Update**: Screen tracking events have been renamed for web analytics consistency:
+**BREAKING CHANGE**: API key is now required for authentication:
+- Add `apiKey: 'dk_your_api_key'` to your `initialize()` call
+- Get your API key from your web tracking script tag (`data-api-key` attribute)
+- This fixes 401 authentication errors with the Datalyr API
+
+**Previous Update (v1.0.3)**: Screen tracking events renamed for web consistency:
 - `screen_view` → `pageviews` 
-- This ensures mobile and web analytics use the same event names
 - **Action Required**: Update any custom analytics queries or dashboards that reference `screen_view` events
 
 ---
@@ -94,6 +98,7 @@ import { datalyr } from '@datalyr/react-native-sdk';
 // Initialize with automatic events
 await datalyr.initialize({
   workspaceId: 'your-workspace-id',
+  apiKey: 'dk_your_api_key', // Required for authentication
   autoEvents: {
     trackSessions: true,        // ✅ Session start/end
     trackScreenViews: true,     // ✅ Automatic screen tracking  

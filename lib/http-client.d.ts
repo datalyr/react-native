@@ -3,6 +3,7 @@ interface HttpClientConfig {
     maxRetries: number;
     retryDelay: number;
     timeout: number;
+    apiKey?: string;
 }
 interface HttpResponse {
     success: boolean;

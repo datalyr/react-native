@@ -40,6 +40,7 @@ export class DatalyrSDK {
       initialized: false,
       config: {
         workspaceId: '',
+        apiKey: '',
         debug: false,
         endpoint: 'https://datalyr-ingest.datalyr-ingest.workers.dev',
         maxRetries: 3,
@@ -72,6 +73,10 @@ export class DatalyrSDK {
       if (!config.workspaceId) {
         throw new Error('workspaceId is required');
       }
+      
+      if (!config.apiKey) {
+        throw new Error('apiKey is required');
+      }
 
       // Set up configuration
       this.state.config = { ...this.state.config, ...config };
@@ -81,6 +86,7 @@ export class DatalyrSDK {
         maxRetries: this.state.config.maxRetries || 3,
         retryDelay: this.state.config.retryDelay || 1000,
         timeout: 15000,
+        apiKey: this.state.config.apiKey,
       });
 
       // Initialize event queue

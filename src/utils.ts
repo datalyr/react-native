@@ -1,6 +1,13 @@
 import { Platform, Dimensions } from 'react-native';
-import DeviceInfo from 'react-native-device-info';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Conditional import for react-native-device-info
+let DeviceInfo: any = null;
+try {
+  DeviceInfo = require('react-native-device-info');
+} catch (error) {
+  console.warn('react-native-device-info not available, using fallback device info');
+}
 import { v4 as uuidv4 } from 'uuid';
 import 'react-native-get-random-values'; // Required for uuid
 
@@ -103,6 +110,24 @@ export const getOrCreateSessionId = async (): Promise<string> => {
 export const getDeviceInfo = async (): Promise<DeviceInfoType> => {
   const { width, height } = Dimensions.get('window');
   
+  // If DeviceInfo is not available (like in Expo Go), use fallback
+  if (!DeviceInfo) {
+    return {
+      deviceId: generateUUID(),
+      model: Platform.OS === 'ios' ? 'iPhone' : 'Android',
+      manufacturer: Platform.OS === 'ios' ? 'Apple' : 'Google',
+      osVersion: Platform.Version.toString(),
+      appVersion: '1.0.0',
+      buildNumber: '1',
+      bundleId: 'expo.app',
+      screenWidth: width,
+      screenHeight: height,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      locale: 'en-US',
+      isEmulator: false,
+    };
+  }
+  
   try {
     const [
       deviceId,
@@ -172,41 +197,32 @@ export const getDeviceInfo = async (): Promise<DeviceInfoType> => {
 export const createFingerprintData = async (): Promise<FingerprintData> => {
   const deviceInfo = await getDeviceInfo();
   
-  try {
-    // Try to get advertising ID (IDFA/GAID)
-    const advertisingId = await DeviceInfo.getAndroidId().catch(() => 
-      DeviceInfo.getIosIdForVendor().catch(() => undefined)
-    );
-    
-    return {
-      deviceId: deviceInfo.deviceId,
-      advertisingId,
-      deviceInfo: {
-        model: deviceInfo.model,
-        manufacturer: deviceInfo.manufacturer,
-        osVersion: deviceInfo.osVersion,
-        screenSize: `${deviceInfo.screenWidth}x${deviceInfo.screenHeight}`,
-        timezone: deviceInfo.timezone,
-        locale: deviceInfo.locale,
-        carrier: deviceInfo.carrier,
-        isEmulator: deviceInfo.isEmulator,
-      },
-    };
-  } catch (error) {
-    console.warn('Failed to create fingerprint data:', error);
-    
-    return {
-      deviceId: deviceInfo.deviceId,
-      deviceInfo: {
-        model: deviceInfo.model,
-        manufacturer: deviceInfo.manufacturer,
-        osVersion: deviceInfo.osVersion,
-        screenSize: `${deviceInfo.screenWidth}x${deviceInfo.screenHeight}`,
-        timezone: deviceInfo.timezone,
-        locale: deviceInfo.locale,
-        isEmulator: deviceInfo.isEmulator,
-      },
-    };
+  let advertisingId: string | undefined = undefined;
+  
+  // Only try to get advertising ID if DeviceInfo is available
+  if (DeviceInfo) {
+    try {
+      advertisingId = await DeviceInfo.getAndroidId().catch(() => 
+        DeviceInfo.getIosIdForVendor().catch(() => undefined)
+      );
+    } catch (error) {
+      console.warn('Failed to get advertising ID:', error);
+    }
+  }
+  
+  return {
+    deviceId: deviceInfo.deviceId,
+    advertisingId,
+    deviceInfo: {
+      model: deviceInfo.model,
+      manufacturer: deviceInfo.manufacturer,
+      osVersion: deviceInfo.osVersion,
+      screenSize: `${deviceInfo.screenWidth}x${deviceInfo.screenHeight}`,
+      timezone: deviceInfo.timezone,
+      locale: deviceInfo.locale,
+      carrier: deviceInfo.carrier,
+      isEmulator: deviceInfo.isEmulator,
+    },
   }
 };
 
