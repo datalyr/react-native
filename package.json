@@ -1,7 +1,7 @@
 {
   "name": "@datalyr/react-native-sdk",
-  "version": "1.0.11",
-  "description": "Mobile attribution + automatic events for React Native & Expo - Like Mixpanel's automatic events + better attribution than any competitor",
+  "version": "2.0.0",
+  "description": "SKAdNetwork attribution + automatic events for React Native & Expo - Compete with AppsFlyer/Adjust at 90% cost savings",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
@@ -20,18 +20,23 @@
   "keywords": [
     "react-native",
     "expo",
-    "analytics",
+    "skadnetwork",
     "attribution",
     "tracking",
     "mobile",
     "datalyr",
+    "appsflyer",
+    "adjust",
     "mixpanel",
     "automatic-events",
     "session-tracking",
     "utm-tracking",
     "facebook-attribution",
     "tiktok-attribution",
-    "google-attribution"
+    "google-attribution",
+    "ios-attribution",
+    "conversion-tracking",
+    "revenue-optimization"
   ],
   "author": "Datalyr",
   "license": "MIT",
