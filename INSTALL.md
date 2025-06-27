@@ -2,6 +2,7 @@
 
 ## 🎯 Key Features
 
+- 🚀 **NEW: SKAdNetwork Support** - Compete with AppsFlyer/Adjust at 90% cost savings
 - ✅ **Complete Attribution** - Track users from ad click to conversion
 - ✅ **Automatic Events** - Like Mixpanel (sessions, screen views, app lifecycle)
 - ✅ **Device Fingerprinting** - IDFA/GAID collection with fallback IDs  
@@ -49,6 +50,7 @@ cp -r docs/mobile/react-native/src/* src/datalyr-sdk/
 
 ### 4. Initialize in Your App
 
+**Basic Setup:**
 ```typescript
 // App.tsx or your main component
 import React, { useEffect } from 'react';
@@ -88,6 +90,41 @@ const App: React.FC = () => {
 };
 ```
 
+**🚀 NEW: SKAdNetwork Setup (iOS 14+ Attribution):**
+```typescript
+// For iOS attribution competing with AppsFlyer/Adjust
+import React, { useEffect } from 'react';
+import { Datalyr } from '@datalyr/react-native-sdk';
+
+const App: React.FC = () => {
+  useEffect(() => {
+    initializeDatalyrWithSKAdNetwork();
+  }, []);
+
+  const initializeDatalyrWithSKAdNetwork = async () => {
+    try {
+      await Datalyr.initialize({
+        workspaceId: 'your-workspace-id',
+        apiKey: 'dk_your_api_key',
+        skadTemplate: 'ecommerce', // Choose: 'ecommerce', 'gaming', 'subscription'
+        debug: true,
+        enableAttribution: true,
+        autoEvents: {
+          trackSessions: true,
+          trackScreenViews: true,
+        },
+      });
+      
+      console.log('Datalyr SDK initialized with SKAdNetwork!');
+    } catch (error) {
+      console.error('SDK init failed:', error);
+    }
+  };
+
+  // ... rest of your app
+};
+```
+
 ### 5. Test the Integration
 
 ```typescript
@@ -116,6 +153,7 @@ const testTracking = async () => {
 ```typescript
 await datalyr.initialize({
   workspaceId: 'your-workspace-id',     // Required
+  apiKey: 'dk_your_api_key',            // Required for authentication
   debug: true,                          // Enable debug logs
   endpoint: 'custom-endpoint',          // Optional custom endpoint
   maxRetries: 3,                        // Network retry attempts
@@ -123,6 +161,9 @@ await datalyr.initialize({
   batchSize: 10,                        // Events per batch
   flushInterval: 10000,                 // Auto-flush interval in ms
   maxQueueSize: 100,                    // Max offline queue size
+  
+  // 🚀 NEW: SKAdNetwork Support (iOS 14+ Attribution)
+  skadTemplate: 'ecommerce',            // Choose: 'ecommerce', 'gaming', 'subscription'
   
   // 🚀 NEW: Automatic Events (Like Mixpanel)
   autoEvents: {
@@ -312,6 +353,73 @@ await datalyr.endSession();
 
 ---
 
-**Ready to test? Your mobile attribution + automatic events are now live! 🚀**
+## 🚀 SKAdNetwork Setup (iOS Attribution)
 
-*Now with automatic events like Mixpanel - no manual tracking required!* 
+### **1. Add Native Bridge (React Native CLI/Expo Bare)**
+
+Create `ios/YourApp/DatalyrSKAdNetwork.m`:
+```objc
+#import <React/RCTBridgeModule.h>
+#import <StoreKit/StoreKit.h>
+
+@interface DatalyrSKAdNetwork : NSObject <RCTBridgeModule>
+@end
+
+@implementation DatalyrSKAdNetwork
+
+RCT_EXPORT_MODULE();
+
+RCT_EXPORT_METHOD(updateConversionValue:(NSInteger)value
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+    if (@available(iOS 14.0, *)) {
+        @try {
+            [SKAdNetwork updateConversionValue:value];
+            resolve(@(YES));
+        } @catch (NSException *exception) {
+            reject(@"skadnetwork_error", exception.reason, nil);
+        }
+    } else {
+        reject(@"ios_version_error", @"SKAdNetwork requires iOS 14.0+", nil);
+    }
+}
+
+@end
+```
+
+### **2. Track Events with SKAdNetwork**
+
+```typescript
+import { Datalyr } from '@datalyr/react-native-sdk';
+
+// Track events with automatic conversion value encoding
+await Datalyr.trackPurchase(29.99, 'USD', 'premium_plan');
+await Datalyr.trackWithSKAdNetwork('add_to_cart', { product_id: 'shirt_001' });
+await Datalyr.trackWithSKAdNetwork('level_complete', { level: 5, score: 1250 });
+
+// Test conversion values (doesn't send to Apple)
+const value = Datalyr.getConversionValue('purchase', { revenue: 29.99 });
+console.log('Conversion value:', value); // Example: 5
+```
+
+### **3. Industry Templates**
+
+Choose the template that best fits your app:
+
+**E-commerce (`skadTemplate: 'ecommerce'`):**
+- Optimized for: purchase, add_to_cart, begin_checkout, signup, subscribe, view_item
+- Revenue encoding: 8 tiers from $0-1 to $250+
+
+**Gaming (`skadTemplate: 'gaming'`):**
+- Optimized for: level_complete, tutorial_complete, purchase, achievement_unlocked, session_start, ad_watched
+- Revenue encoding for in-app purchases
+
+**Subscription (`skadTemplate: 'subscription'`):**
+- Optimized for: trial_start, subscribe, upgrade, cancel, signup, payment_method_added
+- Revenue encoding for subscription plans
+
+---
+
+**Ready to test? Your mobile attribution + automatic events + SKAdNetwork are now live! 🚀**
+
+*Compete with AppsFlyer/Adjust at 90% cost savings while getting Mixpanel-style automatic events!* 
