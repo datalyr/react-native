@@ -6,8 +6,17 @@
 
 ---
 
-## 🚨 Migration Notice (v1.0.11)
+## 🚨 Migration Notice
 
+### **🚀 NEW in v2.0.0: SKAdNetwork Support!**
+**Compete with AppsFlyer/Adjust at 90% cost savings:**
+- Add `skadTemplate: 'ecommerce'` to your `initialize()` call for automatic iOS 14+ attribution
+- Use `Datalyr.trackPurchase()` and `Datalyr.trackWithSKAdNetwork()` for conversion tracking
+- Choose from 3 industry templates: `'ecommerce'`, `'gaming'`, `'subscription'`
+- **Benefit**: Same SKAdNetwork functionality as enterprise MMPs at $49/month instead of $500/month
+- See [SKAdNetwork Quick Setup](#-skadnetwork-quick-setup-ios-attribution) below for details
+
+### **v1.0.11 Changes:**
 **BREAKING CHANGE**: API key is now required for authentication:
 - Add `apiKey: 'dk_your_api_key'` to your `initialize()` call
 - Get your API key from your web tracking script tag (`data-api-key` attribute)
@@ -52,6 +61,15 @@
 // ✅ Deep link attribution with install detection
 ```
 
+### 📊 **SKAdNetwork Integration (iOS 14+)**
+```typescript
+// Automatic conversion value encoding - compete with AppsFlyer/Adjust at 90% cost savings!
+// ✅ Industry templates: E-commerce, Gaming, Subscription
+// ✅ Automatic revenue tier encoding (8 tiers: $0-1, $1-5, $5-10, $10-25, $25-50, $50-100, $100-250, $250+)
+// ✅ Event priority optimization for maximum attribution
+// ✅ Unified web + mobile analytics dashboard
+```
+
 ### 📊 **Automatic Events (Like Mixpanel)**
 ```typescript
 // No manual tracking required - events happen automatically!
@@ -85,6 +103,7 @@
 ### **📊 Feature Documentation**
 - **[SDK_COMPLETION_STATUS.md](https://github.com/datalyr/react-native-sdk/blob/main/SDK_COMPLETION_STATUS.md)** - What's included vs competitors
 - **[test-app/](https://github.com/datalyr/react-native-sdk/tree/main/test-app)** - 🧪 **Complete test app** - Ready-to-run Expo app demonstrating all features
+- **[examples/skadnetwork-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/skadnetwork-example.tsx)** - 🚀 **SKAdNetwork demo** - Complete interface for testing all templates
 - **[examples/auto-events-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/auto-events-example.tsx)** - Live demo of automatic events
 - **[examples/attribution-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/attribution-example.tsx)** - Attribution testing interface
 - **[examples/example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/example.tsx)** - Basic SDK usage example
@@ -97,6 +116,7 @@
 
 ## 🎯 30-Second Integration
 
+**Basic Setup:**
 ```typescript
 import { datalyr } from '@datalyr/react-native-sdk';
 
@@ -117,8 +137,26 @@ await datalyr.initialize({
 await datalyr.track('purchase', { value: 29.99, currency: 'USD' });
 await datalyr.identify('user_123', { email: 'user@example.com' });
 await datalyr.screen('home_screen');
+```
 
-// 🎉 That's it! Automatic events happen behind the scenes
+**🚀 NEW: SKAdNetwork Setup (iOS 14+ Attribution):**
+```typescript
+import { Datalyr } from '@datalyr/react-native-sdk';
+
+// Initialize with SKAdNetwork for iOS attribution
+await Datalyr.initialize({
+  workspaceId: 'your-workspace-id',
+  apiKey: 'dk_your_api_key',
+  skadTemplate: 'ecommerce', // 'ecommerce', 'gaming', or 'subscription'
+  enableAttribution: true,
+  autoEvents: { trackSessions: true, trackScreenViews: true },
+});
+
+// Track events with automatic SKAdNetwork encoding
+await Datalyr.trackPurchase(29.99, 'USD', 'premium_plan');
+await Datalyr.trackWithSKAdNetwork('add_to_cart', { product_id: 'shirt_001' });
+
+// 🎉 Automatic conversion value encoding sends to Apple!
 ```
 
 ## 🧪 **Want to Test First?**
@@ -161,18 +199,19 @@ Events appear in your Datalyr dashboard with `source: 'mobile_app'`:
 
 ---
 
-## 🏆 vs. Competitors
+## 🏆 vs. Enterprise MMPs
 
-| Feature | Mixpanel | Amplitude | Firebase | **Datalyr** |
-|---------|----------|-----------|----------|-------------|
-| Attribution | ❌ | ❌ | ❌ | **✅** |
-| Auto Events | ✅ | ✅ | ✅ | **✅** |
-| Session Tracking | ✅ | ✅ | ✅ | **✅** |
-| Offline Support | ✅ | ✅ | ✅ | **✅** |
-| Ad Platform Integration | ❌ | ❌ | ❌ | **✅** |
-| Revenue Tracking | ✅ | ✅ | ✅ | **✅** |
+| Feature | AppsFlyer | Adjust | Mixpanel | **Datalyr** |
+|---------|-----------|--------|----------|-------------|
+| SKAdNetwork | ✅ ($300/mo) | ✅ ($500/mo) | ❌ | **✅ ($49/mo)** |
+| Attribution | ✅ | ✅ | ❌ | **✅** |
+| Auto Events | ❌ | ❌ | ✅ | **✅** |
+| Web + Mobile | ❌ | ❌ | ✅ | **✅** |
+| Revenue Optimization | ✅ | ✅ | ✅ | **✅** |
+| Industry Templates | ✅ | ✅ | ❌ | **✅** |
+| Cost | $300-3000/mo | $500-5000/mo | $20-2000/mo | **$49-499/mo** |
 
-**🎯 Datalyr Advantage:** Only SDK that combines attribution + automatic events!
+**🎯 Datalyr Advantage:** Same SKAdNetwork functionality as enterprise MMPs at 90% cost savings + unified web analytics!
 
 ---
 
@@ -180,10 +219,11 @@ Events appear in your Datalyr dashboard with `source: 'mobile_app'`:
 
 Want to see all features in action?
 
-1. **🧪 Complete Test App:** Run the [test-app/](https://github.com/datalyr/react-native-sdk/tree/main/test-app) - Full Expo app with all features
-2. **Basic Integration:** Check out [examples/example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/example.tsx)
+1. **🚀 SKAdNetwork Demo:** Try [examples/skadnetwork-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/skadnetwork-example.tsx) - Test all industry templates with real-time conversion values
+2. **🧪 Complete Test App:** Run the [test-app/](https://github.com/datalyr/react-native-sdk/tree/main/test-app) - Full Expo app with all features
 3. **Auto Events Demo:** Run [examples/auto-events-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/auto-events-example.tsx)  
 4. **Attribution Testing:** Use [examples/attribution-example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/attribution-example.tsx)
+5. **Basic Integration:** Check out [examples/example.tsx](https://github.com/datalyr/react-native-sdk/blob/main/examples/example.tsx)
 
 ---
 
@@ -196,6 +236,65 @@ Want to see all features in action?
 
 ---
 
-**🔥 The only mobile SDK that tracks attribution AND provides automatic events like Mixpanel!** 
+**🔥 The only mobile SDK that combines SKAdNetwork attribution + automatic events + unified web analytics!** 
 
-*Production-ready with 100% feature completion - attribution tracking + automatic events like Mixpanel!* 
+*Compete with AppsFlyer/Adjust at 90% cost savings while getting Mixpanel-style automatic events!*
+
+---
+
+## 🚀 SKAdNetwork Quick Setup (iOS Attribution)
+
+### **1. Add Native Bridge (React Native CLI/Expo Bare):**
+
+Create `ios/YourApp/DatalyrSKAdNetwork.m`:
+```objc
+#import <React/RCTBridgeModule.h>
+#import <StoreKit/StoreKit.h>
+
+@interface DatalyrSKAdNetwork : NSObject <RCTBridgeModule>
+@end
+
+@implementation DatalyrSKAdNetwork
+RCT_EXPORT_MODULE();
+
+RCT_EXPORT_METHOD(updateConversionValue:(NSInteger)value
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+    if (@available(iOS 14.0, *)) {
+        [SKAdNetwork updateConversionValue:value];
+        resolve(@(YES));
+    } else {
+        reject(@"ios_version_error", @"SKAdNetwork requires iOS 14.0+", nil);
+    }
+}
+@end
+```
+
+### **2. Initialize with Template:**
+```typescript
+import { Datalyr } from '@datalyr/react-native-sdk';
+
+await Datalyr.initialize({
+  workspaceId: 'your-workspace-id',
+  apiKey: 'your-api-key',
+  skadTemplate: 'ecommerce', // Choose: 'ecommerce', 'gaming', 'subscription'
+});
+```
+
+### **3. Track Events:**
+```typescript
+// Automatic SKAdNetwork encoding for iOS 14+
+await Datalyr.trackPurchase(29.99, 'USD', 'premium_plan');
+await Datalyr.trackWithSKAdNetwork('add_to_cart', { product_id: 'shirt_001' });
+
+// Test conversion values (doesn't send to Apple)
+const value = Datalyr.getConversionValue('purchase', { revenue: 29.99 });
+console.log('Conversion value:', value); // Example: 5
+```
+
+### **4. Revenue Encoding:**
+The SDK automatically maps revenue to 8 optimized tiers:
+- $0-1 → Tier 0, $1-5 → Tier 1, $5-10 → Tier 2, $10-25 → Tier 3
+- $25-50 → Tier 4, $50-100 → Tier 5, $100-250 → Tier 6, $250+ → Tier 7
+
+**🎯 Result:** Same attribution as AppsFlyer/Adjust at $49/month instead of $500/month! 
