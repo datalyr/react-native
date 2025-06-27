@@ -26,6 +26,8 @@ import { createHttpClient, HttpClient } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData } from './attribution';
 import { createAutoEventsManager, AutoEventsManager, SessionData } from './auto-events';
+import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
+import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 
 export class DatalyrSDK {
   private state: SDKState;
@@ -33,6 +35,8 @@ export class DatalyrSDK {
   private eventQueue: EventQueue;
   private autoEventsManager: AutoEventsManager | null = null;
   private appStateSubscription: any = null;
+  private static conversionEncoder?: ConversionValueEncoder;
+  private static debugEnabled = false;
 
   constructor() {
     // Initialize state with defaults
@@ -137,6 +141,20 @@ export class DatalyrSDK {
         }
       }, 50);
 
+      // Initialize SKAdNetwork conversion encoder
+      if (config.skadTemplate) {
+        const template = ConversionTemplates[config.skadTemplate];
+        if (template) {
+          DatalyrSDK.conversionEncoder = new ConversionValueEncoder(template);
+          DatalyrSDK.debugEnabled = config.debug || false;
+          
+          if (DatalyrSDK.debugEnabled) {
+            debugLog(`SKAdNetwork encoder initialized with template: ${config.skadTemplate}`);
+            debugLog(`SKAdNetwork bridge available: ${SKAdNetworkBridge.isAvailable()}`);
+          }
+        }
+      }
+
       // SDK initialized successfully - set state before tracking install event
       this.state.initialized = true;
 
@@ -149,6 +167,7 @@ export class DatalyrSDK {
           ...installData,
         });
       }
+      
       debugLog('Datalyr SDK initialized successfully', {
         workspaceId: this.state.config.workspaceId,
         visitorId: this.state.visitorId,
@@ -386,6 +405,76 @@ export class DatalyrSDK {
     }
   }
 
+  // MARK: - SKAdNetwork Enhanced Methods
+
+  /**
+   * Track event with automatic SKAdNetwork conversion value encoding
+   */
+  async trackWithSKAdNetwork(
+    event: string, 
+    properties?: EventData
+  ): Promise<void> {
+    // Existing tracking (keep exactly as-is)
+    await this.track(event, properties);
+
+    // NEW: Automatic SKAdNetwork encoding
+    if (!DatalyrSDK.conversionEncoder) {
+      if (DatalyrSDK.debugEnabled) {
+        errorLog('SKAdNetwork encoder not initialized. Pass skadTemplate in initialize()');
+      }
+      return;
+    }
+
+    const conversionValue = DatalyrSDK.conversionEncoder.encode(event, properties);
+    
+    if (conversionValue > 0) {
+      const success = await SKAdNetworkBridge.updateConversionValue(conversionValue);
+      
+      if (DatalyrSDK.debugEnabled) {
+        debugLog(`Event: ${event}, Conversion Value: ${conversionValue}, Success: ${success}`, properties);
+      }
+    } else if (DatalyrSDK.debugEnabled) {
+      debugLog(`No conversion value generated for event: ${event}`);
+    }
+  }
+
+  /**
+   * Track purchase with automatic revenue encoding
+   */
+  async trackPurchase(
+    value: number, 
+    currency = 'USD', 
+    productId?: string
+  ): Promise<void> {
+    const properties: Record<string, any> = { revenue: value, currency };
+    if (productId) properties.product_id = productId;
+    
+    await this.trackWithSKAdNetwork('purchase', properties);
+  }
+
+  /**
+   * Track subscription with automatic revenue encoding
+   */
+  async trackSubscription(
+    value: number, 
+    currency = 'USD', 
+    plan?: string
+  ): Promise<void> {
+    const properties: Record<string, any> = { revenue: value, currency };
+    if (plan) properties.plan = plan;
+    
+    await this.trackWithSKAdNetwork('subscribe', properties);
+  }
+
+  /**
+   * Get conversion value for testing (doesn't send to Apple)
+   */
+  getConversionValue(event: string, properties?: Record<string, any>): number | null {
+    return DatalyrSDK.conversionEncoder?.encode(event, properties) || null;
+  }
+
+  // MARK: - Private Methods
+
   /**
    * Create an event payload with all required data
    */
@@ -547,4 +636,116 @@ export class DatalyrSDK {
       errorLog('Error destroying SDK:', error as Error);
     }
   }
-} 
+}
+
+// Create singleton instance
+const datalyr = new DatalyrSDK();
+
+// Export enhanced Datalyr class with static methods
+export class Datalyr {
+  /**
+   * Initialize Datalyr with SKAdNetwork conversion value encoding
+   */
+  static async initialize(config: DatalyrConfig): Promise<void> {
+    await datalyr.initialize(config);
+  }
+
+  /**
+   * Track event with automatic SKAdNetwork conversion value encoding
+   */
+  static async trackWithSKAdNetwork(
+    event: string, 
+    properties?: Record<string, any>
+  ): Promise<void> {
+    await datalyr.trackWithSKAdNetwork(event, properties);
+  }
+
+  /**
+   * Track purchase with automatic revenue encoding
+   */
+  static async trackPurchase(
+    value: number, 
+    currency = 'USD', 
+    productId?: string
+  ): Promise<void> {
+    await datalyr.trackPurchase(value, currency, productId);
+  }
+
+  /**
+   * Track subscription with automatic revenue encoding
+   */
+  static async trackSubscription(
+    value: number, 
+    currency = 'USD', 
+    plan?: string
+  ): Promise<void> {
+    await datalyr.trackSubscription(value, currency, plan);
+  }
+
+  /**
+   * Get conversion value for testing (doesn't send to Apple)
+   */
+  static getConversionValue(event: string, properties?: Record<string, any>): number | null {
+    return datalyr.getConversionValue(event, properties);
+  }
+
+  // Standard SDK methods
+  static async track(eventName: string, eventData?: EventData): Promise<void> {
+    await datalyr.track(eventName, eventData);
+  }
+
+  static async screen(screenName: string, properties?: EventData): Promise<void> {
+    await datalyr.screen(screenName, properties);
+  }
+
+  static async identify(userId: string, properties?: UserProperties): Promise<void> {
+    await datalyr.identify(userId, properties);
+  }
+
+  static async alias(newUserId: string, previousId?: string): Promise<void> {
+    await datalyr.alias(newUserId, previousId);
+  }
+
+  static async reset(): Promise<void> {
+    await datalyr.reset();
+  }
+
+  static async flush(): Promise<void> {
+    await datalyr.flush();
+  }
+
+  static getStatus() {
+    return datalyr.getStatus();
+  }
+
+  static getAttributionData(): AttributionData {
+    return datalyr.getAttributionData();
+  }
+
+  static async setAttributionData(data: Partial<AttributionData>): Promise<void> {
+    await datalyr.setAttributionData(data);
+  }
+
+  static getCurrentSession() {
+    return datalyr.getCurrentSession();
+  }
+
+  static async endSession(): Promise<void> {
+    await datalyr.endSession();
+  }
+
+  static async trackAppUpdate(previousVersion: string, currentVersion: string): Promise<void> {
+    await datalyr.trackAppUpdate(previousVersion, currentVersion);
+  }
+
+  static async trackRevenue(eventName: string, properties?: EventData): Promise<void> {
+    await datalyr.trackRevenue(eventName, properties);
+  }
+
+  static updateAutoEventsConfig(config: Partial<AutoEventConfig>): void {
+    datalyr.updateAutoEventsConfig(config);
+  }
+}
+
+// Export default instance for backward compatibility
+export default datalyr; 

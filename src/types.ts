@@ -30,6 +30,7 @@ export interface DatalyrConfig {
     maxRetries: number;
     retryDelay: number;
   };
+  skadTemplate?: 'ecommerce' | 'gaming' | 'subscription';
 }
 
 // Event Types
