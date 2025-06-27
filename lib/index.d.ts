@@ -1,5 +1,6 @@
-import { DatalyrSDK } from './datalyr-sdk';
+import { DatalyrSDK, Datalyr } from './datalyr-sdk';
 export declare const datalyr: DatalyrSDK;
+export { Datalyr };
 export * from './types';
 export { attributionManager } from './attribution';
 export { createAutoEventsManager, AutoEventsManager } from './auto-events';
@@ -7,4 +8,6 @@ export * from './utils';
 export * from './http-client';
 export * from './event-queue';
 export { DatalyrSDK };
+export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
+export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 export default DatalyrSDK;

@@ -27,6 +27,7 @@ export interface DatalyrConfig {
         maxRetries: number;
         retryDelay: number;
     };
+    skadTemplate?: 'ecommerce' | 'gaming' | 'subscription';
 }
 export interface EventData {
     [key: string]: any;
@@ -43,7 +44,6 @@ export interface EventData {
 }
 export interface FingerprintData {
     deviceId?: string;
-    advertisingId?: string;
     deviceInfo?: {
         model: string;
         manufacturer: string;
