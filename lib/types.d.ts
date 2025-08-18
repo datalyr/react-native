@@ -6,11 +6,12 @@ export interface AutoEventConfig {
     sessionTimeoutMs?: number;
 }
 export interface DatalyrConfig {
-    workspaceId: string;
     apiKey: string;
+    workspaceId?: string;
     debug?: boolean;
     apiUrl?: string;
     endpoint?: string;
+    useServerTracking?: boolean;
     maxRetries?: number;
     retryDelay?: number;
     timeout?: number;

@@ -46,7 +46,8 @@ export class DatalyrSDK {
         workspaceId: '',
         apiKey: '',
         debug: false,
-        endpoint: 'https://datalyr-ingest.datalyr-ingest.workers.dev',
+        endpoint: 'https://api.datalyr.com', // Updated to server-side API
+        useServerTracking: true, // Default to server-side
         maxRetries: 3,
         retryDelay: 1000,
         batchSize: 10,
@@ -74,25 +75,27 @@ export class DatalyrSDK {
       debugLog('Initializing Datalyr SDK...', { workspaceId: config.workspaceId });
 
       // Validate configuration
-      if (!config.workspaceId) {
-        throw new Error('workspaceId is required');
+      if (!config.apiKey) {
+        throw new Error('apiKey is required for Datalyr SDK v1.0.0');
       }
       
-      if (!config.apiKey) {
-        throw new Error('apiKey is required');
+      // workspaceId is now optional (for backward compatibility)
+      if (!config.workspaceId) {
+        debugLog('workspaceId not provided, using server-side tracking only');
       }
 
       // Set up configuration
       this.state.config = { ...this.state.config, ...config };
 
-      // Initialize HTTP client
-      this.httpClient = new HttpClient(this.state.config.endpoint || 'https://datalyr-ingest.datalyr-ingest.workers.dev', {
+      // Initialize HTTP client with server-side API
+      this.httpClient = new HttpClient(this.state.config.endpoint || 'https://api.datalyr.com', {
         maxRetries: this.state.config.maxRetries || 3,
         retryDelay: this.state.config.retryDelay || 1000,
         timeout: this.state.config.timeout || 15000,
-        apiKey: this.state.config.apiKey,
+        apiKey: this.state.config.apiKey!,
         workspaceId: this.state.config.workspaceId,
         debug: this.state.config.debug || false,
+        useServerTracking: this.state.config.useServerTracking ?? true,
       });
 
       // Initialize event queue
@@ -163,7 +166,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.0.11',
+          sdk_version: '1.0.1',
           ...installData,
         });
       }
@@ -339,7 +342,7 @@ export class DatalyrSDK {
   } {
     return {
       initialized: this.state.initialized,
-      workspaceId: this.state.config.workspaceId,
+      workspaceId: this.state.config.workspaceId || '',
       visitorId: this.state.visitorId,
       sessionId: this.state.sessionId,
       currentUserId: this.state.currentUserId,
@@ -484,7 +487,7 @@ export class DatalyrSDK {
     const attributionData = attributionManager.getAttributionData();
 
     const payload: EventPayload = {
-      workspaceId: this.state.config.workspaceId,
+      workspaceId: this.state.config.workspaceId || 'mobile_sdk',
       visitorId: this.state.visitorId,
       sessionId: this.state.sessionId,
       eventId: generateUUID(),

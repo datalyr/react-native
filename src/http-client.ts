@@ -5,9 +5,10 @@ interface HttpClientConfig {
   maxRetries: number;
   retryDelay: number;
   timeout: number;
-  apiKey?: string;
-  workspaceId: string;
+  apiKey: string; // Now required for server-side tracking
+  workspaceId?: string; // Optional, for legacy support
   debug: boolean;
+  useServerTracking?: boolean; // Flag to use new server API
 }
 
 interface HttpResponse {
@@ -24,7 +25,10 @@ export class HttpClient {
   private requestCount = 0;
 
   constructor(endpoint: string, config: HttpClientConfig) {
-    this.endpoint = endpoint;
+    // Use server-side API if flag is set (default to true for v1.0.0)
+    this.endpoint = config.useServerTracking !== false 
+      ? 'https://api.datalyr.com'
+      : endpoint;
     this.config = config;
   }
 
@@ -68,23 +72,31 @@ export class HttpClient {
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': `datalyr-react-native-sdk/1.0.11`,
+        'User-Agent': `@datalyr/react-native/1.0.1`,
       };
 
-      // Use workspace ID as Bearer token if no API key provided (matching web script)
-      const authToken = this.config.apiKey || this.config.workspaceId;
-      headers['Authorization'] = `Bearer ${authToken}`;
-
-      // Add multiple auth methods for compatibility
-      if (this.config.apiKey) {
+      // Server-side tracking uses X-API-Key header
+      if (this.config.useServerTracking !== false) {
         headers['X-API-Key'] = this.config.apiKey;
-        headers['X-Datalyr-API-Key'] = this.config.apiKey;
+      } else {
+        // Legacy client-side tracking
+        const authToken = this.config.apiKey || this.config.workspaceId;
+        headers['Authorization'] = `Bearer ${authToken}`;
+        if (this.config.apiKey) {
+          headers['X-API-Key'] = this.config.apiKey;
+          headers['X-Datalyr-API-Key'] = this.config.apiKey;
+        }
       }
       
+      // Transform payload for server-side API if needed
+      const requestBody = this.config.useServerTracking !== false 
+        ? this.transformForServerAPI(payload)
+        : payload;
+
       const response = await fetch(this.endpoint, {
         method: 'POST',
         headers,
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
 
@@ -170,6 +182,29 @@ export class HttpClient {
   }
 
   /**
+   * Transform payload for server-side API format
+   */
+  private transformForServerAPI(payload: EventPayload): any {
+    return {
+      event: payload.eventName,
+      userId: payload.userId || payload.visitorId,
+      anonymousId: payload.visitorId,
+      properties: {
+        ...payload.eventData,
+        sessionId: payload.sessionId,
+        source: payload.source || 'mobile_app',
+        fingerprint: payload.fingerprintData,
+      },
+      context: {
+        library: '@datalyr/react-native',
+        version: '1.0.1',
+        userProperties: payload.userProperties,
+      },
+      timestamp: payload.timestamp,
+    };
+  }
+
+  /**
    * Test connectivity to the endpoint
    */
   async testConnection(): Promise<boolean> {
@@ -217,9 +252,10 @@ export const createHttpClient = (endpoint: string, config?: Partial<HttpClientCo
     maxRetries: 3,
     retryDelay: 1000, // 1 second base delay
     timeout: 15000, // 15 seconds
-    apiKey: undefined,
+    apiKey: '',
     workspaceId: '',
     debug: false,
+    useServerTracking: true, // Default to server-side API for v1.0.0
   };
 
   return new HttpClient(endpoint, { ...defaultConfig, ...config });

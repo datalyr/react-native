@@ -3,9 +3,10 @@ interface HttpClientConfig {
     maxRetries: number;
     retryDelay: number;
     timeout: number;
-    apiKey?: string;
-    workspaceId: string;
+    apiKey: string;
+    workspaceId?: string;
     debug: boolean;
+    useServerTracking?: boolean;
 }
 interface HttpResponse {
     success: boolean;
@@ -43,6 +44,10 @@ export declare class HttpClient {
      * Promise-based delay
      */
     private delay;
+    /**
+     * Transform payload for server-side API format
+     */
+    private transformForServerAPI;
     /**
      * Test connectivity to the endpoint
      */

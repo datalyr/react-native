@@ -9,11 +9,12 @@ export interface AutoEventConfig {
 
 // Core SDK Configuration
 export interface DatalyrConfig {
-  workspaceId: string;
-  apiKey: string;
+  apiKey: string; // Required for server-side tracking
+  workspaceId?: string; // Optional for backward compatibility
   debug?: boolean;
   apiUrl?: string;
   endpoint?: string;
+  useServerTracking?: boolean; // Default: true for v1.0.0
   maxRetries?: number;
   retryDelay?: number;
   timeout?: number;

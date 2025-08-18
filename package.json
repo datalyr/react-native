@@ -1,7 +1,7 @@
 {
-  "name": "@datalyr/react-native-sdk",
-  "version": "2.0.0",
-  "description": "SKAdNetwork attribution + automatic events for React Native & Expo - Compete with AppsFlyer/Adjust at 90% cost savings",
+  "name": "@datalyr/react-native",
+  "version": "1.0.1",
+  "description": "Datalyr SDK for React Native & Expo - Server-side attribution tracking",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
