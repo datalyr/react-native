@@ -43,7 +43,7 @@
   "homepage": "https://datalyr.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/datalyr/datalyr-react-native.git"
+    "url": "https://github.com/datalyr/react-native.git"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
