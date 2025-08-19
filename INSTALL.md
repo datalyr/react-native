@@ -1,33 +1,22 @@
-# Datalyr React Native SDK - Quick Install Guide
+# Datalyr React Native SDK - Installation Guide
 
-## 🎯 Key Features
+## Key Features
 
-- 🚀 **NEW: SKAdNetwork Support** - Compete with AppsFlyer/Adjust at 90% cost savings
-- ✅ **Complete Attribution** - Track users from ad click to conversion
-- ✅ **Automatic Events** - Like Mixpanel (sessions, screen views, app lifecycle)
-- ✅ **Device Fingerprinting** - IDFA/GAID collection with fallback IDs  
-- ✅ **Offline Support** - Queue events when offline, sync when connected
-- ✅ **Session Management** - Automatic session tracking with timeouts
-- ✅ **Deep Link Support** - Extract attribution from app launches
-- ✅ **Privacy Compliant** - GDPR/CCPA support with opt-out options
+- **Complete Attribution** - Track users from ad click to conversion
+- **Automatic Events** - Sessions, screen views, app lifecycle
+- **SKAdNetwork Support** - iOS 14+ attribution
+- **Offline Support** - Queue events when offline
+- **Deep Link Support** - Extract attribution from app launches
+- **Privacy Compliant** - GDPR/CCPA support
 
-## 🚀 Quick Setup (5 minutes)
+## Quick Setup
 
-### 1. Install Dependencies
+### 1. Install Package
 
 ```bash
-# Navigate to your React Native project
-cd your-react-native-app
-
-# Install required dependencies
-npm install @react-native-async-storage/async-storage @react-native-community/netinfo react-native-device-info react-native-get-random-values react-native-idfa uuid
-# or with yarn
-yarn add @react-native-async-storage/async-storage @react-native-community/netinfo react-native-device-info react-native-get-random-values react-native-idfa uuid
-
-# Install dev dependencies
-npm install --save-dev @types/uuid
-# or with yarn  
-yarn add --dev @types/uuid
+npm install @datalyr/react-native
+# or
+yarn add @datalyr/react-native
 ```
 
 ### 2. iOS Setup (if targeting iOS)
@@ -36,19 +25,7 @@ yarn add --dev @types/uuid
 cd ios && pod install && cd ..
 ```
 
-### 3. Add the SDK to Your Project
-
-For now, copy the SDK files directly into your project:
-
-```bash
-# Create SDK directory
-mkdir -p src/datalyr-sdk
-
-# Copy SDK files
-cp -r docs/mobile/react-native/src/* src/datalyr-sdk/
-```
-
-### 4. Initialize in Your App
+### 3. Initialize in Your App
 
 **Basic Setup:**
 ```typescript
@@ -90,7 +67,7 @@ const App: React.FC = () => {
 };
 ```
 
-**🚀 NEW: SKAdNetwork Setup (iOS 14+ Attribution):**
+**SKAdNetwork Setup (iOS 14+ Attribution):**
 ```typescript
 // For iOS attribution competing with AppsFlyer/Adjust
 import React, { useEffect } from 'react';
@@ -148,7 +125,7 @@ const testTracking = async () => {
 };
 ```
 
-## 🔧 Configuration Options
+## Configuration Options
 
 ```typescript
 await datalyr.initialize({
@@ -176,13 +153,13 @@ await datalyr.initialize({
 });
 ```
 
-## 📱 Platform Requirements
+## Platform Requirements
 
 - **React Native**: >= 0.60.0
 - **iOS**: >= 11.0
 - **Android**: >= API level 21
 
-## 🎯 Framework Compatibility
+## Framework Compatibility
 
 | Framework | Compatibility | Install Guide |
 |-----------|---------------|---------------|
@@ -195,7 +172,7 @@ await datalyr.initialize({
 
 **📖 For Expo users:** See [EXPO_INSTALL.md](./EXPO_INSTALL.md) for Expo-specific setup instructions.
 
-## 🎯 Setting Up Attribution
+## Setting Up Attribution
 
 ### 1. Configure Deep Links
 
@@ -267,7 +244,7 @@ Expected output:
 */
 ```
 
-## 🧪 Testing Events
+## Testing Events
 
 After setup, events will appear in your Datalyr dashboard at:
 `https://app.datalyr.com/dashboard/ozLZblQ8hN`
@@ -292,7 +269,7 @@ Look for events with `source: 'mobile_app'` to confirm mobile tracking is workin
 - User identification with `datalyr.identify()`
 - Manual screen views with `datalyr.screen()`
 
-## ⚡ Quick Debugging
+## Debugging
 
 ```typescript
 // Check SDK status
@@ -309,14 +286,14 @@ await datalyr.initialize({
 });
 ```
 
-## 🚨 Common Issues
+## Common Issues
 
 1. **Events not appearing**: Check debug logs and network connectivity
 2. **Build errors**: Ensure all dependencies are installed and linked
 3. **iOS build issues**: Run `cd ios && pod install`
 4. **Android issues**: Check that your minSdkVersion is >= 21
 
-## 🚀 Automatic Events Demo
+## Automatic Events
 
 Want to see all the automatic events in action? Check out `auto-events-example.tsx` for a live demo that shows:
 
@@ -343,7 +320,7 @@ await datalyr.trackRevenue('purchase', {
 await datalyr.endSession();
 ```
 
-## 📚 Next Steps
+## Next Steps
 
 - See `example.tsx` for basic integration example
 - See `auto-events-example.tsx` for automatic events demo
@@ -353,7 +330,7 @@ await datalyr.endSession();
 
 ---
 
-## 🚀 SKAdNetwork Setup (iOS Attribution)
+## SKAdNetwork Setup (iOS Attribution)
 
 ### **1. Add Native Bridge (React Native CLI/Expo Bare)**
 

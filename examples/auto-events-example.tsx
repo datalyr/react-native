@@ -9,7 +9,7 @@ import {
   AppState,
   SafeAreaView,
 } from 'react-native';
-import { datalyr } from '@datalyr/react-native-sdk';
+import { datalyr } from '@datalyr/react-native';
 
 // This example demonstrates all automatic events (like Mixpanel)
 export default function AutoEventsExample() {

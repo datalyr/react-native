@@ -1,15 +1,14 @@
 # Datalyr Expo SDK - Installation Guide
 
-## 🎯 Expo Compatibility Overview
+## Expo Compatibility
 
-**✅ Works with Expo:** The Datalyr SDK can be used with Expo, but requires some adjustments for the **managed workflow**.
+The Datalyr SDK works with all Expo workflows:
 
-**📱 Expo Workflow Compatibility:**
-- ✅ **Expo Bare Workflow** - Full compatibility (use regular React Native SDK)
-- ✅ **Expo Managed Workflow** - Requires Expo-specific version (this guide)
-- ❌ **Expo Go** - Limited compatibility due to native dependencies
+- **Expo Bare Workflow** - Full compatibility (use regular React Native SDK)
+- **Expo Managed Workflow** - Requires Expo-specific setup (this guide)
+- **Expo Go** - Limited compatibility due to native dependencies
 
-## 🚀 Quick Setup for Expo Managed Workflow
+## Quick Setup for Expo Managed Workflow
 
 ### 1. Install Expo Dependencies
 
@@ -131,7 +130,7 @@ const App: React.FC = () => {
 export default App;
 ```
 
-## 🔧 Expo vs React Native CLI Differences
+## Expo vs React Native CLI Differences
 
 | Feature | React Native CLI | Expo Managed | Expo Bare |
 |---------|------------------|--------------|-----------|
@@ -142,7 +141,7 @@ export default App;
 | Attribution | Full support ✅ | Full support ✅ | Full support ✅ |
 | Auto Events | Full support ✅ | Full support ✅ | Full support ✅ |
 
-## 📱 Expo-Specific Features
+## Expo-Specific Features
 
 ### 1. Device Information
 ```typescript
@@ -186,7 +185,7 @@ const getNetworkType = async () => {
 };
 ```
 
-## 🎯 Attribution Setup for Expo
+## Attribution Setup for Expo
 
 Deep links work the same way, but configuration is in `app.json`:
 
@@ -205,7 +204,7 @@ const tiktokUrl = 'yourappscheme://open?utm_source=tiktok&utm_campaign=viral_vid
 const googleUrl = 'yourappscheme://open?utm_source=google&utm_campaign=brand_search&gclid=google456def';
 ```
 
-## 🧪 Testing with Expo
+## Testing with Expo
 
 ### Development
 ```bash
@@ -228,23 +227,23 @@ eas submit --platform ios
 eas submit --platform android
 ```
 
-## ⚠️ Expo Limitations
+## Expo Limitations
 
-### What Works Fully:
-- ✅ Event tracking and attribution
-- ✅ Session management  
-- ✅ Screen view tracking
-- ✅ App lifecycle events
-- ✅ Deep link attribution
-- ✅ Basic device fingerprinting
+### What Works:
+- Event tracking and attribution
+- Session management  
+- Screen view tracking
+- App lifecycle events
+- Deep link attribution
+- Basic device fingerprinting
 
-### What Has Limitations:
-- ⚠️ **IDFA/GAID Collection** - Requires additional setup with expo-ads-admob
-- ⚠️ **Advanced Device Info** - Some properties not available in managed workflow
-- ⚠️ **Carrier Information** - Not available in managed workflow
-- ⚠️ **Custom Native Modules** - Can't use if staying in managed workflow
+### Limitations:
+- **IDFA/GAID Collection** - Requires additional setup
+- **Advanced Device Info** - Some properties not available in managed workflow
+- **Carrier Information** - Not available in managed workflow
+- **Custom Native Modules** - Not available in managed workflow
 
-## 🚀 Recommended Setup
+## Recommended Setup
 
 ### For Maximum Compatibility:
 1. **Use Expo Bare Workflow** - Get full React Native CLI features
@@ -255,24 +254,24 @@ eas submit --platform android
 2. **Core attribution still works** - LYR tags, UTM params, click IDs
 3. **Automatic events work fully** - Sessions, screen views, app lifecycle
 
-## 📊 Expected Events in Dashboard
+## Expected Events in Dashboard
 
 Events will appear in your Datalyr dashboard with `source: 'mobile_app'`:
 
-**🔥 Automatic Events:**
-- `session_start` - New user session (automatic)
-- `session_end` - Session ended with stats (automatic)  
-- `pageviews` - Screen navigation (automatic)
-- `app_install` - First app launch with attribution (automatic)
-- `app_update` - App version changes (automatic)
-- `app_foreground`/`app_background` - App lifecycle (automatic)
-- `sdk_initialized` - SDK setup complete (automatic)
+**Automatic Events:**
+- `session_start` - New user session
+- `session_end` - Session ended with stats  
+- `pageviews` - Screen navigation
+- `app_install` - First app launch with attribution
+- `app_update` - App version changes
+- `app_foreground`/`app_background` - App lifecycle
+- `sdk_initialized` - SDK setup complete
 
-**📱 Manual Events:**
+**Manual Events:**
 - Custom events from `datalyr.track()`
 - User identification from `datalyr.identify()`
 
-## 🆚 Expo vs React Native CLI Recommendation
+## Choosing Between Expo and React Native CLI
 
 ### Choose **React Native CLI** if:
 - You need full IDFA/GAID support
@@ -293,6 +292,6 @@ Events will appear in your Datalyr dashboard with `source: 'mobile_app'`:
 
 ---
 
-**🎉 Ready to test? Your Expo app with automatic attribution is ready!**
+**Ready to test?** Your Expo app with automatic attribution is ready!
 
-*The SDK provides 90% of the attribution value even with Expo limitations!* 
+The SDK provides 90% of the attribution value even with Expo's managed workflow limitations. 

@@ -1,19 +1,19 @@
 # @datalyr/react-native
 
-Official Datalyr SDK for React Native & Expo - Server-side attribution tracking and analytics.
+Official Datalyr SDK for React Native & Expo - Mobile attribution tracking and analytics.
 
 [![npm version](https://img.shields.io/npm/v/@datalyr/react-native.svg)](https://www.npmjs.com/package/@datalyr/react-native)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
-- 🔒 **Server-side tracking** - Secure API key authentication
+- 🎯 **Complete Attribution** - Track users from ad click to conversion
 - 📱 **React Native & Expo** - Works with both platforms
-- 🎯 **Attribution tracking** - UTM, referrer, and deep links
+- 🔄 **Automatic Events** - Session tracking, screen views, app lifecycle
 - 📊 **SKAdNetwork** - iOS 14+ attribution support
-- 💾 **Offline queue** - Events saved and retried
-- 🔄 **Session management** - Automatic session tracking
-- ⚡ **Performance** - < 100KB, minimal battery impact
+- 💾 **Offline Support** - Events saved and retried when reconnected
+- 🔒 **Privacy First** - GDPR/CCPA compliant
+- ⚡ **Lightweight** - < 100KB, minimal battery impact
 
 ## Installation
 
@@ -23,18 +23,15 @@ npm install @datalyr/react-native
 yarn add @datalyr/react-native
 ```
 
-### Additional Dependencies
-
-For device information and attribution:
-```bash
-npm install react-native-device-info @react-native-async-storage/async-storage
-```
-
 ### iOS Setup
 
 ```bash
 cd ios && pod install
 ```
+
+### Expo Users
+
+See [EXPO_INSTALL.md](./EXPO_INSTALL.md) for Expo-specific setup instructions.
 
 ## Quick Start
 
@@ -44,9 +41,9 @@ import { Datalyr } from '@datalyr/react-native';
 // Initialize SDK
 await Datalyr.initialize({
   apiKey: 'dk_your_api_key', // Required - get from Datalyr dashboard
-  debug: true, // Enable debug logs
-  enableAutoEvents: true, // Track sessions, app lifecycle
-  enableAttribution: true, // Track attribution data
+  debug: true, // Enable debug logs in development
+  enableAutoEvents: true, // Track sessions, screen views, app lifecycle
+  enableAttribution: true, // Track attribution data from ads
 });
 
 // Track custom event

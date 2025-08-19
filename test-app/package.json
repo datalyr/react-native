@@ -15,7 +15,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@datalyr/react-native-sdk": "^1.0.11",
+    "@datalyr/react-native": "file:..",
     "expo": "~53.0.12",
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",

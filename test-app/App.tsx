@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { datalyr } from '@datalyr/react-native-sdk';
+import { datalyr } from '@datalyr/react-native';
 
 const App: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);

@@ -15,7 +15,7 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
-import { datalyr } from '@datalyr/react-native-sdk';
+import { datalyr } from '@datalyr/react-native';
 
 const App: React.FC = () => {
   const [sdkStatus, setSdkStatus] = useState<any>(null);

@@ -16,7 +16,7 @@ import {
   TextInput,
   Linking,
 } from 'react-native';
-import { datalyr } from '@datalyr/react-native-sdk';
+import { datalyr } from '@datalyr/react-native';
 
 const AttributionExample: React.FC = () => {
   const [attributionData, setAttributionData] = useState<any>(null);
