@@ -10,6 +10,7 @@ import {
 } from './types';
 import { 
   getOrCreateVisitorId, 
+  getOrCreateAnonymousId,
   getOrCreateSessionId, 
   createFingerprintData, 
   generateUUID, 
@@ -56,6 +57,7 @@ export class DatalyrSDK {
         respectDoNotTrack: true,
       },
       visitorId: '',
+      anonymousId: '',  // Persistent anonymous identifier
       sessionId: '',
       userProperties: {},
       eventQueue: [],
@@ -106,8 +108,9 @@ export class DatalyrSDK {
         maxRetryCount: this.state.config.maxRetries || 3,
       });
 
-      // Initialize visitor ID and session
+      // Initialize visitor ID, anonymous ID and session
       this.state.visitorId = await getOrCreateVisitorId();
+      this.state.anonymousId = await getOrCreateAnonymousId();
       this.state.sessionId = await getOrCreateSessionId();
 
       // Load persisted user data
@@ -174,6 +177,7 @@ export class DatalyrSDK {
       debugLog('Datalyr SDK initialized successfully', {
         workspaceId: this.state.config.workspaceId,
         visitorId: this.state.visitorId,
+        anonymousId: this.state.anonymousId,
         sessionId: this.state.sessionId,
       });
 
@@ -251,9 +255,10 @@ export class DatalyrSDK {
       // Persist user data
       await this.persistUserData();
 
-      // Track identify event
-      await this.track('identify', { 
+      // Track $identify event for identity resolution
+      await this.track('$identify', { 
         userId, 
+        anonymous_id: this.state.anonymousId,
         ...properties 
       });
 
@@ -276,6 +281,7 @@ export class DatalyrSDK {
         newUserId,
         previousId: previousId || this.state.visitorId,
         visitorId: this.state.visitorId,
+        anonymousId: this.state.anonymousId,  // Include for identity resolution
       };
 
       debugLog('Aliasing user:', aliasData);
@@ -335,6 +341,7 @@ export class DatalyrSDK {
     initialized: boolean;
     workspaceId: string;
     visitorId: string;
+    anonymousId: string;
     sessionId: string;
     currentUserId?: string;
     queueStats: any;
@@ -344,11 +351,19 @@ export class DatalyrSDK {
       initialized: this.state.initialized,
       workspaceId: this.state.config.workspaceId || '',
       visitorId: this.state.visitorId,
+      anonymousId: this.state.anonymousId,
       sessionId: this.state.sessionId,
       currentUserId: this.state.currentUserId,
       queueStats: this.eventQueue.getStats(),
       attribution: attributionManager.getAttributionSummary(),
     };
+  }
+
+  /**
+   * Get the persistent anonymous ID
+   */
+  getAnonymousId(): string {
+    return this.state.anonymousId;
   }
 
   /**
@@ -489,11 +504,14 @@ export class DatalyrSDK {
     const payload: EventPayload = {
       workspaceId: this.state.config.workspaceId || 'mobile_sdk',
       visitorId: this.state.visitorId,
+      anonymousId: this.state.anonymousId,  // Include persistent anonymous ID
       sessionId: this.state.sessionId,
       eventId: generateUUID(),
       eventName,
       eventData: {
         ...eventData,
+        // Include anonymous_id in event data for attribution
+        anonymous_id: this.state.anonymousId,
         // Auto-captured mobile data
         platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
         os_version: deviceInfo.osVersion,
@@ -719,6 +737,10 @@ export class Datalyr {
 
   static getStatus() {
     return datalyr.getStatus();
+  }
+
+  static getAnonymousId(): string {
+    return datalyr.getAnonymousId();
   }
 
   static getAttributionData(): AttributionData {

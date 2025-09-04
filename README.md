@@ -14,6 +14,7 @@ Official Datalyr SDK for React Native & Expo - Mobile attribution tracking and a
 - 💾 **Offline Support** - Events saved and retried when reconnected
 - 🔒 **Privacy First** - GDPR/CCPA compliant
 - ⚡ **Lightweight** - < 100KB, minimal battery impact
+- 🆔 **Identity Resolution** - Persistent anonymous ID links web → mobile → server events
 
 ## Installation
 
@@ -163,6 +164,35 @@ await Datalyr.setAttributionData({
   medium: 'email',
 });
 ```
+
+## Identity Resolution (New in v1.1.0)
+
+The SDK now includes persistent anonymous IDs for complete user journey tracking:
+
+```typescript
+// Get anonymous ID (persists across app sessions)
+const anonymousId = Datalyr.getAnonymousId();
+
+// Pass to your backend for attribution preservation
+await fetch('/api/purchase', {
+  method: 'POST',
+  body: JSON.stringify({
+    items: cart,
+    anonymous_id: anonymousId  // Links server events to mobile events
+  })
+});
+
+// Identity is automatically linked when you identify a user
+await Datalyr.identify('user_123', {
+  email: 'user@example.com'
+});
+// This creates a $identify event that links anonymous_id to user_id
+```
+
+### Key Benefits:
+- **Attribution Preservation**: Never lose fbclid, gclid, ttclid, or lyr tracking
+- **Complete Journey**: Track users from web → app → server
+- **Automatic Linking**: Identity resolution happens automatically
 
 ## Session Management
 

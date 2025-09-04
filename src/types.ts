@@ -66,6 +66,7 @@ export interface FingerprintData {
 export interface EventPayload {
   workspaceId: string;
   visitorId: string;
+  anonymousId: string;  // Persistent anonymous identifier
   sessionId: string;
   eventId: string;
   eventName: string;
@@ -92,6 +93,7 @@ export interface SDKState {
   initialized: boolean;
   config: DatalyrConfig;
   visitorId: string;
+  anonymousId: string;  // Persistent anonymous identifier
   sessionId: string;
   currentUserId?: string;
   userProperties: UserProperties;

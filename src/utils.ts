@@ -16,6 +16,7 @@ import { DeviceInfo as DeviceInfoType, FingerprintData } from './types';
 // Storage Keys
 export const STORAGE_KEYS = {
   VISITOR_ID: '@datalyr/visitor_id',
+  ANONYMOUS_ID: '@datalyr/anonymous_id',  // Persistent anonymous identifier
   SESSION_ID: '@datalyr/session_id',
   USER_ID: '@datalyr/user_id',
   USER_PROPERTIES: '@datalyr/user_properties',
@@ -68,6 +69,25 @@ export const getOrCreateVisitorId = async (): Promise<string> => {
   } catch (error) {
     console.warn('Failed to get/create visitor ID:', error);
     return generateUUID(); // Fallback to memory-only ID
+  }
+};
+
+/**
+ * Get or create a persistent anonymous ID
+ * This ID persists across app reinstalls and never changes
+ */
+export const getOrCreateAnonymousId = async (): Promise<string> => {
+  try {
+    let anonymousId = await AsyncStorage.getItem(STORAGE_KEYS.ANONYMOUS_ID);
+    if (!anonymousId) {
+      // Generate anonymous_id with anon_ prefix to match web SDK
+      anonymousId = `anon_${generateUUID()}`;
+      await AsyncStorage.setItem(STORAGE_KEYS.ANONYMOUS_ID, anonymousId);
+    }
+    return anonymousId;
+  } catch (error) {
+    console.warn('Failed to get/create anonymous ID:', error);
+    return `anon_${generateUUID()}`; // Fallback to memory-only ID
   }
 };
 
