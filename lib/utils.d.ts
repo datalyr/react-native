@@ -2,6 +2,7 @@ import 'react-native-get-random-values';
 import { DeviceInfo as DeviceInfoType, FingerprintData } from './types';
 export declare const STORAGE_KEYS: {
     VISITOR_ID: string;
+    ANONYMOUS_ID: string;
     SESSION_ID: string;
     USER_ID: string;
     USER_PROPERTIES: string;
@@ -25,6 +26,11 @@ export declare const hashString: (str: string) => string;
  * Get or create a persistent visitor ID
  */
 export declare const getOrCreateVisitorId: () => Promise<string>;
+/**
+ * Get or create a persistent anonymous ID
+ * This ID persists across app reinstalls and never changes
+ */
+export declare const getOrCreateAnonymousId: () => Promise<string>;
 /**
  * Get or create a session ID (with session timeout logic)
  */

@@ -213,6 +213,7 @@ export class HttpClient {
       const testPayload: EventPayload = {
         workspaceId: 'test', 
         visitorId: 'test',
+        anonymousId: 'test',
         sessionId: 'test',
         eventId: 'test',
         eventName: 'connection_test',

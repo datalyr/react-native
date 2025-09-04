@@ -45,11 +45,16 @@ export declare class DatalyrSDK {
         initialized: boolean;
         workspaceId: string;
         visitorId: string;
+        anonymousId: string;
         sessionId: string;
         currentUserId?: string;
         queueStats: any;
         attribution: any;
     };
+    /**
+     * Get the persistent anonymous ID
+     */
+    getAnonymousId(): string;
     /**
      * Get detailed attribution data
      */
@@ -151,11 +156,13 @@ export declare class Datalyr {
         initialized: boolean;
         workspaceId: string;
         visitorId: string;
+        anonymousId: string;
         sessionId: string;
         currentUserId?: string;
         queueStats: any;
         attribution: any;
     };
+    static getAnonymousId(): string;
     static getAttributionData(): AttributionData;
     static setAttributionData(data: Partial<AttributionData>): Promise<void>;
     static getCurrentSession(): SessionData | null;
