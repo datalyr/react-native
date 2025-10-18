@@ -96,6 +96,11 @@ export declare class AttributionManager {
      */
     trackInstall(): Promise<AttributionData>;
     /**
+     * Merge web attribution data into mobile session
+     * Called when web-to-app attribution is resolved via email
+     */
+    mergeWebAttribution(webAttribution: any): void;
+    /**
      * Set custom attribution data
      */
     setAttributionData(data: Partial<AttributionData>): Promise<void>;

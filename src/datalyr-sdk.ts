@@ -248,7 +248,7 @@ export class DatalyrSDK {
 
       // Update current user ID
       this.state.currentUserId = userId;
-      
+
       // Merge user properties
       this.state.userProperties = { ...this.state.userProperties, ...properties };
 
@@ -256,14 +256,90 @@ export class DatalyrSDK {
       await this.persistUserData();
 
       // Track $identify event for identity resolution
-      await this.track('$identify', { 
-        userId, 
+      await this.track('$identify', {
+        userId,
         anonymous_id: this.state.anonymousId,
-        ...properties 
+        ...properties
       });
+
+      // Fetch and merge web attribution if email is provided
+      if (this.state.config.enableWebToAppAttribution !== false) {
+        const email = properties?.email || (typeof userId === 'string' && userId.includes('@') ? userId : null);
+        if (email) {
+          await this.fetchAndMergeWebAttribution(email);
+        }
+      }
 
     } catch (error) {
       errorLog('Error identifying user:', error as Error);
+    }
+  }
+
+  /**
+   * Fetch web attribution data for user and merge into mobile session
+   * Called automatically during identify() if email is provided
+   */
+  private async fetchAndMergeWebAttribution(email: string): Promise<void> {
+    try {
+      debugLog('Fetching web attribution for email:', email);
+
+      // Call API endpoint to get web attribution
+      const response = await fetch('https://api.datalyr.com/attribution/lookup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Datalyr-API-Key': this.state.config.apiKey!,
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        debugLog('Failed to fetch web attribution:', response.status);
+        return;
+      }
+
+      const result = await response.json() as { found: boolean; attribution?: any };
+
+      if (!result.found || !result.attribution) {
+        debugLog('No web attribution found for user');
+        return;
+      }
+
+      const webAttribution = result.attribution;
+      debugLog('Web attribution found:', {
+        visitor_id: webAttribution.visitor_id,
+        has_fbclid: !!webAttribution.fbclid,
+        has_gclid: !!webAttribution.gclid,
+        utm_source: webAttribution.utm_source,
+      });
+
+      // Merge web attribution into current session
+      await this.track('$web_attribution_merged', {
+        web_visitor_id: webAttribution.visitor_id,
+        web_user_id: webAttribution.user_id,
+        fbclid: webAttribution.fbclid,
+        gclid: webAttribution.gclid,
+        ttclid: webAttribution.ttclid,
+        gbraid: webAttribution.gbraid,
+        wbraid: webAttribution.wbraid,
+        fbp: webAttribution.fbp,
+        fbc: webAttribution.fbc,
+        utm_source: webAttribution.utm_source,
+        utm_medium: webAttribution.utm_medium,
+        utm_campaign: webAttribution.utm_campaign,
+        utm_content: webAttribution.utm_content,
+        utm_term: webAttribution.utm_term,
+        web_timestamp: webAttribution.timestamp,
+      });
+
+      // Update attribution manager with web data
+      attributionManager.mergeWebAttribution(webAttribution);
+
+      debugLog('Successfully merged web attribution into mobile session');
+
+    } catch (error) {
+      errorLog('Error fetching web attribution:', error as Error);
+      // Non-blocking - continue even if attribution fetch fails
     }
   }
 

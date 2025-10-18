@@ -27,6 +27,11 @@ export declare class DatalyrSDK {
      */
     identify(userId: string, properties?: UserProperties): Promise<void>;
     /**
+     * Fetch web attribution data for user and merge into mobile session
+     * Called automatically during identify() if email is provided
+     */
+    private fetchAndMergeWebAttribution;
+    /**
      * Alias a user (connect anonymous user to known user)
      */
     alias(newUserId: string, previousId?: string): Promise<void>;

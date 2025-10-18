@@ -22,6 +22,7 @@ export interface DatalyrConfig {
     respectDoNotTrack?: boolean;
     enableAutoEvents?: boolean;
     enableAttribution?: boolean;
+    enableWebToAppAttribution?: boolean;
     autoEvents?: AutoEventConfig;
     autoEventConfig?: AutoEventConfig;
     retryConfig?: {

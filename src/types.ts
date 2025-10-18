@@ -25,6 +25,7 @@ export interface DatalyrConfig {
   respectDoNotTrack?: boolean;
   enableAutoEvents?: boolean;
   enableAttribution?: boolean;
+  enableWebToAppAttribution?: boolean;
   autoEvents?: AutoEventConfig;
   autoEventConfig?: AutoEventConfig;
   retryConfig?: {
@@ -33,7 +34,6 @@ export interface DatalyrConfig {
   };
   skadTemplate?: 'ecommerce' | 'gaming' | 'subscription';
 }
-
 // Event Types
 export interface EventData {
   [key: string]: any;
