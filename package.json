@@ -1,6 +1,6 @@
 {
   "name": "@datalyr/react-native",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Datalyr SDK for React Native & Expo - Server-side attribution tracking",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -58,6 +58,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/react": "^18.2.0",
+    "@types/react-native": "^0.72.8",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
