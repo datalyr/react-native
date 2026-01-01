@@ -30,6 +30,8 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "src/utils-expo.ts",
-    "src/expo.ts"
+    "src/expo.ts",
+    "src/datalyr-sdk-expo.ts",
+    "src/utils-interface.ts"
   ]
 } 

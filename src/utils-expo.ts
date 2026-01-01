@@ -9,13 +9,16 @@ import { v4 as uuidv4 } from 'uuid';
 // Storage keys
 export const STORAGE_KEYS = {
   VISITOR_ID: '@datalyr/visitor_id',
+  ANONYMOUS_ID: '@datalyr/anonymous_id',  // Persistent anonymous identifier
   SESSION_ID: '@datalyr/session_id',
   SESSION_START: '@datalyr/session_start',
   USER_ID: '@datalyr/user_id',
   USER_PROPERTIES: '@datalyr/user_properties',
+  EVENT_QUEUE: '@datalyr/event_queue',
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
   INSTALL_TIME: '@datalyr/install_time',
   LAST_APP_VERSION: '@datalyr/last_app_version',
+  LAST_SESSION_TIME: '@datalyr/last_session_time',
   DEVICE_ID: '@datalyr/device_id',
 } as const;
 
@@ -136,21 +139,40 @@ const getOrCreateDeviceId = async (): Promise<string> => {
   }
 };
 
-// Visitor ID management  
+// Visitor ID management
 export const getOrCreateVisitorId = async (): Promise<string> => {
   try {
     let visitorId = await Storage.getItem<string>(STORAGE_KEYS.VISITOR_ID);
-    
+
     if (!visitorId) {
       visitorId = generateUUID();
       await Storage.setItem(STORAGE_KEYS.VISITOR_ID, visitorId);
       debugLog('Created new visitor ID:', visitorId);
     }
-    
+
     return visitorId;
   } catch (error) {
     errorLog('Error managing visitor ID:', error as Error);
     return generateUUID();
+  }
+};
+
+// Anonymous ID management - persistent across app reinstalls
+export const getOrCreateAnonymousId = async (): Promise<string> => {
+  try {
+    let anonymousId = await Storage.getItem<string>(STORAGE_KEYS.ANONYMOUS_ID);
+
+    if (!anonymousId) {
+      // Generate anonymous_id with anon_ prefix to match web SDK
+      anonymousId = `anon_${generateUUID()}`;
+      await Storage.setItem(STORAGE_KEYS.ANONYMOUS_ID, anonymousId);
+      debugLog('Created new anonymous ID:', anonymousId);
+    }
+
+    return anonymousId;
+  } catch (error) {
+    errorLog('Error managing anonymous ID:', error as Error);
+    return `anon_${generateUUID()}`;
   }
 };
 

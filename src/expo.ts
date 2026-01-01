@@ -1,36 +1,56 @@
-// Expo entry point - uses Expo-compatible utilities
-// Import this with: import { datalyr } from '@datalyr/react-native-sdk/expo';
+/**
+ * Expo entry point - uses Expo-compatible utilities
+ * Import this with: import { datalyr } from '@datalyr/react-native/expo';
+ *
+ * This entry point uses Expo-specific packages for device info:
+ * - expo-application (app version, bundle ID)
+ * - expo-device (device model, manufacturer)
+ * - expo-network (network type detection)
+ *
+ * For React Native CLI apps, use the default import instead:
+ * import { datalyr } from '@datalyr/react-native';
+ */
 
-// Note: This is a placeholder - you'd need to create a version of DatalyrSDK
-// that imports from utils-expo.ts instead of utils.ts
+// Export Expo-specific SDK (uses utils-expo.ts)
+export { DatalyrSDKExpo as DatalyrSDK, DatalyrExpo as Datalyr } from './datalyr-sdk-expo';
+import datalyrExpo from './datalyr-sdk-expo';
+export { datalyrExpo as datalyr };
 
-export { DatalyrSDK as datalyr } from './datalyr-sdk';
+// Export types
 export * from './types';
+
+// Export attribution manager
 export { attributionManager } from './attribution';
+
+// Export auto-events
 export { createAutoEventsManager, AutoEventsManager } from './auto-events';
 
-// Re-export Expo-specific utilities
-export { 
-  debugLog, 
-  errorLog, 
-  generateUUID, 
-  Storage, 
-  getOrCreateVisitorId, 
+// Re-export Expo-specific utilities for advanced usage
+export {
+  debugLog,
+  errorLog,
+  generateUUID,
+  Storage,
+  getOrCreateVisitorId,
+  getOrCreateAnonymousId,
   getOrCreateSessionId,
   createFingerprintData,
   getNetworkType,
   validateEventName,
   validateEventData,
   isFirstLaunch,
-  checkAppVersion
+  checkAppVersion,
+  getDeviceInfo,
+  STORAGE_KEYS,
 } from './utils-expo';
 
+// Export HTTP client and event queue
 export * from './http-client';
 export * from './event-queue';
 
-// Default export for compatibility
-import { DatalyrSDK } from './datalyr-sdk';
-export default DatalyrSDK;
+// Export SKAdNetwork components
+export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
+export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 
-// TODO: Create expo-specific version that uses utils-expo.ts
-// This would require creating datalyr-sdk-expo.ts that imports utils-expo instead of utils 
+// Default export
+export default datalyrExpo;
