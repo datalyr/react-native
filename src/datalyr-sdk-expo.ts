@@ -33,6 +33,8 @@ import { attributionManager, AttributionData } from './attribution';
 import { createAutoEventsManager, AutoEventsManager } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
+import { metaIntegration, tiktokIntegration } from './integrations';
+import { DeferredDeepLinkResult } from './types';
 
 export class DatalyrSDKExpo {
   private state: SDKState;
@@ -147,6 +149,33 @@ export class DatalyrSDKExpo {
         }
       }
 
+      // Initialize platform SDKs (Meta/TikTok) if configured
+      if (config.meta) {
+        try {
+          await metaIntegration.initialize(config.meta, config.debug || false);
+          debugLog('Meta SDK initialized');
+
+          // Fetch deferred deep link data
+          if (config.meta.enableDeferredDeepLink) {
+            const deferredData = await metaIntegration.fetchDeferredDeepLink();
+            if (deferredData) {
+              await this.handleDeferredDeepLink(deferredData);
+            }
+          }
+        } catch (error) {
+          errorLog('Failed to initialize Meta SDK:', error as Error);
+        }
+      }
+
+      if (config.tiktok) {
+        try {
+          await tiktokIntegration.initialize(config.tiktok, config.debug || false);
+          debugLog('TikTok SDK initialized');
+        } catch (error) {
+          errorLog('Failed to initialize TikTok SDK:', error as Error);
+        }
+      }
+
       this.state.initialized = true;
 
       if (attributionManager.isInstall()) {
@@ -237,6 +266,30 @@ export class DatalyrSDKExpo {
         if (email) {
           await this.fetchAndMergeWebAttribution(email);
         }
+      }
+
+      // Forward user data to platform SDKs for Advanced Matching
+      if (metaIntegration.isAvailable() && properties) {
+        metaIntegration.setUserData({
+          email: properties.email,
+          phone: properties.phone,
+          firstName: properties.firstName || properties.first_name,
+          lastName: properties.lastName || properties.last_name,
+          city: properties.city,
+          state: properties.state,
+          zip: properties.zip || properties.zipCode || properties.postalCode,
+          country: properties.country,
+          gender: properties.gender,
+          dateOfBirth: properties.dateOfBirth || properties.dob || properties.birthday,
+        });
+      }
+
+      if (tiktokIntegration.isAvailable()) {
+        tiktokIntegration.identify(
+          properties?.email,
+          properties?.phone,
+          userId
+        );
       }
 
     } catch (error) {
@@ -340,6 +393,11 @@ export class DatalyrSDKExpo {
 
       this.state.sessionId = await getOrCreateSessionId();
 
+      // Clear user data from platform SDKs
+      if (metaIntegration.isAvailable()) {
+        metaIntegration.clearUserData();
+      }
+
       debugLog('User data reset completed');
 
     } catch (error) {
@@ -436,6 +494,14 @@ export class DatalyrSDKExpo {
     if (productId) properties.product_id = productId;
 
     await this.trackWithSKAdNetwork('purchase', properties);
+
+    // Forward to platform SDKs
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logPurchase(value, currency, { productId });
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logPurchase(value, currency, productId);
+    }
   }
 
   async trackSubscription(value: number, currency = 'USD', plan?: string): Promise<void> {
@@ -443,6 +509,179 @@ export class DatalyrSDKExpo {
     if (plan) properties.plan = plan;
 
     await this.trackWithSKAdNetwork('subscribe', properties);
+
+    // Forward to platform SDKs
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logEvent('Subscribe', { value, currency, content_id: plan });
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logSubscription(value, currency, plan);
+    }
+  }
+
+  // Standard e-commerce events with platform forwarding
+
+  async trackAddToCart(value: number, currency: string, contentId?: string, contentName?: string): Promise<void> {
+    const properties: Record<string, any> = { value, currency };
+    if (contentId) properties.content_id = contentId;
+    if (contentName) properties.content_name = contentName;
+
+    await this.track('add_to_cart', properties);
+
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logEvent('AddToCart', { value, currency, content_id: contentId, content_name: contentName });
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logAddToCart(value, currency, contentId, contentName);
+    }
+  }
+
+  async trackViewContent(contentId: string, contentName?: string, contentType?: string, value?: number, currency?: string): Promise<void> {
+    const properties: Record<string, any> = { content_id: contentId };
+    if (contentName) properties.content_name = contentName;
+    if (contentType) properties.content_type = contentType;
+    if (value !== undefined) properties.value = value;
+    if (currency) properties.currency = currency;
+
+    await this.track('view_content', properties);
+
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logEvent('ViewContent', properties);
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logViewContent(contentId, contentName, contentType, value, currency);
+    }
+  }
+
+  async trackInitiateCheckout(value?: number, currency?: string, numItems?: number, contentIds?: string[]): Promise<void> {
+    const properties: Record<string, any> = {};
+    if (value !== undefined) properties.value = value;
+    if (currency) properties.currency = currency;
+    if (numItems !== undefined) properties.num_items = numItems;
+    if (contentIds) properties.content_ids = contentIds;
+
+    await this.track('initiate_checkout', properties);
+
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logEvent('InitiateCheckout', properties);
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logInitiateCheckout(value, currency, numItems, contentIds);
+    }
+  }
+
+  async trackCompleteRegistration(registrationMethod?: string): Promise<void> {
+    const properties: Record<string, any> = {};
+    if (registrationMethod) properties.registration_method = registrationMethod;
+
+    await this.track('complete_registration', properties);
+
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logEvent('CompleteRegistration', properties);
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logCompleteRegistration(registrationMethod);
+    }
+  }
+
+  async trackSearch(searchString: string, contentIds?: string[]): Promise<void> {
+    const properties: Record<string, any> = { search_string: searchString };
+    if (contentIds) properties.content_ids = contentIds;
+
+    await this.track('search', properties);
+
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logEvent('Search', properties);
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logSearch(searchString, contentIds);
+    }
+  }
+
+  async trackLead(value?: number, currency?: string): Promise<void> {
+    const properties: Record<string, any> = {};
+    if (value !== undefined) properties.value = value;
+    if (currency) properties.currency = currency;
+
+    await this.track('lead', properties);
+
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logEvent('Lead', properties);
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logLead(value, currency);
+    }
+  }
+
+  async trackAddPaymentInfo(success?: boolean): Promise<void> {
+    const properties: Record<string, any> = {};
+    if (success !== undefined) properties.success = success;
+
+    await this.track('add_payment_info', properties);
+
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.logEvent('AddPaymentInfo', properties);
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.logAddPaymentInfo(success);
+    }
+  }
+
+  // Platform integration methods
+
+  getDeferredAttributionData(): DeferredDeepLinkResult | null {
+    if (metaIntegration.isAvailable()) {
+      return metaIntegration.getDeferredDeepLinkData();
+    }
+    return null;
+  }
+
+  getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean } {
+    return {
+      meta: metaIntegration.isAvailable(),
+      tiktok: tiktokIntegration.isAvailable(),
+    };
+  }
+
+  async updateTrackingAuthorization(authorized: boolean): Promise<void> {
+    if (metaIntegration.isAvailable()) {
+      metaIntegration.updateTrackingAuthorization(authorized);
+    }
+    if (tiktokIntegration.isAvailable()) {
+      tiktokIntegration.updateTrackingAuthorization(authorized);
+    }
+  }
+
+  private async handleDeferredDeepLink(data: DeferredDeepLinkResult): Promise<void> {
+    debugLog('Handling deferred deep link:', data);
+
+    // Store attribution data
+    if (data.fbclid || data.utmSource || data.campaignId) {
+      await attributionManager.setAttributionData({
+        fbclid: data.fbclid,
+        ttclid: data.ttclid,
+        utm_source: data.utmSource,
+        utm_medium: data.utmMedium,
+        utm_campaign: data.utmCampaign,
+        utm_content: data.utmContent,
+        utm_term: data.utmTerm,
+        source: data.source,
+      });
+    }
+
+    // Track the deferred deep link event
+    await this.track('$deferred_deep_link', {
+      url: data.url,
+      source: data.source,
+      fbclid: data.fbclid,
+      ttclid: data.ttclid,
+      utm_source: data.utmSource,
+      utm_medium: data.utmMedium,
+      utm_campaign: data.utmCampaign,
+      campaign_id: data.campaignId,
+      adset_id: data.adsetId,
+      ad_id: data.adId,
+    });
   }
 
   getConversionValue(event: string, properties?: Record<string, any>): number | null {
@@ -668,6 +907,50 @@ export class DatalyrExpo {
 
   static updateAutoEventsConfig(config: Partial<AutoEventConfig>): void {
     datalyrExpo.updateAutoEventsConfig(config);
+  }
+
+  // Standard e-commerce events with platform forwarding
+
+  static async trackAddToCart(value: number, currency: string, contentId?: string, contentName?: string): Promise<void> {
+    await datalyrExpo.trackAddToCart(value, currency, contentId, contentName);
+  }
+
+  static async trackViewContent(contentId: string, contentName?: string, contentType?: string, value?: number, currency?: string): Promise<void> {
+    await datalyrExpo.trackViewContent(contentId, contentName, contentType, value, currency);
+  }
+
+  static async trackInitiateCheckout(value?: number, currency?: string, numItems?: number, contentIds?: string[]): Promise<void> {
+    await datalyrExpo.trackInitiateCheckout(value, currency, numItems, contentIds);
+  }
+
+  static async trackCompleteRegistration(registrationMethod?: string): Promise<void> {
+    await datalyrExpo.trackCompleteRegistration(registrationMethod);
+  }
+
+  static async trackSearch(searchString: string, contentIds?: string[]): Promise<void> {
+    await datalyrExpo.trackSearch(searchString, contentIds);
+  }
+
+  static async trackLead(value?: number, currency?: string): Promise<void> {
+    await datalyrExpo.trackLead(value, currency);
+  }
+
+  static async trackAddPaymentInfo(success?: boolean): Promise<void> {
+    await datalyrExpo.trackAddPaymentInfo(success);
+  }
+
+  // Platform integration methods
+
+  static getDeferredAttributionData(): DeferredDeepLinkResult | null {
+    return datalyrExpo.getDeferredAttributionData();
+  }
+
+  static getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean } {
+    return datalyrExpo.getPlatformIntegrationStatus();
+  }
+
+  static async updateTrackingAuthorization(authorized: boolean): Promise<void> {
+    await datalyrExpo.updateTrackingAuthorization(authorized);
   }
 }
 

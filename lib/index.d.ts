@@ -10,4 +10,5 @@ export * from './event-queue';
 export { DatalyrSDK };
 export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
+export { metaIntegration, tiktokIntegration } from './integrations';
 export default DatalyrSDK;

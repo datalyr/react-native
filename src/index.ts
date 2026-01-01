@@ -1,5 +1,5 @@
 // Main entry point for React Native CLI
-// Import this with: import { datalyr } from '@datalyr/react-native-sdk';
+// Import with: import { Datalyr } from '@datalyr/react-native';
 
 import { DatalyrSDK, Datalyr } from './datalyr-sdk';
 
@@ -26,5 +26,8 @@ export { DatalyrSDK };
 export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 
-// Default export for compatibility  
+// Export platform integrations
+export { metaIntegration, tiktokIntegration } from './integrations';
+
+// Default export for compatibility
 export default DatalyrSDK; 

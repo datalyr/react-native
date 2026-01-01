@@ -1,27 +1,39 @@
 # @datalyr/react-native
 
-Official Datalyr SDK for React Native & Expo - Mobile attribution tracking and analytics.
+Mobile analytics and attribution SDK for React Native and Expo. Track events, identify users, and capture attribution data from ad platforms.
 
-[![npm version](https://img.shields.io/npm/v/@datalyr/react-native.svg)](https://www.npmjs.com/package/@datalyr/react-native)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## Table of Contents
 
-## Features
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Configuration](#configuration)
+- [Event Tracking](#event-tracking)
+  - [Custom Events](#custom-events)
+  - [Screen Views](#screen-views)
+  - [E-Commerce Events](#e-commerce-events)
+- [User Identity](#user-identity)
+  - [Anonymous ID](#anonymous-id)
+  - [Identifying Users](#identifying-users)
+  - [User Properties](#user-properties)
+- [Attribution](#attribution)
+  - [Automatic Capture](#automatic-capture)
+  - [Deferred Deep Links](#deferred-deep-links)
+- [Event Queue](#event-queue)
+- [Auto Events](#auto-events)
+- [SKAdNetwork](#skadnetwork)
+- [Platform Integrations](#platform-integrations)
+- [Expo Support](#expo-support)
+- [TypeScript](#typescript)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 
-- 🎯 **Complete Attribution** - Track users from ad click to conversion
-- 📱 **React Native & Expo** - Works with both platforms
-- 🔄 **Automatic Events** - Session tracking, screen views, app lifecycle
-- 📊 **SKAdNetwork** - iOS 14+ attribution support
-- 💾 **Offline Support** - Events saved and retried when reconnected
-- 🔒 **Privacy First** - GDPR/CCPA compliant
-- ⚡ **Lightweight** - < 100KB, minimal battery impact
-- 🆔 **Identity Resolution** - Persistent anonymous ID links web → mobile → server events
+---
 
 ## Installation
 
 ```bash
 npm install @datalyr/react-native
-# or
-yarn add @datalyr/react-native
 ```
 
 ### iOS Setup
@@ -30,56 +42,374 @@ yarn add @datalyr/react-native
 cd ios && pod install
 ```
 
-### Expo Users
+This installs the SDK with bundled Meta and TikTok native SDKs.
 
-See [EXPO_INSTALL.md](./EXPO_INSTALL.md) for Expo-specific setup instructions.
+Add to `ios/YourApp/Info.plist`:
+
+```xml
+<!-- Meta SDK -->
+<key>FacebookAppID</key>
+<string>YOUR_FACEBOOK_APP_ID</string>
+<key>FacebookClientToken</key>
+<string>YOUR_CLIENT_TOKEN</string>
+<key>FacebookDisplayName</key>
+<string>Your App Name</string>
+
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>fbYOUR_FACEBOOK_APP_ID</string>
+    </array>
+  </dict>
+</array>
+
+<!-- TikTok SDK -->
+<key>LSApplicationQueriesSchemes</key>
+<array>
+  <string>tiktok</string>
+  <string>snssdk1180</string>
+  <string>snssdk1233</string>
+</array>
+```
+
+### Android Setup
+
+No additional setup required.
+
+---
 
 ## Quick Start
 
 ```typescript
 import { Datalyr } from '@datalyr/react-native';
 
-// Initialize SDK
+// Initialize
 await Datalyr.initialize({
-  apiKey: 'dk_your_api_key', // Required - get from Datalyr dashboard
-  debug: true, // Enable debug logs in development
-  enableAutoEvents: true, // Track sessions, screen views, app lifecycle
-  enableAttribution: true, // Track attribution data from ads
+  apiKey: 'dk_your_api_key',
+  enableAutoEvents: true,
+  enableAttribution: true,
 });
 
-// Track custom event
-await Datalyr.track('Button Clicked', {
-  button_name: 'purchase',
-  value: 99.99,
-});
+// Track events
+await Datalyr.track('button_clicked', { button: 'signup' });
 
-// Identify user
-await Datalyr.identify('user_123', {
-  email: 'user@example.com',
-  plan: 'premium',
-});
+// Identify users
+await Datalyr.identify('user_123', { email: 'user@example.com' });
+
+// Track purchases
+await Datalyr.trackPurchase(99.99, 'USD', 'product_123');
 ```
+
+---
+
+## How It Works
+
+The SDK collects events and sends them to the Datalyr backend for analytics and attribution.
+
+### Data Flow
+
+1. Events are created with `track()`, `screen()`, or e-commerce methods
+2. Each event includes device info, session data, and attribution parameters
+3. Events are queued locally and sent in batches
+4. If offline, events are stored and sent when connectivity returns
+5. Events are processed server-side for analytics and attribution reporting
+
+### Event Payload
+
+Every event includes:
+
+```typescript
+{
+  event: 'purchase',              // Event name
+  properties: { ... },            // Custom properties
+
+  // Identity
+  anonymous_id: 'uuid',           // Persistent device ID
+  user_id: 'user_123',            // Set after identify()
+  session_id: 'uuid',             // Current session
+
+  // Device
+  platform: 'ios',
+  device_model: 'iPhone 14',
+  os_version: '17.0',
+  app_version: '1.2.0',
+
+  // Attribution (if captured)
+  utm_source: 'facebook',
+  fbclid: 'abc123',
+
+  // Timestamps
+  timestamp: '2024-01-15T10:30:00Z',
+}
+```
+
+---
 
 ## Configuration
 
 ```typescript
-interface DatalyrConfig {
-  apiKey: string;              // Required - Your API key
-  workspaceId?: string;        // Optional - For legacy support
-  debug?: boolean;             // Enable debug logging
-  endpoint?: string;           // Custom API endpoint
-  useServerTracking?: boolean; // Default: true
-  enableAutoEvents?: boolean;  // Track lifecycle events
-  enableAttribution?: boolean; // Track attribution data
-  skadTemplate?: 'ecommerce' | 'gaming' | 'subscription'; // SKAdNetwork
-  maxQueueSize?: number;       // Default: 100
-  flushInterval?: number;      // Default: 30000ms
+await Datalyr.initialize({
+  // Required
+  apiKey: string,
+
+  // Features
+  debug?: boolean,                   // Console logging
+  enableAutoEvents?: boolean,        // Track app lifecycle
+  enableAttribution?: boolean,       // Capture attribution data
+
+  // Event Queue
+  batchSize?: number,                // Events per batch (default: 10)
+  flushInterval?: number,            // Send interval ms (default: 30000)
+  maxQueueSize?: number,             // Max queued events (default: 100)
+
+  // iOS
+  skadTemplate?: 'ecommerce' | 'gaming' | 'subscription',
+
+  // Platform SDKs
+  meta?: MetaConfig,
+  tiktok?: TikTokConfig,
+});
+```
+
+---
+
+## Event Tracking
+
+### Custom Events
+
+Track any action in your app:
+
+```typescript
+// Simple event
+await Datalyr.track('signup_started');
+
+// Event with properties
+await Datalyr.track('product_viewed', {
+  product_id: 'SKU123',
+  product_name: 'Blue Shirt',
+  price: 29.99,
+  currency: 'USD',
+  category: 'Apparel',
+});
+
+// Event with value
+await Datalyr.track('level_completed', {
+  level: 5,
+  score: 1250,
+  time_seconds: 120,
+});
+```
+
+### Screen Views
+
+Track navigation:
+
+```typescript
+await Datalyr.screen('Home');
+
+await Datalyr.screen('Product Details', {
+  product_id: 'SKU123',
+  source: 'search',
+});
+```
+
+### E-Commerce Events
+
+Standard e-commerce events that also forward to Meta and TikTok:
+
+```typescript
+// View product
+await Datalyr.trackViewContent('SKU123', 'Blue Shirt', 'product', 29.99, 'USD');
+
+// Add to cart
+await Datalyr.trackAddToCart(29.99, 'USD', 'SKU123', 'Blue Shirt');
+
+// Start checkout
+await Datalyr.trackInitiateCheckout(59.98, 'USD', 2, ['SKU123', 'SKU456']);
+
+// Complete purchase
+await Datalyr.trackPurchase(59.98, 'USD', 'order_123');
+
+// Subscription
+await Datalyr.trackSubscription(9.99, 'USD', 'monthly_pro');
+
+// Registration
+await Datalyr.trackCompleteRegistration('email');
+
+// Search
+await Datalyr.trackSearch('blue shoes', ['SKU1', 'SKU2']);
+
+// Lead
+await Datalyr.trackLead(100.0, 'USD');
+
+// Payment info
+await Datalyr.trackAddPaymentInfo(true);
+```
+
+---
+
+## User Identity
+
+### Anonymous ID
+
+Every device gets a persistent anonymous ID on first launch:
+
+```typescript
+const anonymousId = Datalyr.getAnonymousId();
+// 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+```
+
+This ID:
+- Persists across app sessions
+- Links events before and after user identification
+- Can be passed to your backend for server-side attribution
+
+### Identifying Users
+
+Link the anonymous ID to a known user:
+
+```typescript
+await Datalyr.identify('user_123', {
+  email: 'user@example.com',
+});
+```
+
+After `identify()`:
+- All future events include `user_id`
+- Historical anonymous events can be linked server-side
+- User data is forwarded to Meta/TikTok for Advanced Matching
+
+### User Properties
+
+Pass any user attributes:
+
+```typescript
+await Datalyr.identify('user_123', {
+  // Standard fields
+  email: 'user@example.com',
+  name: 'John Doe',
+  phone: '+1234567890',
+
+  // Custom fields
+  plan: 'premium',
+  company: 'Acme Inc',
+  signup_date: '2024-01-15',
+});
+```
+
+### Logout
+
+Clear user data on logout:
+
+```typescript
+await Datalyr.reset();
+```
+
+This:
+- Clears the user ID
+- Starts a new session
+- Keeps the anonymous ID (same device)
+
+---
+
+## Attribution
+
+### Automatic Capture
+
+The SDK captures attribution from deep links and referrers:
+
+```typescript
+const attribution = Datalyr.getAttributionData();
+```
+
+Captured parameters:
+
+| Type | Parameters |
+|------|------------|
+| UTM | `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` |
+| Click IDs | `fbclid`, `gclid`, `ttclid`, `twclid`, `li_click_id`, `msclkid` |
+| Campaign | `campaign_id`, `adset_id`, `ad_id` |
+
+### Deferred Deep Links
+
+Capture attribution from App Store installs (iOS):
+
+```typescript
+await Datalyr.initialize({
+  apiKey: 'dk_your_api_key',
+  meta: {
+    appId: '1234567890',
+    enableDeferredDeepLink: true,
+  },
+});
+
+// Check for deferred attribution
+const deferred = Datalyr.getDeferredAttributionData();
+if (deferred) {
+  console.log(deferred.fbclid);      // Facebook click ID
+  console.log(deferred.campaignId);  // Campaign ID
 }
 ```
 
-## Core Methods
+### Manual Attribution
 
-### Initialize
+Set attribution programmatically:
+
+```typescript
+await Datalyr.setAttributionData({
+  utm_source: 'newsletter',
+  utm_campaign: 'spring_sale',
+});
+```
+
+---
+
+## Event Queue
+
+Events are batched for efficiency and offline support.
+
+### Configuration
+
+```typescript
+await Datalyr.initialize({
+  apiKey: 'dk_your_api_key',
+  batchSize: 10,           // Send when 10 events queued
+  flushInterval: 30000,    // Or every 30 seconds
+  maxQueueSize: 100,       // Max events to store offline
+});
+```
+
+### Manual Flush
+
+Send all queued events immediately:
+
+```typescript
+await Datalyr.flush();
+```
+
+### Queue Status
+
+```typescript
+const status = Datalyr.getStatus();
+console.log(status.queueStats.queueSize);  // Events waiting
+console.log(status.queueStats.pending);    // Events being sent
+```
+
+### Offline Support
+
+When the device is offline:
+- Events are stored locally
+- Queue persists across app restarts
+- Events are sent when connectivity returns
+
+---
+
+## Auto Events
+
+Enable automatic lifecycle tracking:
+
 ```typescript
 await Datalyr.initialize({
   apiKey: 'dk_your_api_key',
@@ -87,276 +417,134 @@ await Datalyr.initialize({
 });
 ```
 
-### Track Events
-```typescript
-// Simple event
-await Datalyr.track('Product Viewed');
-
-// Event with properties
-await Datalyr.track('Purchase Completed', {
-  product_id: 'SKU123',
-  amount: 49.99,
-  currency: 'USD',
-});
-```
-
-### Identify Users
-```typescript
-await Datalyr.identify('user_123', {
-  email: 'user@example.com',
-  name: 'John Doe',
-  plan: 'premium',
-  company: 'Acme Inc',
-});
-```
-
-### Track Screen Views
-```typescript
-await Datalyr.screen('Product Details', {
-  product_id: 'SKU123',
-  category: 'Electronics',
-});
-```
-
-### Track Revenue
-```typescript
-// Purchase tracking with SKAdNetwork
-await Datalyr.trackPurchase(99.99, 'USD', 'premium_subscription');
-
-// Subscription tracking
-await Datalyr.trackSubscription(9.99, 'USD', 'monthly_pro');
-
-// Custom revenue event
-await Datalyr.trackRevenue('In-App Purchase', {
-  product_id: 'coins_1000',
-  amount: 4.99,
-  currency: 'USD',
-});
-```
-
-## Attribution Tracking
-
-The SDK automatically tracks:
-- Deep links and Universal Links
-- UTM parameters
-- Referrer data
-- Install attribution
-- Platform click IDs (fbclid, gclid, ttclid, etc.)
-
-### Get Attribution Data
-```typescript
-const attribution = Datalyr.getAttributionData();
-console.log(attribution);
-// {
-//   campaign: 'summer_sale',
-//   source: 'facebook',
-//   medium: 'social',
-//   fbclid: 'abc123',
-//   ...
-// }
-```
-
-### Set Custom Attribution
-```typescript
-await Datalyr.setAttributionData({
-  campaign: 'email_campaign',
-  source: 'newsletter',
-  medium: 'email',
-});
-```
-
-## Identity Resolution (New in v1.1.0)
-
-The SDK now includes persistent anonymous IDs for complete user journey tracking:
-
-```typescript
-// Get anonymous ID (persists across app sessions)
-const anonymousId = Datalyr.getAnonymousId();
-
-// Pass to your backend for attribution preservation
-await fetch('/api/purchase', {
-  method: 'POST',
-  body: JSON.stringify({
-    items: cart,
-    anonymous_id: anonymousId  // Links server events to mobile events
-  })
-});
-
-// Identity is automatically linked when you identify a user
-await Datalyr.identify('user_123', {
-  email: 'user@example.com'
-});
-// This creates a $identify event that links anonymous_id to user_id
-```
-
-### Key Benefits:
-- **Attribution Preservation**: Never lose fbclid, gclid, ttclid, or lyr tracking
-- **Complete Journey**: Track users from web → app → server
-- **Automatic Linking**: Identity resolution happens automatically
-
-## Session Management
-
-Sessions are tracked automatically with a 30-minute timeout.
-
-```typescript
-// Get current session
-const session = Datalyr.getCurrentSession();
-
-// Manually end session
-await Datalyr.endSession();
-
-// Reset user (logout)
-await Datalyr.reset();
-```
-
-## SKAdNetwork Support (iOS)
-
-Enable SKAdNetwork conversion value tracking:
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  skadTemplate: 'ecommerce', // or 'gaming', 'subscription'
-});
-
-// Events automatically update conversion values
-await Datalyr.trackPurchase(99.99, 'USD');
-
-// Get conversion value for testing
-const value = Datalyr.getConversionValue('purchase', { revenue: 50 });
-console.log('Conversion value:', value); // 0-63
-```
-
-## Automatic Events
-
-When `enableAutoEvents` is true, the SDK tracks:
-
-- `app_install` - First app open
-- `app_open` - App launches
-- `app_background` - App enters background
-- `app_foreground` - App returns to foreground
-- `app_update` - App version changes
-- `session_start` - New session begins
-- `session_end` - Session expires
-
-## Offline Support
-
-Events are automatically queued when offline and sent when connection is restored.
-
-```typescript
-// Manually flush queue
-await Datalyr.flush();
-
-// Get queue status
-const status = Datalyr.getStatus();
-console.log('Queue size:', status.queueStats.queueSize);
-```
-
-## Debug Mode
-
-Enable debug logging during development:
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  debug: true, // Enable console logs
-});
-```
-
-## TypeScript Support
-
-Full TypeScript support with type definitions included:
-
-```typescript
-import { 
-  Datalyr, 
-  DatalyrConfig, 
-  EventData, 
-  UserProperties,
-  AttributionData 
-} from '@datalyr/react-native';
-```
-
-## Expo Support
-
-Works with Expo managed and bare workflows:
-
-```typescript
-// expo.config.js
-export default {
-  plugins: [
-    // No additional config needed
-  ],
-};
-```
-
-## Migration from v0.x
-
-If migrating from an older version:
-
-```typescript
-// Old (v0.x)
-import datalyr from '@datalyr/react-native-sdk';
-datalyr.initialize({ workspaceId: 'ws_123' });
-
-// New (v1.0+)
-import { Datalyr } from '@datalyr/react-native';
-await Datalyr.initialize({ apiKey: 'dk_your_api_key' });
-```
-
-## API Reference
-
-### Methods
-
-| Method | Description |
-|--------|-------------|
-| `initialize(config)` | Initialize SDK with configuration |
-| `track(event, properties?)` | Track custom event |
-| `identify(userId, properties?)` | Identify user |
-| `screen(name, properties?)` | Track screen view |
-| `alias(newUserId, previousId?)` | Create user alias |
-| `reset()` | Reset user session |
-| `flush()` | Flush event queue |
-| `getStatus()` | Get SDK status |
-| `getAttributionData()` | Get attribution data |
-| `setAttributionData(data)` | Set attribution data |
-| `getCurrentSession()` | Get current session |
-| `endSession()` | End current session |
-| `trackPurchase(value, currency, productId?)` | Track purchase |
-| `trackSubscription(value, currency, plan?)` | Track subscription |
-| `trackRevenue(event, properties?)` | Track revenue event |
-
-## Troubleshooting
-
-### Events not appearing?
-1. Check your API key is correct
-2. Enable debug mode to see logs
-3. Verify network connectivity
-4. Check `getStatus()` for queue information
-
-### Authentication errors?
-- Ensure API key starts with `dk_`
-- Get your API key from: https://app.datalyr.com/settings/api-keys
-
-### Build errors?
-```bash
-# Clear caches
-npx react-native clean-project
-
-# iOS specific
-cd ios && pod install
-```
-
-## Support
-
-- 📧 Email: support@datalyr.com
-- 📚 Docs: https://docs.datalyr.com
-- 🐛 Issues: https://github.com/datalyr/react-native/issues
-
-## License
-
-MIT © Datalyr
+| Event | Trigger |
+|-------|---------|
+| `app_install` | First app open |
+| `app_open` | App launch |
+| `app_background` | App enters background |
+| `app_foreground` | App returns to foreground |
+| `app_update` | App version changes |
+| `session_start` | New session begins |
+| `session_end` | Session expires (30 min inactivity) |
 
 ---
 
-Built with ❤️ by [Datalyr](https://datalyr.com)
+## SKAdNetwork
+
+iOS conversion tracking with Apple's SKAdNetwork:
+
+```typescript
+await Datalyr.initialize({
+  apiKey: 'dk_your_api_key',
+  skadTemplate: 'ecommerce',
+});
+
+// E-commerce events update conversion values
+await Datalyr.trackPurchase(99.99, 'USD');
+```
+
+| Template | Events |
+|----------|--------|
+| `ecommerce` | purchase, add_to_cart, begin_checkout, signup, subscribe, view_item |
+| `gaming` | level_complete, tutorial_complete, purchase, achievement_unlocked |
+| `subscription` | trial_start, subscribe, upgrade, cancel, signup |
+
+---
+
+## Platform Integrations
+
+Bundled Meta and TikTok SDKs for iOS. No extra npm packages needed.
+
+### Meta (Facebook)
+
+```typescript
+await Datalyr.initialize({
+  apiKey: 'dk_your_api_key',
+  meta: {
+    appId: '1234567890',
+    clientToken: 'abc123',
+    enableDeferredDeepLink: true,
+    enableAppEvents: true,
+  },
+});
+```
+
+### TikTok
+
+```typescript
+await Datalyr.initialize({
+  apiKey: 'dk_your_api_key',
+  tiktok: {
+    appId: 'your_app_id',
+    tiktokAppId: '7123456789',
+    enableAppEvents: true,
+  },
+});
+```
+
+### App Tracking Transparency
+
+Update after ATT dialog:
+
+```typescript
+const { status } = await requestTrackingPermissionsAsync();
+await Datalyr.updateTrackingAuthorization(status === 'granted');
+```
+
+### Check Status
+
+```typescript
+const status = Datalyr.getPlatformIntegrationStatus();
+// { meta: true, tiktok: true }
+```
+
+---
+
+## Expo Support
+
+```typescript
+import { Datalyr } from '@datalyr/react-native/expo';
+```
+
+Same API as standard React Native.
+
+---
+
+## TypeScript
+
+```typescript
+import {
+  Datalyr,
+  DatalyrConfig,
+  EventData,
+  UserProperties,
+  AttributionData,
+} from '@datalyr/react-native';
+```
+
+---
+
+## Troubleshooting
+
+### Events not appearing
+
+1. Check API key starts with `dk_`
+2. Enable `debug: true`
+3. Check `Datalyr.getStatus()` for queue info
+4. Verify network connectivity
+
+### iOS build errors
+
+```bash
+cd ios && pod deintegrate && pod install
+```
+
+### Meta/TikTok not working
+
+Verify Info.plist contains required keys (see Installation).
+
+---
+
+## License
+
+MIT

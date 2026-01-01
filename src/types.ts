@@ -7,6 +7,39 @@ export interface AutoEventConfig {
   sessionTimeoutMs?: number;
 }
 
+// Meta (Facebook) SDK Configuration
+export interface MetaConfig {
+  appId: string;                     // Facebook App ID
+  clientToken?: string;              // Client Token for advanced features
+  enableDeferredDeepLink?: boolean;  // Default: true
+  enableAppEvents?: boolean;         // Default: true
+  advertiserTrackingEnabled?: boolean; // iOS ATT status (auto-detected if not set)
+}
+
+// TikTok SDK Configuration
+export interface TikTokConfig {
+  appId: string;                     // Your App ID (for Datalyr)
+  tiktokAppId: string;               // TikTok App ID
+  accessToken?: string;              // Access Token for Events API
+  enableAppEvents?: boolean;         // Default: true
+}
+
+// Deferred Deep Link Result (from platform SDKs)
+export interface DeferredDeepLinkResult {
+  url?: string;
+  source?: string;
+  fbclid?: string;
+  ttclid?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+  campaignId?: string;
+  adsetId?: string;
+  adId?: string;
+}
+
 // Core SDK Configuration
 export interface DatalyrConfig {
   apiKey: string; // Required for server-side tracking
@@ -33,6 +66,12 @@ export interface DatalyrConfig {
     retryDelay: number;
   };
   skadTemplate?: 'ecommerce' | 'gaming' | 'subscription';
+
+  // Meta (Facebook) SDK Configuration
+  meta?: MetaConfig;
+
+  // TikTok SDK Configuration
+  tiktok?: TikTokConfig;
 }
 // Event Types
 export interface EventData {

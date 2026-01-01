@@ -5,6 +5,33 @@ export interface AutoEventConfig {
     trackPerformance?: boolean;
     sessionTimeoutMs?: number;
 }
+export interface MetaConfig {
+    appId: string;
+    clientToken?: string;
+    enableDeferredDeepLink?: boolean;
+    enableAppEvents?: boolean;
+    advertiserTrackingEnabled?: boolean;
+}
+export interface TikTokConfig {
+    appId: string;
+    tiktokAppId: string;
+    accessToken?: string;
+    enableAppEvents?: boolean;
+}
+export interface DeferredDeepLinkResult {
+    url?: string;
+    source?: string;
+    fbclid?: string;
+    ttclid?: string;
+    utmSource?: string;
+    utmMedium?: string;
+    utmCampaign?: string;
+    utmContent?: string;
+    utmTerm?: string;
+    campaignId?: string;
+    adsetId?: string;
+    adId?: string;
+}
 export interface DatalyrConfig {
     apiKey: string;
     workspaceId?: string;
@@ -30,6 +57,8 @@ export interface DatalyrConfig {
         retryDelay: number;
     };
     skadTemplate?: 'ecommerce' | 'gaming' | 'subscription';
+    meta?: MetaConfig;
+    tiktok?: TikTokConfig;
 }
 export interface EventData {
     [key: string]: any;

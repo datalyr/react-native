@@ -1,4 +1,4 @@
-import { DatalyrConfig, EventData, UserProperties, AutoEventConfig } from './types';
+import { DatalyrConfig, EventData, UserProperties, AutoEventConfig, DeferredDeepLinkResult } from './types';
 import { AttributionData } from './attribution';
 import { SessionData } from './auto-events';
 export declare class DatalyrSDK {
@@ -93,13 +93,61 @@ export declare class DatalyrSDK {
      */
     trackWithSKAdNetwork(event: string, properties?: EventData): Promise<void>;
     /**
-     * Track purchase with automatic revenue encoding
+     * Track purchase with automatic revenue encoding and platform forwarding
      */
     trackPurchase(value: number, currency?: string, productId?: string): Promise<void>;
     /**
-     * Track subscription with automatic revenue encoding
+     * Track subscription with automatic revenue encoding and platform forwarding
      */
     trackSubscription(value: number, currency?: string, plan?: string): Promise<void>;
+    /**
+     * Track add to cart event
+     */
+    trackAddToCart(value: number, currency?: string, productId?: string, productName?: string): Promise<void>;
+    /**
+     * Track view content/product event
+     */
+    trackViewContent(contentId?: string, contentName?: string, contentType?: string, value?: number, currency?: string): Promise<void>;
+    /**
+     * Track initiate checkout event
+     */
+    trackInitiateCheckout(value: number, currency?: string, numItems?: number, productIds?: string[]): Promise<void>;
+    /**
+     * Track complete registration event
+     */
+    trackCompleteRegistration(method?: string): Promise<void>;
+    /**
+     * Track search event
+     */
+    trackSearch(query: string, resultIds?: string[]): Promise<void>;
+    /**
+     * Track lead/contact form submission
+     */
+    trackLead(value?: number, currency?: string): Promise<void>;
+    /**
+     * Track add payment info event
+     */
+    trackAddPaymentInfo(success?: boolean): Promise<void>;
+    /**
+     * Get deferred attribution data from platform SDKs
+     */
+    getDeferredAttributionData(): DeferredDeepLinkResult | null;
+    /**
+     * Get platform integration status
+     */
+    getPlatformIntegrationStatus(): {
+        meta: boolean;
+        tiktok: boolean;
+    };
+    /**
+     * Update tracking authorization status on all platform SDKs
+     * Call this AFTER the user responds to the ATT permission dialog
+     */
+    updateTrackingAuthorization(enabled: boolean): Promise<void>;
+    /**
+     * Handle deferred deep link data from platform SDKs
+     */
+    private handleDeferredDeepLink;
     /**
      * Get conversion value for testing (doesn't send to Apple)
      */
@@ -175,5 +223,18 @@ export declare class Datalyr {
     static trackAppUpdate(previousVersion: string, currentVersion: string): Promise<void>;
     static trackRevenue(eventName: string, properties?: EventData): Promise<void>;
     static updateAutoEventsConfig(config: Partial<AutoEventConfig>): void;
+    static trackAddToCart(value: number, currency?: string, productId?: string, productName?: string): Promise<void>;
+    static trackViewContent(contentId?: string, contentName?: string, contentType?: string, value?: number, currency?: string): Promise<void>;
+    static trackInitiateCheckout(value: number, currency?: string, numItems?: number, productIds?: string[]): Promise<void>;
+    static trackCompleteRegistration(method?: string): Promise<void>;
+    static trackSearch(query: string, resultIds?: string[]): Promise<void>;
+    static trackLead(value?: number, currency?: string): Promise<void>;
+    static trackAddPaymentInfo(success?: boolean): Promise<void>;
+    static getDeferredAttributionData(): DeferredDeepLinkResult | null;
+    static getPlatformIntegrationStatus(): {
+        meta: boolean;
+        tiktok: boolean;
+    };
+    static updateTrackingAuthorization(enabled: boolean): Promise<void>;
 }
 export default datalyr;

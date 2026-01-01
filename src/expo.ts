@@ -1,14 +1,14 @@
 /**
  * Expo entry point - uses Expo-compatible utilities
- * Import this with: import { datalyr } from '@datalyr/react-native/expo';
+ * Import with: import { Datalyr } from '@datalyr/react-native/expo';
  *
- * This entry point uses Expo-specific packages for device info:
+ * Uses Expo-specific packages:
  * - expo-application (app version, bundle ID)
  * - expo-device (device model, manufacturer)
  * - expo-network (network type detection)
  *
- * For React Native CLI apps, use the default import instead:
- * import { datalyr } from '@datalyr/react-native';
+ * For React Native CLI, use:
+ * import { Datalyr } from '@datalyr/react-native';
  */
 
 // Export Expo-specific SDK (uses utils-expo.ts)
