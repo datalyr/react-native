@@ -1,9 +1,27 @@
 /**
- * Native Bridge for Meta and TikTok SDKs
+ * Native Bridge for Meta, TikTok, and Apple Search Ads
  * Uses bundled native modules instead of separate npm packages
  */
 
 import { NativeModules, Platform } from 'react-native';
+
+/**
+ * Apple Search Ads attribution data returned from AdServices API
+ */
+export interface AppleSearchAdsAttribution {
+  attribution: boolean;
+  orgId?: number;
+  orgName?: string;
+  campaignId?: number;
+  campaignName?: string;
+  adGroupId?: number;
+  adGroupName?: string;
+  keywordId?: number;
+  keyword?: string;
+  clickDate?: string;
+  conversionType?: string;
+  countryOrRegion?: string;
+}
 
 interface DatalyrNativeModule {
   // Meta SDK Methods
@@ -48,8 +66,11 @@ interface DatalyrNativeModule {
   logoutTikTok(): Promise<boolean>;
   updateTikTokTrackingAuthorization(enabled: boolean): Promise<boolean>;
 
+  // Apple Search Ads Methods
+  getAppleSearchAdsAttribution(): Promise<AppleSearchAdsAttribution | null>;
+
   // SDK Availability
-  getSDKAvailability(): Promise<{ meta: boolean; tiktok: boolean }>;
+  getSDKAvailability(): Promise<{ meta: boolean; tiktok: boolean; appleSearchAds: boolean }>;
 }
 
 // Native module is only available on iOS
@@ -69,15 +90,16 @@ export const isNativeModuleAvailable = (): boolean => {
 export const getSDKAvailability = async (): Promise<{
   meta: boolean;
   tiktok: boolean;
+  appleSearchAds: boolean;
 }> => {
   if (!DatalyrNative) {
-    return { meta: false, tiktok: false };
+    return { meta: false, tiktok: false, appleSearchAds: false };
   }
 
   try {
     return await DatalyrNative.getSDKAvailability();
   } catch {
-    return { meta: false, tiktok: false };
+    return { meta: false, tiktok: false, appleSearchAds: false };
   }
 };
 
@@ -266,6 +288,26 @@ export const TikTokNativeBridge = {
     } catch (error) {
       console.error('[Datalyr/TikTokNative] Update tracking failed:', error);
       return false;
+    }
+  },
+};
+
+// MARK: - Apple Search Ads Bridge
+
+export const AppleSearchAdsNativeBridge = {
+  /**
+   * Get Apple Search Ads attribution data
+   * Uses AdServices framework (iOS 14.3+)
+   * Returns null if user didn't come from Apple Search Ads or on older iOS
+   */
+  async getAttribution(): Promise<AppleSearchAdsAttribution | null> {
+    if (!DatalyrNative) return null;
+
+    try {
+      return await DatalyrNative.getAppleSearchAdsAttribution();
+    } catch (error) {
+      console.error('[Datalyr/AppleSearchAds] Get attribution failed:', error);
+      return null;
     }
   },
 };

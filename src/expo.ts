@@ -52,5 +52,9 @@ export * from './event-queue';
 export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 
+// Export platform integrations
+export { appleSearchAdsIntegration } from './integrations';
+export type { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
+
 // Default export
 export default datalyrExpo;

@@ -23,6 +23,9 @@ Mobile analytics and attribution SDK for React Native and Expo. Track events, id
 - [Auto Events](#auto-events)
 - [SKAdNetwork](#skadnetwork)
 - [Platform Integrations](#platform-integrations)
+  - [Meta](#meta-facebook)
+  - [TikTok](#tiktok)
+  - [Apple Search Ads](#apple-search-ads)
 - [Expo Support](#expo-support)
 - [TypeScript](#typescript)
 - [Troubleshooting](#troubleshooting)
@@ -482,6 +485,32 @@ await Datalyr.initialize({
 });
 ```
 
+### Apple Search Ads
+
+Attribution for users who install from Apple Search Ads (iOS 14.3+). Automatically fetched on initialization.
+
+```typescript
+// Check if user came from Apple Search Ads
+const asaAttribution = Datalyr.getAppleSearchAdsAttribution();
+
+if (asaAttribution?.attribution) {
+  console.log(asaAttribution.campaignId);    // Campaign ID
+  console.log(asaAttribution.campaignName);  // Campaign name
+  console.log(asaAttribution.adGroupId);     // Ad group ID
+  console.log(asaAttribution.keyword);       // Search keyword
+  console.log(asaAttribution.clickDate);     // Click date
+}
+```
+
+Attribution data is automatically included in all events with the `asa_` prefix:
+- `asa_campaign_id`, `asa_campaign_name`
+- `asa_ad_group_id`, `asa_ad_group_name`
+- `asa_keyword_id`, `asa_keyword`
+- `asa_org_id`, `asa_org_name`
+- `asa_click_date`, `asa_conversion_type`
+
+No additional configuration needed. The SDK uses Apple's AdServices API.
+
 ### App Tracking Transparency
 
 Update after ATT dialog:
@@ -495,7 +524,7 @@ await Datalyr.updateTrackingAuthorization(status === 'granted');
 
 ```typescript
 const status = Datalyr.getPlatformIntegrationStatus();
-// { meta: true, tiktok: true }
+// { meta: true, tiktok: true, appleSearchAds: true }
 ```
 
 ---

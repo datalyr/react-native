@@ -67,4 +67,8 @@ RCT_EXTERN_METHOD(updateTikTokTrackingAuthorization:(BOOL)enabled
 RCT_EXTERN_METHOD(getSDKAvailability:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 
+// Apple Search Ads Attribution
+RCT_EXTERN_METHOD(getAppleSearchAdsAttribution:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+
 @end

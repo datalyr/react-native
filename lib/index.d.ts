@@ -10,5 +10,6 @@ export * from './event-queue';
 export { DatalyrSDK };
 export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
-export { metaIntegration, tiktokIntegration } from './integrations';
+export { metaIntegration, tiktokIntegration, appleSearchAdsIntegration } from './integrations';
+export type { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
 export default DatalyrSDK;

@@ -27,7 +27,10 @@ export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEn
 export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 
 // Export platform integrations
-export { metaIntegration, tiktokIntegration } from './integrations';
+export { metaIntegration, tiktokIntegration, appleSearchAdsIntegration } from './integrations';
+
+// Export native bridge types
+export type { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
 
 // Default export for compatibility
 export default DatalyrSDK; 

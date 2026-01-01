@@ -1,6 +1,7 @@
 import { DatalyrConfig, EventData, UserProperties, AutoEventConfig, DeferredDeepLinkResult } from './types';
 import { AttributionData } from './attribution';
 import { SessionData } from './auto-events';
+import { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
 export declare class DatalyrSDK {
     private state;
     private httpClient;
@@ -138,7 +139,13 @@ export declare class DatalyrSDK {
     getPlatformIntegrationStatus(): {
         meta: boolean;
         tiktok: boolean;
+        appleSearchAds: boolean;
     };
+    /**
+     * Get Apple Search Ads attribution data
+     * Returns attribution if user installed via Apple Search Ads, null otherwise
+     */
+    getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null;
     /**
      * Update tracking authorization status on all platform SDKs
      * Call this AFTER the user responds to the ATT permission dialog
@@ -234,7 +241,9 @@ export declare class Datalyr {
     static getPlatformIntegrationStatus(): {
         meta: boolean;
         tiktok: boolean;
+        appleSearchAds: boolean;
     };
+    static getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null;
     static updateTrackingAuthorization(enabled: boolean): Promise<void>;
 }
 export default datalyr;

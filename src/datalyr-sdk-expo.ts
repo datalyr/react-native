@@ -33,8 +33,9 @@ import { attributionManager, AttributionData } from './attribution';
 import { createAutoEventsManager, AutoEventsManager } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
-import { metaIntegration, tiktokIntegration } from './integrations';
+import { metaIntegration, tiktokIntegration, appleSearchAdsIntegration } from './integrations';
 import { DeferredDeepLinkResult } from './types';
+import { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
 
 export class DatalyrSDKExpo {
   private state: SDKState;
@@ -175,6 +176,14 @@ export class DatalyrSDKExpo {
           errorLog('Failed to initialize TikTok SDK:', error as Error);
         }
       }
+
+      // Initialize Apple Search Ads attribution (iOS only, auto-fetches on init)
+      await appleSearchAdsIntegration.initialize(config.debug);
+      debugLog('Platform integrations initialized', {
+        meta: metaIntegration.isAvailable(),
+        tiktok: tiktokIntegration.isAvailable(),
+        appleSearchAds: appleSearchAdsIntegration.isAvailable(),
+      });
 
       this.state.initialized = true;
 
@@ -636,11 +645,20 @@ export class DatalyrSDKExpo {
     return null;
   }
 
-  getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean } {
+  getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean } {
     return {
       meta: metaIntegration.isAvailable(),
       tiktok: tiktokIntegration.isAvailable(),
+      appleSearchAds: appleSearchAdsIntegration.isAvailable(),
     };
+  }
+
+  /**
+   * Get Apple Search Ads attribution data
+   * Returns attribution if user installed via Apple Search Ads, null otherwise
+   */
+  getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null {
+    return appleSearchAdsIntegration.getAttributionData();
   }
 
   async updateTrackingAuthorization(authorized: boolean): Promise<void> {
@@ -694,6 +712,22 @@ export class DatalyrSDKExpo {
     const attributionData = attributionManager.getAttributionData();
     const networkType = await getNetworkType();
 
+    // Get Apple Search Ads attribution if available
+    const asaAttribution = appleSearchAdsIntegration.getAttributionData();
+    const asaData = asaAttribution?.attribution ? {
+      asa_campaign_id: asaAttribution.campaignId,
+      asa_campaign_name: asaAttribution.campaignName,
+      asa_ad_group_id: asaAttribution.adGroupId,
+      asa_ad_group_name: asaAttribution.adGroupName,
+      asa_keyword_id: asaAttribution.keywordId,
+      asa_keyword: asaAttribution.keyword,
+      asa_org_id: asaAttribution.orgId,
+      asa_org_name: asaAttribution.orgName,
+      asa_click_date: asaAttribution.clickDate,
+      asa_conversion_type: asaAttribution.conversionType,
+      asa_country_or_region: asaAttribution.countryOrRegion,
+    } : {};
+
     const payload: EventPayload = {
       workspaceId: this.state.config.workspaceId || 'mobile_sdk',
       visitorId: this.state.visitorId,
@@ -713,6 +747,8 @@ export class DatalyrSDKExpo {
         timestamp: Date.now(),
         sdk_variant: 'expo',
         ...attributionData,
+        // Apple Search Ads attribution
+        ...asaData,
       },
       fingerprintData,
       source: 'mobile_app',
@@ -945,8 +981,12 @@ export class DatalyrExpo {
     return datalyrExpo.getDeferredAttributionData();
   }
 
-  static getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean } {
+  static getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean } {
     return datalyrExpo.getPlatformIntegrationStatus();
+  }
+
+  static getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null {
+    return datalyrExpo.getAppleSearchAdsAttribution();
   }
 
   static async updateTrackingAuthorization(authorized: boolean): Promise<void> {

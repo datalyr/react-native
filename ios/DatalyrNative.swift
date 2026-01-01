@@ -1,6 +1,7 @@
 import Foundation
 import FBSDKCoreKit
 import TikTokBusinessSDK
+import AdServices
 
 @objc(DatalyrNative)
 class DatalyrNative: NSObject {
@@ -269,7 +270,63 @@ class DatalyrNative: NSObject {
   ) {
     resolve([
       "meta": true,
-      "tiktok": true
+      "tiktok": true,
+      "appleSearchAds": true
     ])
+  }
+
+  // MARK: - Apple Search Ads Attribution
+
+  @objc func getAppleSearchAdsAttribution(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    reject: @escaping RCTPromiseRejectBlock
+  ) {
+    // AdServices is available on iOS 14.3+
+    if #available(iOS 14.3, *) {
+      do {
+        // Get the attribution token from AdServices
+        let token = try AAAttribution.attributionToken()
+
+        // Send token to Apple's API to get attribution data
+        var request = URLRequest(url: URL(string: "https://api-adservices.apple.com/api/v1/")!)
+        request.httpMethod = "POST"
+        request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
+        request.httpBody = token.data(using: .utf8)
+
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+          if let error = error {
+            // Network error - resolve with nil instead of rejecting
+            resolve(nil)
+            return
+          }
+
+          guard let data = data else {
+            resolve(nil)
+            return
+          }
+
+          do {
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+              // Return attribution data
+              // Includes: attribution, orgId, orgName, campaignId, campaignName,
+              // adGroupId, adGroupName, clickDate, conversionType, etc.
+              resolve(json)
+            } else {
+              resolve(nil)
+            }
+          } catch {
+            resolve(nil)
+          }
+        }
+        task.resume()
+
+      } catch {
+        // Attribution token not available (user didn't come from Apple Search Ads)
+        resolve(nil)
+      }
+    } else {
+      // iOS version too old
+      resolve(nil)
+    }
   }
 }
