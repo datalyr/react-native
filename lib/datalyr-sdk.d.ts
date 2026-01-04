@@ -56,15 +56,30 @@ export declare class DatalyrSDK {
         currentUserId?: string;
         queueStats: any;
         attribution: any;
+        journey: any;
     };
     /**
      * Get the persistent anonymous ID
      */
     getAnonymousId(): string;
     /**
-     * Get detailed attribution data
+     * Get detailed attribution data (includes journey tracking data)
      */
-    getAttributionData(): AttributionData;
+    getAttributionData(): AttributionData & Record<string, any>;
+    /**
+     * Get journey tracking summary
+     */
+    getJourneySummary(): {
+        hasFirstTouch: boolean;
+        hasLastTouch: boolean;
+        touchpointCount: number;
+        daysSinceFirstTouch: number;
+        sources: string[];
+    };
+    /**
+     * Get full customer journey (all touchpoints)
+     */
+    getJourney(): import("./journey").TouchPoint[];
     /**
      * Set custom attribution data (for testing or manual attribution)
      */
@@ -91,6 +106,7 @@ export declare class DatalyrSDK {
     updateAutoEventsConfig(config: Partial<AutoEventConfig>): void;
     /**
      * Track event with automatic SKAdNetwork conversion value encoding
+     * Uses SKAN 4.0 on iOS 16.1+ with coarse values and lock window support
      */
     trackWithSKAdNetwork(event: string, properties?: EventData): Promise<void>;
     /**
@@ -140,12 +156,18 @@ export declare class DatalyrSDK {
         meta: boolean;
         tiktok: boolean;
         appleSearchAds: boolean;
+        playInstallReferrer: boolean;
     };
     /**
      * Get Apple Search Ads attribution data
      * Returns attribution if user installed via Apple Search Ads, null otherwise
      */
     getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null;
+    /**
+     * Get Google Play Install Referrer attribution data (Android only)
+     * Returns referrer data if available, null otherwise
+     */
+    getPlayInstallReferrer(): Record<string, any> | null;
     /**
      * Update tracking authorization status on all platform SDKs
      * Call this AFTER the user responds to the ATT permission dialog
@@ -221,6 +243,7 @@ export declare class Datalyr {
         currentUserId?: string;
         queueStats: any;
         attribution: any;
+        journey: any;
     };
     static getAnonymousId(): string;
     static getAttributionData(): AttributionData;

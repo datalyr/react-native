@@ -30,6 +30,7 @@ import {
 import { createHttpClient, HttpClient } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData } from './attribution';
+import { journeyManager } from './journey';
 import { createAutoEventsManager, AutoEventsManager } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
@@ -113,6 +114,24 @@ export class DatalyrSDKExpo {
 
       if (this.state.config.enableAttribution) {
         await attributionManager.initialize();
+      }
+
+      // Initialize journey tracking (for first-touch, last-touch, touchpoints)
+      await journeyManager.initialize();
+
+      // Record initial attribution to journey if this is a new session with attribution
+      const initialAttribution = attributionManager.getAttributionData();
+      if (initialAttribution.utm_source || initialAttribution.fbclid || initialAttribution.gclid || initialAttribution.lyr) {
+        await journeyManager.recordAttribution(this.state.sessionId, {
+          source: initialAttribution.utm_source || initialAttribution.campaign_source,
+          medium: initialAttribution.utm_medium || initialAttribution.campaign_medium,
+          campaign: initialAttribution.utm_campaign || initialAttribution.campaign_name,
+          fbclid: initialAttribution.fbclid,
+          gclid: initialAttribution.gclid,
+          ttclid: initialAttribution.ttclid,
+          clickIdType: initialAttribution.fbclid ? 'fbclid' : initialAttribution.gclid ? 'gclid' : initialAttribution.ttclid ? 'ttclid' : undefined,
+          lyr: initialAttribution.lyr,
+        });
       }
 
       if (this.state.config.enableAutoEvents) {
@@ -441,8 +460,32 @@ export class DatalyrSDKExpo {
     return this.state.anonymousId;
   }
 
-  getAttributionData(): AttributionData {
-    return attributionManager.getAttributionData();
+  /**
+   * Get detailed attribution data (includes journey tracking data)
+   */
+  getAttributionData(): AttributionData & Record<string, any> {
+    const attribution = attributionManager.getAttributionData();
+    const journeyData = journeyManager.getAttributionData();
+
+    // Merge attribution with journey data
+    return {
+      ...attribution,
+      ...journeyData,
+    };
+  }
+
+  /**
+   * Get journey tracking summary
+   */
+  getJourneySummary() {
+    return journeyManager.getJourneySummary();
+  }
+
+  /**
+   * Get full customer journey (all touchpoints)
+   */
+  getJourney() {
+    return journeyManager.getJourney();
   }
 
   async setAttributionData(data: Partial<AttributionData>): Promise<void> {
@@ -477,6 +520,10 @@ export class DatalyrSDKExpo {
     }
   }
 
+  /**
+   * Track event with automatic SKAdNetwork conversion value encoding
+   * Uses SKAN 4.0 on iOS 16.1+ with coarse values and lock window support
+   */
   async trackWithSKAdNetwork(event: string, properties?: EventData): Promise<void> {
     await this.track(event, properties);
 
@@ -487,13 +534,15 @@ export class DatalyrSDKExpo {
       return;
     }
 
-    const conversionValue = DatalyrSDKExpo.conversionEncoder.encode(event, properties);
+    // Use SKAN 4.0 encoding (includes coarse value and lock window)
+    const result = DatalyrSDKExpo.conversionEncoder.encodeWithSKAN4(event, properties);
 
-    if (conversionValue > 0) {
-      const success = await SKAdNetworkBridge.updateConversionValue(conversionValue);
+    if (result.fineValue > 0 || result.priority > 0) {
+      // Use SKAN 4.0 method (automatically falls back to SKAN 3.0 on older iOS)
+      const success = await SKAdNetworkBridge.updatePostbackConversionValue(result);
 
       if (DatalyrSDKExpo.debugEnabled) {
-        debugLog(`Event: ${event}, Conversion Value: ${conversionValue}, Success: ${success}`, properties);
+        debugLog(`SKAN: event=${event}, fine=${result.fineValue}, coarse=${result.coarseValue}, lock=${result.lockWindow}, success=${success}`, properties);
       }
     }
   }

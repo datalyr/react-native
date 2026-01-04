@@ -22,6 +22,10 @@ export * from './types';
 // Export attribution manager
 export { attributionManager } from './attribution';
 
+// Export journey tracking
+export { journeyManager } from './journey';
+export type { TouchAttribution, TouchPoint } from './journey';
+
 // Export auto-events
 export { createAutoEventsManager, AutoEventsManager } from './auto-events';
 

@@ -1,12 +1,16 @@
 /**
- * Native Bridge for Meta, TikTok, and Apple Search Ads
+ * Native Bridge for Meta, TikTok, Apple Search Ads, and Play Install Referrer
  * Uses bundled native modules instead of separate npm packages
+ *
+ * Supported Platforms:
+ * - iOS: Meta SDK, TikTok SDK, Apple Search Ads (AdServices)
+ * - Android: Meta SDK, TikTok SDK, Play Install Referrer
  */
 
 import { NativeModules, Platform } from 'react-native';
 
 /**
- * Apple Search Ads attribution data returned from AdServices API
+ * Apple Search Ads attribution data returned from AdServices API (iOS only)
  */
 export interface AppleSearchAdsAttribution {
   attribution: boolean;
@@ -21,6 +25,25 @@ export interface AppleSearchAdsAttribution {
   clickDate?: string;
   conversionType?: string;
   countryOrRegion?: string;
+}
+
+/**
+ * Play Install Referrer data (Android only)
+ */
+export interface PlayInstallReferrerData {
+  referrerUrl: string;
+  referrerClickTimestamp: number;
+  installBeginTimestamp: number;
+  installCompleteTimestamp?: number;
+  gclid?: string;
+  fbclid?: string;
+  ttclid?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmTerm?: string;
+  utmContent?: string;
+  referrer?: string;
 }
 
 interface DatalyrNativeModule {
@@ -66,16 +89,29 @@ interface DatalyrNativeModule {
   logoutTikTok(): Promise<boolean>;
   updateTikTokTrackingAuthorization(enabled: boolean): Promise<boolean>;
 
-  // Apple Search Ads Methods
+  // Apple Search Ads Methods (iOS only)
   getAppleSearchAdsAttribution(): Promise<AppleSearchAdsAttribution | null>;
 
   // SDK Availability
-  getSDKAvailability(): Promise<{ meta: boolean; tiktok: boolean; appleSearchAds: boolean }>;
+  getSDKAvailability(): Promise<{
+    meta: boolean;
+    tiktok: boolean;
+    appleSearchAds: boolean;
+    playInstallReferrer?: boolean;
+  }>;
 }
 
-// Native module is only available on iOS
-const DatalyrNative: DatalyrNativeModule | null =
-  Platform.OS === 'ios' ? NativeModules.DatalyrNative : null;
+interface PlayInstallReferrerModule {
+  isAvailable(): Promise<boolean>;
+  getInstallReferrer(): Promise<PlayInstallReferrerData | null>;
+}
+
+// Native modules - available on both iOS and Android
+const DatalyrNative: DatalyrNativeModule | null = NativeModules.DatalyrNative ?? null;
+
+// Play Install Referrer - Android only
+const DatalyrPlayInstallReferrer: PlayInstallReferrerModule | null =
+  Platform.OS === 'android' ? NativeModules.DatalyrPlayInstallReferrer : null;
 
 /**
  * Check if native module is available
@@ -85,21 +121,34 @@ export const isNativeModuleAvailable = (): boolean => {
 };
 
 /**
- * Get SDK availability status
+ * Get SDK availability status for all platforms
  */
 export const getSDKAvailability = async (): Promise<{
   meta: boolean;
   tiktok: boolean;
   appleSearchAds: boolean;
+  playInstallReferrer: boolean;
 }> => {
+  const defaultAvailability = {
+    meta: false,
+    tiktok: false,
+    appleSearchAds: false,
+    playInstallReferrer: false,
+  };
+
   if (!DatalyrNative) {
-    return { meta: false, tiktok: false, appleSearchAds: false };
+    return defaultAvailability;
   }
 
   try {
-    return await DatalyrNative.getSDKAvailability();
+    const result = await DatalyrNative.getSDKAvailability();
+    return {
+      ...defaultAvailability,
+      ...result,
+      playInstallReferrer: Platform.OS === 'android' && DatalyrPlayInstallReferrer !== null,
+    };
   } catch {
-    return { meta: false, tiktok: false, appleSearchAds: false };
+    return defaultAvailability;
   }
 };
 
@@ -292,7 +341,7 @@ export const TikTokNativeBridge = {
   },
 };
 
-// MARK: - Apple Search Ads Bridge
+// MARK: - Apple Search Ads Bridge (iOS only)
 
 export const AppleSearchAdsNativeBridge = {
   /**
@@ -301,12 +350,49 @@ export const AppleSearchAdsNativeBridge = {
    * Returns null if user didn't come from Apple Search Ads or on older iOS
    */
   async getAttribution(): Promise<AppleSearchAdsAttribution | null> {
-    if (!DatalyrNative) return null;
+    if (!DatalyrNative || Platform.OS !== 'ios') return null;
 
     try {
       return await DatalyrNative.getAppleSearchAdsAttribution();
     } catch (error) {
       console.error('[Datalyr/AppleSearchAds] Get attribution failed:', error);
+      return null;
+    }
+  },
+};
+
+// MARK: - Play Install Referrer Bridge (Android only)
+
+export const PlayInstallReferrerNativeBridge = {
+  /**
+   * Check if Play Install Referrer is available
+   * Only available on Android with Google Play Services
+   */
+  async isAvailable(): Promise<boolean> {
+    if (!DatalyrPlayInstallReferrer || Platform.OS !== 'android') return false;
+
+    try {
+      return await DatalyrPlayInstallReferrer.isAvailable();
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Get install referrer data from Google Play
+   *
+   * Returns UTM parameters, click IDs (gclid, fbclid, ttclid), and timestamps
+   * from the Google Play Store referrer.
+   *
+   * Call this on first app launch to capture install attribution.
+   */
+  async getInstallReferrer(): Promise<PlayInstallReferrerData | null> {
+    if (!DatalyrPlayInstallReferrer || Platform.OS !== 'android') return null;
+
+    try {
+      return await DatalyrPlayInstallReferrer.getInstallReferrer();
+    } catch (error) {
+      console.error('[Datalyr/PlayInstallReferrer] Get referrer failed:', error);
       return null;
     }
   },

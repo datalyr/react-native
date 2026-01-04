@@ -27,10 +27,11 @@ import {
 import { createHttpClient, HttpClient } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData } from './attribution';
+import { journeyManager } from './journey';
 import { createAutoEventsManager, AutoEventsManager, SessionData } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
-import { metaIntegration, tiktokIntegration, appleSearchAdsIntegration } from './integrations';
+import { metaIntegration, tiktokIntegration, appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
 import { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
 
 export class DatalyrSDK {
@@ -124,6 +125,24 @@ export class DatalyrSDK {
         await attributionManager.initialize();
       }
 
+      // Initialize journey tracking (for first-touch, last-touch, touchpoints)
+      await journeyManager.initialize();
+
+      // Record initial attribution to journey if this is a new session with attribution
+      const initialAttribution = attributionManager.getAttributionData();
+      if (initialAttribution.utm_source || initialAttribution.fbclid || initialAttribution.gclid || initialAttribution.lyr) {
+        await journeyManager.recordAttribution(this.state.sessionId, {
+          source: initialAttribution.utm_source || initialAttribution.campaign_source,
+          medium: initialAttribution.utm_medium || initialAttribution.campaign_medium,
+          campaign: initialAttribution.utm_campaign || initialAttribution.campaign_name,
+          fbclid: initialAttribution.fbclid,
+          gclid: initialAttribution.gclid,
+          ttclid: initialAttribution.ttclid,
+          clickIdType: initialAttribution.fbclid ? 'fbclid' : initialAttribution.gclid ? 'gclid' : initialAttribution.ttclid ? 'ttclid' : undefined,
+          lyr: initialAttribution.lyr,
+        });
+      }
+
       // Initialize auto-events manager (asynchronously to avoid blocking)
       if (this.state.config.enableAutoEvents) {
         this.autoEventsManager = new AutoEventsManager(
@@ -185,10 +204,14 @@ export class DatalyrSDK {
       // Initialize Apple Search Ads attribution (iOS only, auto-fetches on init)
       await appleSearchAdsIntegration.initialize(config.debug);
 
+      // Initialize Google Play Install Referrer (Android only)
+      await playInstallReferrerIntegration.initialize();
+
       debugLog('Platform integrations initialized', {
         meta: metaIntegration.isAvailable(),
         tiktok: tiktokIntegration.isAvailable(),
         appleSearchAds: appleSearchAdsIntegration.isAvailable(),
+        playInstallReferrer: playInstallReferrerIntegration.isAvailable(),
       });
 
       // SDK initialized successfully - set state before tracking install event
@@ -490,6 +513,7 @@ export class DatalyrSDK {
     currentUserId?: string;
     queueStats: any;
     attribution: any;
+    journey: any;
   } {
     return {
       initialized: this.state.initialized,
@@ -500,6 +524,7 @@ export class DatalyrSDK {
       currentUserId: this.state.currentUserId,
       queueStats: this.eventQueue.getStats(),
       attribution: attributionManager.getAttributionSummary(),
+      journey: journeyManager.getJourneySummary(),
     };
   }
 
@@ -511,10 +536,31 @@ export class DatalyrSDK {
   }
 
   /**
-   * Get detailed attribution data
+   * Get detailed attribution data (includes journey tracking data)
    */
-  getAttributionData(): AttributionData {
-    return attributionManager.getAttributionData();
+  getAttributionData(): AttributionData & Record<string, any> {
+    const attribution = attributionManager.getAttributionData();
+    const journeyData = journeyManager.getAttributionData();
+
+    // Merge attribution with journey data
+    return {
+      ...attribution,
+      ...journeyData,
+    };
+  }
+
+  /**
+   * Get journey tracking summary
+   */
+  getJourneySummary() {
+    return journeyManager.getJourneySummary();
+  }
+
+  /**
+   * Get full customer journey (all touchpoints)
+   */
+  getJourney() {
+    return journeyManager.getJourney();
   }
 
   /**
@@ -571,15 +617,16 @@ export class DatalyrSDK {
 
   /**
    * Track event with automatic SKAdNetwork conversion value encoding
+   * Uses SKAN 4.0 on iOS 16.1+ with coarse values and lock window support
    */
   async trackWithSKAdNetwork(
-    event: string, 
+    event: string,
     properties?: EventData
   ): Promise<void> {
     // Existing tracking (keep exactly as-is)
     await this.track(event, properties);
 
-    // NEW: Automatic SKAdNetwork encoding
+    // Automatic SKAdNetwork encoding with SKAN 4.0 support
     if (!DatalyrSDK.conversionEncoder) {
       if (DatalyrSDK.debugEnabled) {
         errorLog('SKAdNetwork encoder not initialized. Pass skadTemplate in initialize()');
@@ -587,13 +634,15 @@ export class DatalyrSDK {
       return;
     }
 
-    const conversionValue = DatalyrSDK.conversionEncoder.encode(event, properties);
-    
-    if (conversionValue > 0) {
-      const success = await SKAdNetworkBridge.updateConversionValue(conversionValue);
-      
+    // Use SKAN 4.0 encoding (includes coarse value and lock window)
+    const result = DatalyrSDK.conversionEncoder.encodeWithSKAN4(event, properties);
+
+    if (result.fineValue > 0 || result.priority > 0) {
+      // Use SKAN 4.0 method (automatically falls back to SKAN 3.0 on older iOS)
+      const success = await SKAdNetworkBridge.updatePostbackConversionValue(result);
+
       if (DatalyrSDK.debugEnabled) {
-        debugLog(`Event: ${event}, Conversion Value: ${conversionValue}, Success: ${success}`, properties);
+        debugLog(`SKAN: event=${event}, fine=${result.fineValue}, coarse=${result.coarseValue}, lock=${result.lockWindow}, success=${success}`, properties);
       }
     } else if (DatalyrSDK.debugEnabled) {
       debugLog(`No conversion value generated for event: ${event}`);
@@ -837,11 +886,12 @@ export class DatalyrSDK {
   /**
    * Get platform integration status
    */
-  getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean } {
+  getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean; playInstallReferrer: boolean } {
     return {
       meta: metaIntegration.isAvailable(),
       tiktok: tiktokIntegration.isAvailable(),
       appleSearchAds: appleSearchAdsIntegration.isAvailable(),
+      playInstallReferrer: playInstallReferrerIntegration.isAvailable(),
     };
   }
 
@@ -851,6 +901,15 @@ export class DatalyrSDK {
    */
   getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null {
     return appleSearchAdsIntegration.getAttributionData();
+  }
+
+  /**
+   * Get Google Play Install Referrer attribution data (Android only)
+   * Returns referrer data if available, null otherwise
+   */
+  getPlayInstallReferrer(): Record<string, any> | null {
+    const data = playInstallReferrerIntegration.getReferrerData();
+    return data ? playInstallReferrerIntegration.getAttributionData() : null;
   }
 
   /**

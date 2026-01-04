@@ -46,14 +46,15 @@ export class TikTokIntegration {
 
   /**
    * Initialize TikTok SDK with configuration
+   * Supported on both iOS and Android via native modules
    */
   async initialize(config: TikTokConfig, debug: boolean = false): Promise<void> {
     this.debug = debug;
     this.config = config;
 
-    // Only available on iOS via native module
-    if (Platform.OS !== 'ios') {
-      this.log('TikTok SDK only available on iOS');
+    // Only available on iOS and Android via native modules
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
+      this.log('TikTok SDK only available on iOS and Android');
       return;
     }
 

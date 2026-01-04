@@ -1,7 +1,7 @@
 {
   "name": "@datalyr/react-native",
-  "version": "1.2.1",
-  "description": "Datalyr SDK for React Native & Expo - Server-side attribution tracking with bundled Meta and TikTok SDKs",
+  "version": "1.3.0",
+  "description": "Datalyr SDK for React Native & Expo - Server-side attribution tracking with bundled Meta and TikTok SDKs for iOS and Android",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
@@ -15,6 +15,7 @@
     "lib/",
     "src/",
     "ios/",
+    "android/",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -38,11 +39,15 @@
     "tiktok-attribution",
     "google-attribution",
     "ios-attribution",
+    "android-attribution",
     "apple-search-ads",
+    "play-install-referrer",
+    "gclid",
     "conversion-tracking",
     "revenue-optimization",
     "deferred-deep-linking",
-    "fbclid"
+    "fbclid",
+    "ttclid"
   ],
   "author": "Datalyr",
   "license": "MIT",

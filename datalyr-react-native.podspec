@@ -20,8 +20,8 @@ Pod::Spec.new do |s|
   s.swift_version = "5.0"
 
   s.dependency "React-Core"
-  s.dependency "FBSDKCoreKit", "~> 17.0"
-  s.dependency "TikTokBusinessSDK", "~> 1.4"
+  s.dependency "FBSDKCoreKit", "~> 18.0"
+  s.dependency "TikTokBusinessSDK", "~> 1.6"
 
   # Disable bitcode (required for TikTok SDK)
   s.pod_target_xcconfig = {

@@ -3,6 +3,8 @@ export declare const datalyr: DatalyrSDK;
 export { Datalyr };
 export * from './types';
 export { attributionManager } from './attribution';
+export { journeyManager } from './journey';
+export type { TouchAttribution, TouchPoint } from './journey';
 export { createAutoEventsManager, AutoEventsManager } from './auto-events';
 export * from './utils';
 export * from './http-client';
