@@ -19,7 +19,9 @@
  * - referrer_url: Full referrer URL from Play Store
  * - referrer_click_timestamp: When the referrer link was clicked
  * - install_begin_timestamp: When the install began
- * - gclid: Google Ads click ID (if present)
+ * - gclid: Google Ads click ID (standard)
+ * - gbraid: Google Ads privacy-safe click ID (iOS App campaigns)
+ * - wbraid: Google Ads privacy-safe click ID (Web-to-App campaigns)
  * - utm_source, utm_medium, utm_campaign, etc.
  */
 
@@ -37,6 +39,10 @@ export interface PlayInstallReferrer {
   installCompleteTimestamp?: number;
   // Google Ads click ID
   gclid?: string;
+  // Google Ads privacy-safe click IDs (iOS App campaigns)
+  gbraid?: string;
+  // Google Ads privacy-safe click IDs (Web-to-App campaigns)
+  wbraid?: string;
   // UTM Parameters
   utmSource?: string;
   utmMedium?: string;
@@ -94,6 +100,8 @@ class PlayInstallReferrerIntegration {
           utmSource: this.referrerData.utmSource,
           utmMedium: this.referrerData.utmMedium,
           hasGclid: !!this.referrerData.gclid,
+          hasGbraid: !!this.referrerData.gbraid,
+          hasWbraid: !!this.referrerData.wbraid,
         });
       }
     } catch (error) {
@@ -149,12 +157,15 @@ class PlayInstallReferrerIntegration {
       params.utmTerm = searchParams.get('utm_term') || undefined;
       params.utmContent = searchParams.get('utm_content') || undefined;
 
-      // Extract click IDs
+      // Extract click IDs (gclid, gbraid, wbraid)
       params.gclid = searchParams.get('gclid') || undefined;
+      params.gbraid = searchParams.get('gbraid') || undefined;
+      params.wbraid = searchParams.get('wbraid') || undefined;
 
       // Store any additional parameters
+      const knownParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'gbraid', 'wbraid'];
       searchParams.forEach((value, key) => {
-        if (!key.startsWith('utm_') && key !== 'gclid') {
+        if (!knownParams.includes(key) && !key.startsWith('utm_')) {
           params[key] = value;
         }
       });
@@ -186,8 +197,12 @@ class PlayInstallReferrerIntegration {
       referrer_click_timestamp: this.referrerData.referrerClickTimestamp,
       install_begin_timestamp: this.referrerData.installBeginTimestamp,
 
-      // Standard attribution fields
+      // Google Ads click IDs (gclid is standard, gbraid/wbraid are privacy-safe alternatives)
       gclid: this.referrerData.gclid,
+      gbraid: this.referrerData.gbraid,
+      wbraid: this.referrerData.wbraid,
+
+      // UTM parameters
       utm_source: this.referrerData.utmSource,
       utm_medium: this.referrerData.utmMedium,
       utm_campaign: this.referrerData.utmCampaign,

@@ -33,6 +33,7 @@ import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEn
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 import { metaIntegration, tiktokIntegration, appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
 import { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
+import { networkStatusManager } from './network-status';
 
 export class DatalyrSDK {
   private state: SDKState;
@@ -40,6 +41,7 @@ export class DatalyrSDK {
   private eventQueue: EventQueue;
   private autoEventsManager: AutoEventsManager | null = null;
   private appStateSubscription: any = null;
+  private networkStatusUnsubscribe: (() => void) | null = null;
   private static conversionEncoder?: ConversionValueEncoder;
   private static debugEnabled = false;
 
@@ -112,21 +114,21 @@ export class DatalyrSDK {
         maxRetryCount: this.state.config.maxRetries || 3,
       });
 
-      // Initialize visitor ID, anonymous ID and session
-      this.state.visitorId = await getOrCreateVisitorId();
-      this.state.anonymousId = await getOrCreateAnonymousId();
-      this.state.sessionId = await getOrCreateSessionId();
+      // PARALLEL INITIALIZATION: IDs and core managers
+      // Run ID creation and core manager initialization in parallel for faster startup
+      const [visitorId, anonymousId, sessionId] = await Promise.all([
+        getOrCreateVisitorId(),
+        getOrCreateAnonymousId(),
+        getOrCreateSessionId(),
+        // These run concurrently but don't return values we need to capture
+        this.loadPersistedUserData(),
+        this.state.config.enableAttribution ? attributionManager.initialize() : Promise.resolve(),
+        journeyManager.initialize(),
+      ]);
 
-      // Load persisted user data
-      await this.loadPersistedUserData();
-
-      // Initialize attribution manager
-      if (this.state.config.enableAttribution) {
-        await attributionManager.initialize();
-      }
-
-      // Initialize journey tracking (for first-touch, last-touch, touchpoints)
-      await journeyManager.initialize();
+      this.state.visitorId = visitorId;
+      this.state.anonymousId = anonymousId;
+      this.state.sessionId = sessionId;
 
       // Record initial attribution to journey if this is a new session with attribution
       const initialAttribution = attributionManager.getAttributionData();
@@ -169,7 +171,7 @@ export class DatalyrSDK {
         }
       }, 50);
 
-      // Initialize SKAdNetwork conversion encoder
+      // Initialize SKAdNetwork conversion encoder (synchronous, no await needed)
       if (config.skadTemplate) {
         const template = ConversionTemplates[config.skadTemplate];
         if (template) {
@@ -183,29 +185,41 @@ export class DatalyrSDK {
         }
       }
 
-      // Initialize Meta SDK if configured
+      // PARALLEL INITIALIZATION: Network monitoring and platform integrations
+      // These are independent and can run concurrently for faster startup
+      const platformInitPromises: Promise<void>[] = [
+        // Network monitoring
+        this.initializeNetworkMonitoring(),
+        // Apple Search Ads (iOS only)
+        appleSearchAdsIntegration.initialize(config.debug),
+        // Google Play Install Referrer (Android only)
+        playInstallReferrerIntegration.initialize(),
+      ];
+
+      // Add Meta initialization if configured
       if (config.meta?.appId) {
-        await metaIntegration.initialize(config.meta, config.debug);
-
-        // Fetch deferred deep link and merge with attribution
-        if (config.enableAttribution !== false) {
-          const deferredLink = await metaIntegration.fetchDeferredDeepLink();
-          if (deferredLink) {
-            await this.handleDeferredDeepLink(deferredLink);
-          }
-        }
+        platformInitPromises.push(
+          metaIntegration.initialize(config.meta, config.debug).then(async () => {
+            // After Meta initializes, fetch deferred deep link
+            if (config.enableAttribution !== false) {
+              const deferredLink = await metaIntegration.fetchDeferredDeepLink();
+              if (deferredLink) {
+                await this.handleDeferredDeepLink(deferredLink);
+              }
+            }
+          })
+        );
       }
 
-      // Initialize TikTok SDK if configured
+      // Add TikTok initialization if configured
       if (config.tiktok?.appId && config.tiktok?.tiktokAppId) {
-        await tiktokIntegration.initialize(config.tiktok, config.debug);
+        platformInitPromises.push(
+          tiktokIntegration.initialize(config.tiktok, config.debug)
+        );
       }
 
-      // Initialize Apple Search Ads attribution (iOS only, auto-fetches on init)
-      await appleSearchAdsIntegration.initialize(config.debug);
-
-      // Initialize Google Play Install Referrer (Android only)
-      await playInstallReferrerIntegration.initialize();
+      // Wait for all platform integrations to complete
+      await Promise.all(platformInitPromises);
 
       debugLog('Platform integrations initialized', {
         meta: metaIntegration.isAvailable(),
@@ -1095,6 +1109,45 @@ export class DatalyrSDK {
   }
 
   /**
+   * Initialize network status monitoring
+   * Automatically updates event queue when network status changes
+   */
+  private async initializeNetworkMonitoring(): Promise<void> {
+    try {
+      await networkStatusManager.initialize();
+
+      // Update event queue with current network status
+      this.state.isOnline = networkStatusManager.isOnline();
+      this.eventQueue.setOnlineStatus(this.state.isOnline);
+
+      // Subscribe to network changes
+      this.networkStatusUnsubscribe = networkStatusManager.subscribe((state) => {
+        const isOnline = state.isConnected && (state.isInternetReachable !== false);
+        this.state.isOnline = isOnline;
+        this.eventQueue.setOnlineStatus(isOnline);
+
+        // Track network status change event (only if SDK is fully initialized)
+        if (this.state.initialized) {
+          this.track('$network_status_change', {
+            is_online: isOnline,
+            network_type: state.type,
+            is_internet_reachable: state.isInternetReachable,
+          }).catch(() => {
+            // Ignore errors for network status events
+          });
+        }
+      });
+
+      debugLog(`Network monitoring initialized, online: ${this.state.isOnline}`);
+    } catch (error) {
+      errorLog('Error initializing network monitoring (non-blocking):', error as Error);
+      // Default to online if monitoring fails
+      this.state.isOnline = true;
+      this.eventQueue.setOnlineStatus(true);
+    }
+  }
+
+  /**
    * Set up app state monitoring for lifecycle events (optimized)
    */
   private setupAppStateMonitoring(): void {
@@ -1114,6 +1167,8 @@ export class DatalyrSDK {
         } else if (nextAppState === 'active') {
           // App became active, ensure we have fresh session if needed
           this.refreshSession();
+          // Refresh network status when coming back from background
+          networkStatusManager.refresh();
           // Notify auto-events manager for session handling
           if (this.autoEventsManager) {
             this.autoEventsManager.handleAppForeground();
@@ -1153,6 +1208,15 @@ export class DatalyrSDK {
         this.appStateSubscription.remove();
         this.appStateSubscription = null;
       }
+
+      // Remove network status listener
+      if (this.networkStatusUnsubscribe) {
+        this.networkStatusUnsubscribe();
+        this.networkStatusUnsubscribe = null;
+      }
+
+      // Destroy network status manager
+      networkStatusManager.destroy();
 
       // Destroy event queue
       this.eventQueue.destroy();

@@ -29,7 +29,11 @@ export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEn
 export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 
 // Export platform integrations
-export { metaIntegration, tiktokIntegration, appleSearchAdsIntegration } from './integrations';
+export { metaIntegration, tiktokIntegration, appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
+
+// Export network status manager
+export { networkStatusManager } from './network-status';
+export type { NetworkState, NetworkStateListener } from './network-status';
 
 // Export native bridge types
 export type { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';

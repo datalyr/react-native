@@ -124,12 +124,50 @@ export const getOrCreateSessionId = async (): Promise<string> => {
   }
 };
 
+// Cached device info to avoid repeated async calls
+let cachedDeviceInfo: DeviceInfoType | null = null;
+let deviceInfoPromise: Promise<DeviceInfoType> | null = null;
+
 /**
- * Collect comprehensive device information
+ * Collect comprehensive device information (cached after first call)
+ * Device info is cached because it rarely changes during app session
  */
 export const getDeviceInfo = async (): Promise<DeviceInfoType> => {
+  // Return cached info if available
+  if (cachedDeviceInfo) {
+    return cachedDeviceInfo;
+  }
+
+  // If a fetch is already in progress, wait for it (prevents concurrent fetches)
+  if (deviceInfoPromise) {
+    return deviceInfoPromise;
+  }
+
+  // Start fetching and cache the promise
+  deviceInfoPromise = fetchDeviceInfoInternal();
+
+  try {
+    cachedDeviceInfo = await deviceInfoPromise;
+    return cachedDeviceInfo;
+  } finally {
+    deviceInfoPromise = null;
+  }
+};
+
+/**
+ * Clear the cached device info (useful for testing or after app update)
+ */
+export const clearDeviceInfoCache = (): void => {
+  cachedDeviceInfo = null;
+  deviceInfoPromise = null;
+};
+
+/**
+ * Internal function to fetch device info
+ */
+const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
   const { width, height } = Dimensions.get('window');
-  
+
   // If DeviceInfo is not available (like in Expo Go), use fallback
   if (!DeviceInfo) {
     return {
@@ -147,7 +185,7 @@ export const getDeviceInfo = async (): Promise<DeviceInfoType> => {
       isEmulator: false,
     };
   }
-  
+
   try {
     const [
       deviceId,
@@ -174,7 +212,7 @@ export const getDeviceInfo = async (): Promise<DeviceInfoType> => {
       DeviceInfo.getCarrier().catch(() => undefined),
       DeviceInfo.isEmulator(),
     ]);
-    
+
     return {
       deviceId,
       model,
@@ -192,7 +230,7 @@ export const getDeviceInfo = async (): Promise<DeviceInfoType> => {
     };
   } catch (error) {
     console.warn('Failed to collect device info:', error);
-    
+
     // Fallback device info
     return {
       deviceId: generateUUID(),
@@ -232,11 +270,29 @@ export const createFingerprintData = async (): Promise<FingerprintData> => {
   }
 };
 
+// Import network status manager for network type detection
+let networkStatusManagerRef: any = null;
+
+// Lazy load to avoid circular dependencies
+const getNetworkStatusManager = () => {
+  if (!networkStatusManagerRef) {
+    try {
+      networkStatusManagerRef = require('./network-status').networkStatusManager;
+    } catch {
+      // Module not loaded yet
+    }
+  }
+  return networkStatusManagerRef;
+};
+
 /**
  * Get network connection type
  */
 export const getNetworkType = (): string => {
-  // This will be enhanced with react-native-netinfo if needed
+  const manager = getNetworkStatusManager();
+  if (manager) {
+    return manager.getNetworkType();
+  }
   return 'unknown';
 };
 

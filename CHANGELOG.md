@@ -5,6 +5,25 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-01
+
+### Added
+- **iOS 18.4+ Features** - Geo-level postbacks, development postbacks, overlapping windows
+- **Privacy Manifest** (`ios/PrivacyInfo.xcprivacy`) - Required for App Store compliance
+- **Network Status Detection** - Automatic online/offline handling with queue sync
+- `SKAdNetworkBridge` iOS 18.4+ methods:
+  - `isGeoPostbackAvailable()` - Check for geo-level postback support
+  - `setPostbackEnvironment()` - Configure sandbox/production mode
+  - `getEnhancedAttributionInfo()` - Full feature matrix by iOS version
+  - `updatePostbackWithWindow()` - Overlapping window support
+  - `enableDevelopmentMode()` / `disableDevelopmentMode()` - Convenience methods
+- Migration guides from AppsFlyer and Adjust
+- Comprehensive troubleshooting section in README
+
+### Changed
+- Parallel SDK initialization for faster startup
+- Enhanced TypeScript types for iOS 18.4+ responses
+
 ## [1.2.1] - 2025-01
 
 ### Added

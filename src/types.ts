@@ -40,37 +40,105 @@ export interface DeferredDeepLinkResult {
   adId?: string;
 }
 
-// Core SDK Configuration
+/**
+ * Core SDK Configuration
+ *
+ * @example
+ * ```typescript
+ * await Datalyr.initialize({
+ *   apiKey: 'dk_your_api_key',
+ *   debug: true,
+ *   enableAutoEvents: true,
+ *   enableAttribution: true,
+ *   skadTemplate: 'ecommerce',
+ *   meta: { appId: 'FB_APP_ID' },
+ *   tiktok: { appId: 'APP_ID', tiktokAppId: 'TIKTOK_APP_ID' },
+ * });
+ * ```
+ */
 export interface DatalyrConfig {
-  apiKey: string; // Required for server-side tracking
-  workspaceId?: string; // Optional for backward compatibility
+  /** Required: API key from Datalyr dashboard (starts with 'dk_') */
+  apiKey: string;
+
+  /** Optional: Workspace ID for multi-workspace setups */
+  workspaceId?: string;
+
+  /** Enable console logging for debugging. Default: false */
   debug?: boolean;
+
+  /**
+   * API endpoint URL. Default: 'https://api.datalyr.com'
+   * @deprecated Use `endpoint` instead
+   */
   apiUrl?: string;
+
+  /** API endpoint URL. Default: 'https://api.datalyr.com' */
   endpoint?: string;
-  useServerTracking?: boolean; // Default: true for v1.0.0
+
+  /** Use server-side tracking. Default: true */
+  useServerTracking?: boolean;
+
+  /** Maximum retry attempts for failed requests. Default: 3 */
   maxRetries?: number;
+
+  /** Delay between retries in milliseconds. Default: 1000 */
   retryDelay?: number;
+
+  /** Request timeout in milliseconds. Default: 15000 */
   timeout?: number;
+
+  /** Number of events per batch. Default: 10 */
   batchSize?: number;
+
+  /** Interval between automatic flushes in milliseconds. Default: 30000 */
   flushInterval?: number;
+
+  /** Maximum events to store in queue. Default: 100 */
   maxQueueSize?: number;
+
+  /**
+   * Maximum events to store in queue. Default: 100
+   * @deprecated Use `maxQueueSize` instead
+   */
   maxEventQueueSize?: number;
+
+  /** Respect browser Do Not Track setting. Default: true */
   respectDoNotTrack?: boolean;
+
+  /** Enable automatic event tracking (sessions, app lifecycle). Default: false */
   enableAutoEvents?: boolean;
+
+  /** Enable attribution tracking (deep links, install referrer). Default: false */
   enableAttribution?: boolean;
+
+  /** Enable web-to-app attribution matching via email. Default: true */
   enableWebToAppAttribution?: boolean;
+
+  /**
+   * Auto-events configuration
+   * @deprecated Use `autoEventConfig` instead
+   */
   autoEvents?: AutoEventConfig;
+
+  /** Auto-events configuration */
   autoEventConfig?: AutoEventConfig;
+
+  /**
+   * Retry configuration
+   * @deprecated Use `maxRetries` and `retryDelay` instead
+   */
   retryConfig?: {
     maxRetries: number;
     retryDelay: number;
   };
+
+  /** SKAdNetwork template for automatic conversion value encoding (iOS only) */
   skadTemplate?: 'ecommerce' | 'gaming' | 'subscription';
 
-  // Meta (Facebook) SDK Configuration
+  /** Meta (Facebook) SDK Configuration */
   meta?: MetaConfig;
 
-  // TikTok SDK Configuration
+  /** TikTok SDK Configuration */
   tiktok?: TikTokConfig;
 }
 // Event Types

@@ -553,24 +553,160 @@ import {
 
 ---
 
-## Troubleshooting
+## Migrating from AppsFlyer / Adjust
 
-### Events not appearing
+Datalyr provides similar functionality with a simpler integration.
 
-1. Check API key starts with `dk_`
-2. Enable `debug: true`
-3. Check `Datalyr.getStatus()` for queue info
-4. Verify network connectivity
+### From AppsFlyer
 
-### iOS build errors
+```typescript
+// BEFORE: AppsFlyer
+import appsFlyer from 'react-native-appsflyer';
+appsFlyer.logEvent('af_purchase', { af_revenue: 99.99, af_currency: 'USD' });
 
-```bash
-cd ios && pod deintegrate && pod install
+// AFTER: Datalyr
+import { Datalyr } from '@datalyr/react-native';
+await Datalyr.trackPurchase(99.99, 'USD', 'product_id');
 ```
 
-### Meta/TikTok not working
+### From Adjust
 
-Verify Info.plist contains required keys (see Installation).
+```typescript
+// BEFORE: Adjust
+import { Adjust, AdjustEvent } from 'react-native-adjust';
+const event = new AdjustEvent('abc123');
+event.setRevenue(99.99, 'USD');
+Adjust.trackEvent(event);
+
+// AFTER: Datalyr
+import { Datalyr } from '@datalyr/react-native';
+await Datalyr.trackPurchase(99.99, 'USD');
+```
+
+### Event Mapping
+
+| AppsFlyer | Adjust | Datalyr |
+|-----------|--------|---------|
+| `af_purchase` | `PURCHASE` | `trackPurchase()` |
+| `af_add_to_cart` | `ADD_TO_CART` | `trackAddToCart()` |
+| `af_initiated_checkout` | `INITIATE_CHECKOUT` | `trackInitiateCheckout()` |
+| `af_complete_registration` | `COMPLETE_REGISTRATION` | `trackCompleteRegistration()` |
+| `af_content_view` | `VIEW_CONTENT` | `trackViewContent()` |
+| `af_subscribe` | `SUBSCRIBE` | `trackSubscription()` |
+
+### Migration Checklist
+
+- [ ] Remove old SDK: `npm uninstall react-native-appsflyer`
+- [ ] Install Datalyr: `npm install @datalyr/react-native`
+- [ ] Run `cd ios && pod install`
+- [ ] Replace initialization and event tracking code
+- [ ] Verify events in Datalyr dashboard
+
+---
+
+## Troubleshooting
+
+### Events Not Appearing
+
+**1. Check SDK Status**
+```typescript
+const status = Datalyr.getStatus();
+console.log('Initialized:', status.initialized);
+console.log('Queue size:', status.queueStats.queueSize);
+console.log('Online:', status.queueStats.isOnline);
+```
+
+**2. Enable Debug Mode**
+```typescript
+await Datalyr.initialize({
+  apiKey: 'dk_your_api_key',
+  debug: true,
+});
+```
+
+**3. Force Flush**
+```typescript
+await Datalyr.flush();
+```
+
+**4. Verify API Key** - Should start with `dk_`
+
+### iOS Build Errors
+
+```bash
+cd ios
+pod deintegrate
+pod cache clean --all
+pod install
+```
+
+**Clean Reset**
+```bash
+rm -rf node_modules ios/Pods ios/Podfile.lock
+npm install && cd ios && pod install
+```
+
+### Android Build Errors
+
+```bash
+cd android && ./gradlew clean
+npx react-native run-android
+```
+
+### Meta SDK Not Working
+
+Verify Info.plist:
+```xml
+<key>FacebookAppID</key>
+<string>YOUR_APP_ID</string>
+<key>FacebookClientToken</key>
+<string>YOUR_CLIENT_TOKEN</string>
+```
+
+Check status: `Datalyr.getPlatformIntegrationStatus()`
+
+### TikTok SDK Not Working
+
+```typescript
+await Datalyr.initialize({
+  apiKey: 'dk_your_api_key',
+  tiktok: {
+    appId: 'your_app_id',
+    tiktokAppId: '7123456789012345',
+  },
+});
+```
+
+### SKAdNetwork Not Updating
+
+1. iOS 14.0+ required (16.1+ for SKAN 4.0)
+2. Set `skadTemplate` in config
+3. Use `trackWithSKAdNetwork()` instead of `track()`
+
+### Attribution Not Captured
+
+```typescript
+await Datalyr.initialize({
+  apiKey: 'dk_your_api_key',
+  enableAttribution: true,
+});
+
+// Check data
+const attribution = Datalyr.getAttributionData();
+```
+
+### App Tracking Transparency (iOS 14.5+)
+
+```typescript
+import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
+
+const { status } = await requestTrackingPermissionsAsync();
+await Datalyr.updateTrackingAuthorization(status === 'granted');
+```
+
+### Debug Logging
+
+Look for `[Datalyr]` prefixed messages in console.
 
 ---
 
