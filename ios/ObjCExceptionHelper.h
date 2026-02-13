@@ -4,7 +4,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface ObjCExceptionHelper : NSObject
 
-+ (BOOL)tryBlock:(void (NS_NOESCAPE ^)(void))block error:(NSError *_Nullable *_Nullable)error;
++ (nullable NSError *)tryBlock:(void (NS_NOESCAPE ^)(void))block;
 
 @end
 

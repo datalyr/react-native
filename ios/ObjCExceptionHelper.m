@@ -2,23 +2,20 @@
 
 @implementation ObjCExceptionHelper
 
-+ (BOOL)tryBlock:(void (NS_NOESCAPE ^)(void))block error:(NSError **)error {
++ (nullable NSError *)tryBlock:(void (NS_NOESCAPE ^)(void))block {
     @try {
         block();
-        return YES;
+        return nil;
     } @catch (NSException *exception) {
-        if (error) {
-            NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
-            userInfo[NSLocalizedDescriptionKey] = exception.reason ?: @"Unknown NSException";
-            userInfo[@"ExceptionName"] = exception.name;
-            if (exception.userInfo) {
-                userInfo[@"ExceptionUserInfo"] = exception.userInfo;
-            }
-            *error = [NSError errorWithDomain:@"com.datalyr.exception"
-                                         code:-1
-                                     userInfo:userInfo];
+        NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+        userInfo[NSLocalizedDescriptionKey] = exception.reason ?: @"Unknown NSException";
+        userInfo[@"ExceptionName"] = exception.name;
+        if (exception.userInfo) {
+            userInfo[@"ExceptionUserInfo"] = exception.userInfo;
         }
-        return NO;
+        return [NSError errorWithDomain:@"com.datalyr.exception"
+                                   code:-1
+                               userInfo:userInfo];
     }
 }
 
