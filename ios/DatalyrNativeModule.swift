@@ -115,7 +115,7 @@ public class DatalyrNativeModule: Module {
         }
 
         if debug {
-          config?.setLogLevel(.debug)
+          config?.setLogLevel(.verbose)
         }
 
         if let validConfig = config {
