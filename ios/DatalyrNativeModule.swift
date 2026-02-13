@@ -11,49 +11,36 @@ public class DatalyrNativeModule: Module {
 
     AsyncFunction("initializeMetaSDK") { (appId: String, clientToken: String?, advertiserTrackingEnabled: Bool, promise: Promise) in
       DispatchQueue.main.async {
-        let error = ObjCExceptionHelper.execute {
-          Settings.shared.appID = appId
+        Settings.shared.appID = appId
 
-          if let token = clientToken, !token.isEmpty {
-            Settings.shared.clientToken = token
-          }
-
-          Settings.shared.isAdvertiserTrackingEnabled = advertiserTrackingEnabled
-          Settings.shared.isAdvertiserIDCollectionEnabled = advertiserTrackingEnabled
-
-          ApplicationDelegate.shared.application(
-            UIApplication.shared,
-            didFinishLaunchingWithOptions: nil
-          )
+        if let token = clientToken, !token.isEmpty {
+          Settings.shared.clientToken = token
         }
 
-        if let error = error {
-          promise.reject("meta_init_exception", error.localizedDescription)
-          return
-        }
+        Settings.shared.isAdvertiserTrackingEnabled = advertiserTrackingEnabled
+        Settings.shared.isAdvertiserIDCollectionEnabled = advertiserTrackingEnabled
+
+        ApplicationDelegate.shared.application(
+          UIApplication.shared,
+          didFinishLaunchingWithOptions: nil
+        )
 
         promise.resolve(true)
       }
     }
 
     AsyncFunction("fetchDeferredAppLink") { (promise: Promise) in
-      let error = ObjCExceptionHelper.execute {
-        AppLinkUtility.fetchDeferredAppLink { url, error in
-          if error != nil {
-            promise.resolve(nil)
-            return
-          }
-
-          if let url = url {
-            promise.resolve(url.absoluteString)
-          } else {
-            promise.resolve(nil)
-          }
+      AppLinkUtility.fetchDeferredAppLink { url, error in
+        if error != nil {
+          promise.resolve(nil)
+          return
         }
-      }
 
-      if error != nil {
-        promise.resolve(nil)
+        if let url = url {
+          promise.resolve(url.absoluteString)
+        } else {
+          promise.resolve(nil)
+        }
       }
     }
 
@@ -66,19 +53,12 @@ public class DatalyrNativeModule: Module {
         }
       }
 
-      let error = ObjCExceptionHelper.execute {
-        if let value = valueToSum {
-          AppEvents.shared.logEvent(AppEvents.Name(eventName), valueToSum: value, parameters: params)
-        } else if params.isEmpty {
-          AppEvents.shared.logEvent(AppEvents.Name(eventName))
-        } else {
-          AppEvents.shared.logEvent(AppEvents.Name(eventName), parameters: params)
-        }
-      }
-
-      if let error = error {
-        promise.reject("meta_exception", error.localizedDescription)
-        return
+      if let value = valueToSum {
+        AppEvents.shared.logEvent(AppEvents.Name(eventName), valueToSum: value, parameters: params)
+      } else if params.isEmpty {
+        AppEvents.shared.logEvent(AppEvents.Name(eventName))
+      } else {
+        AppEvents.shared.logEvent(AppEvents.Name(eventName), parameters: params)
       }
 
       promise.resolve(true)
@@ -93,64 +73,33 @@ public class DatalyrNativeModule: Module {
         }
       }
 
-      let error = ObjCExceptionHelper.execute {
-        AppEvents.shared.logPurchase(amount: amount, currency: currency, parameters: params)
-      }
-
-      if let error = error {
-        promise.reject("meta_exception", error.localizedDescription)
-        return
-      }
-
+      AppEvents.shared.logPurchase(amount: amount, currency: currency, parameters: params)
       promise.resolve(true)
     }
 
     AsyncFunction("setMetaUserData") { (userData: [String: Any], promise: Promise) in
-      let error = ObjCExceptionHelper.execute {
-        AppEvents.shared.setUserData(userData["email"] as? String, forType: .email)
-        AppEvents.shared.setUserData(userData["firstName"] as? String, forType: .firstName)
-        AppEvents.shared.setUserData(userData["lastName"] as? String, forType: .lastName)
-        AppEvents.shared.setUserData(userData["phone"] as? String, forType: .phone)
-        AppEvents.shared.setUserData(userData["dateOfBirth"] as? String, forType: .dateOfBirth)
-        AppEvents.shared.setUserData(userData["gender"] as? String, forType: .gender)
-        AppEvents.shared.setUserData(userData["city"] as? String, forType: .city)
-        AppEvents.shared.setUserData(userData["state"] as? String, forType: .state)
-        AppEvents.shared.setUserData(userData["zip"] as? String, forType: .zip)
-        AppEvents.shared.setUserData(userData["country"] as? String, forType: .country)
-      }
-
-      if let error = error {
-        promise.reject("meta_exception", error.localizedDescription)
-        return
-      }
+      AppEvents.shared.setUserData(userData["email"] as? String, forType: .email)
+      AppEvents.shared.setUserData(userData["firstName"] as? String, forType: .firstName)
+      AppEvents.shared.setUserData(userData["lastName"] as? String, forType: .lastName)
+      AppEvents.shared.setUserData(userData["phone"] as? String, forType: .phone)
+      AppEvents.shared.setUserData(userData["dateOfBirth"] as? String, forType: .dateOfBirth)
+      AppEvents.shared.setUserData(userData["gender"] as? String, forType: .gender)
+      AppEvents.shared.setUserData(userData["city"] as? String, forType: .city)
+      AppEvents.shared.setUserData(userData["state"] as? String, forType: .state)
+      AppEvents.shared.setUserData(userData["zip"] as? String, forType: .zip)
+      AppEvents.shared.setUserData(userData["country"] as? String, forType: .country)
 
       promise.resolve(true)
     }
 
     AsyncFunction("clearMetaUserData") { (promise: Promise) in
-      let error = ObjCExceptionHelper.execute {
-        AppEvents.shared.clearUserData()
-      }
-
-      if let error = error {
-        promise.reject("meta_exception", error.localizedDescription)
-        return
-      }
-
+      AppEvents.shared.clearUserData()
       promise.resolve(true)
     }
 
     AsyncFunction("updateMetaTrackingAuthorization") { (enabled: Bool, promise: Promise) in
-      let error = ObjCExceptionHelper.execute {
-        Settings.shared.isAdvertiserTrackingEnabled = enabled
-        Settings.shared.isAdvertiserIDCollectionEnabled = enabled
-      }
-
-      if let error = error {
-        promise.reject("meta_exception", error.localizedDescription)
-        return
-      }
-
+      Settings.shared.isAdvertiserTrackingEnabled = enabled
+      Settings.shared.isAdvertiserIDCollectionEnabled = enabled
       promise.resolve(true)
     }
 
@@ -169,79 +118,46 @@ public class DatalyrNativeModule: Module {
           config?.setLogLevel(TikTokLogLevelDebug)
         }
 
-        guard let validConfig = config else {
-          promise.reject("tiktok_init_error", "Failed to create TikTok config")
-          return
-        }
-
-        let error = ObjCExceptionHelper.execute {
+        if let validConfig = config {
           TikTokBusiness.initializeSdk(validConfig)
+          promise.resolve(true)
+        } else {
+          promise.reject("tiktok_init_error", "Failed to create TikTok config")
         }
-
-        if let error = error {
-          promise.reject("tiktok_init_exception", error.localizedDescription)
-          return
-        }
-
-        promise.resolve(true)
       }
     }
 
     AsyncFunction("trackTikTokEvent") { (eventName: String, eventId: String?, properties: [String: Any]?, promise: Promise) in
-      let error = ObjCExceptionHelper.execute {
-        let event: TikTokBaseEvent
+      let event: TikTokBaseEvent
 
-        if let eid = eventId, !eid.isEmpty {
-          event = TikTokBaseEvent(eventName: eventName, eventId: eid)
-        } else {
-          event = TikTokBaseEvent(eventName: eventName)
-        }
-
-        if let dict = properties {
-          for (key, value) in dict {
-            event.addProperty(withKey: key, value: value)
-          }
-        }
-
-        TikTokBusiness.trackTTEvent(event)
+      if let eid = eventId, !eid.isEmpty {
+        event = TikTokBaseEvent(eventName: eventName, eventId: eid)
+      } else {
+        event = TikTokBaseEvent(eventName: eventName)
       }
 
-      if let error = error {
-        promise.reject("tiktok_exception", error.localizedDescription)
-        return
+      if let dict = properties {
+        for (key, value) in dict {
+          event.addProperty(withKey: key, value: value)
+        }
       }
 
+      TikTokBusiness.trackTTEvent(event)
       promise.resolve(true)
     }
 
     AsyncFunction("identifyTikTokUser") { (externalId: String, externalUserName: String, phoneNumber: String, email: String, promise: Promise) in
-      let error = ObjCExceptionHelper.execute {
-        TikTokBusiness.identify(
-          withExternalID: externalId.isEmpty ? nil : externalId,
-          externalUserName: externalUserName.isEmpty ? nil : externalUserName,
-          phoneNumber: phoneNumber.isEmpty ? nil : phoneNumber,
-          email: email.isEmpty ? nil : email
-        )
-      }
-
-      if let error = error {
-        promise.reject("tiktok_exception", error.localizedDescription)
-        return
-      }
-
+      TikTokBusiness.identify(
+        withExternalID: externalId.isEmpty ? nil : externalId,
+        externalUserName: externalUserName.isEmpty ? nil : externalUserName,
+        phoneNumber: phoneNumber.isEmpty ? nil : phoneNumber,
+        email: email.isEmpty ? nil : email
+      )
       promise.resolve(true)
     }
 
     AsyncFunction("logoutTikTok") { (promise: Promise) in
-      let error = ObjCExceptionHelper.execute {
-        TikTokBusiness.logout()
-      }
-
-      if let error = error {
-        promise.reject("tiktok_exception", error.localizedDescription)
-        return
-      }
-
+      TikTokBusiness.logout()
       promise.resolve(true)
     }
 
