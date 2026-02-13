@@ -107,10 +107,11 @@ public class DatalyrNativeModule: Module {
 
     AsyncFunction("initializeTikTokSDK") { (appId: String, tiktokAppId: String, accessToken: String?, debug: Bool, promise: Promise) in
       DispatchQueue.main.async {
-        let config = TikTokConfig(appId: appId, tiktokAppId: tiktokAppId)
-
+        let config: TikTokConfig?
         if let token = accessToken, !token.isEmpty {
-          config?.accessToken = token
+          config = TikTokConfig(accessToken: token, appId: appId, tiktokAppId: tiktokAppId)
+        } else {
+          config = TikTokConfig(appId: appId, tiktokAppId: tiktokAppId)
         }
 
         if debug {
