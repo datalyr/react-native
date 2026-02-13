@@ -115,7 +115,7 @@ public class DatalyrNativeModule: Module {
         }
 
         if debug {
-          config?.setLogLevel(.verbose)
+          config?.setLogLevel(TikTokLogLevelDebug)
         }
 
         if let validConfig = config {
