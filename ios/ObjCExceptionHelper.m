@@ -2,7 +2,7 @@
 
 @implementation ObjCExceptionHelper
 
-+ (nullable NSError *)tryBlock:(void (NS_NOESCAPE ^)(void))block {
++ (nullable NSError *)execute:(void (NS_NOESCAPE ^)(void))block {
     @try {
         block();
         return nil;

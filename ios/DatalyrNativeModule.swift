@@ -11,7 +11,7 @@ public class DatalyrNativeModule: Module {
 
     AsyncFunction("initializeMetaSDK") { (appId: String, clientToken: String?, advertiserTrackingEnabled: Bool, promise: Promise) in
       DispatchQueue.main.async {
-        let error = ObjCExceptionHelper.tryBlock {
+        let error = ObjCExceptionHelper.execute {
           Settings.shared.appID = appId
 
           if let token = clientToken, !token.isEmpty {
@@ -37,7 +37,7 @@ public class DatalyrNativeModule: Module {
     }
 
     AsyncFunction("fetchDeferredAppLink") { (promise: Promise) in
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         AppLinkUtility.fetchDeferredAppLink { url, error in
           if error != nil {
             promise.resolve(nil)
@@ -66,7 +66,7 @@ public class DatalyrNativeModule: Module {
         }
       }
 
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         if let value = valueToSum {
           AppEvents.shared.logEvent(AppEvents.Name(eventName), valueToSum: value, parameters: params)
         } else if params.isEmpty {
@@ -93,7 +93,7 @@ public class DatalyrNativeModule: Module {
         }
       }
 
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         AppEvents.shared.logPurchase(amount: amount, currency: currency, parameters: params)
       }
 
@@ -106,7 +106,7 @@ public class DatalyrNativeModule: Module {
     }
 
     AsyncFunction("setMetaUserData") { (userData: [String: Any], promise: Promise) in
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         AppEvents.shared.setUserData(userData["email"] as? String, forType: .email)
         AppEvents.shared.setUserData(userData["firstName"] as? String, forType: .firstName)
         AppEvents.shared.setUserData(userData["lastName"] as? String, forType: .lastName)
@@ -128,7 +128,7 @@ public class DatalyrNativeModule: Module {
     }
 
     AsyncFunction("clearMetaUserData") { (promise: Promise) in
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         AppEvents.shared.clearUserData()
       }
 
@@ -141,7 +141,7 @@ public class DatalyrNativeModule: Module {
     }
 
     AsyncFunction("updateMetaTrackingAuthorization") { (enabled: Bool, promise: Promise) in
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         Settings.shared.isAdvertiserTrackingEnabled = enabled
         Settings.shared.isAdvertiserIDCollectionEnabled = enabled
       }
@@ -174,7 +174,7 @@ public class DatalyrNativeModule: Module {
           return
         }
 
-        let error = ObjCExceptionHelper.tryBlock {
+        let error = ObjCExceptionHelper.execute {
           TikTokBusiness.initializeSdk(validConfig)
         }
 
@@ -188,7 +188,7 @@ public class DatalyrNativeModule: Module {
     }
 
     AsyncFunction("trackTikTokEvent") { (eventName: String, eventId: String?, properties: [String: Any]?, promise: Promise) in
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         let event: TikTokBaseEvent
 
         if let eid = eventId, !eid.isEmpty {
@@ -215,7 +215,7 @@ public class DatalyrNativeModule: Module {
     }
 
     AsyncFunction("identifyTikTokUser") { (externalId: String, externalUserName: String, phoneNumber: String, email: String, promise: Promise) in
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         TikTokBusiness.identify(
           withExternalID: externalId.isEmpty ? nil : externalId,
           externalUserName: externalUserName.isEmpty ? nil : externalUserName,
@@ -233,7 +233,7 @@ public class DatalyrNativeModule: Module {
     }
 
     AsyncFunction("logoutTikTok") { (promise: Promise) in
-      let error = ObjCExceptionHelper.tryBlock {
+      let error = ObjCExceptionHelper.execute {
         TikTokBusiness.logout()
       }
 
