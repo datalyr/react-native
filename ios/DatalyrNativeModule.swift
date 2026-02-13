@@ -11,36 +11,51 @@ public class DatalyrNativeModule: Module {
 
     AsyncFunction("initializeMetaSDK") { (appId: String, clientToken: String?, advertiserTrackingEnabled: Bool, promise: Promise) in
       DispatchQueue.main.async {
-        Settings.shared.appID = appId
+        var nativeError: NSError?
+        let success = ObjCExceptionHelper.tryBlock({
+          Settings.shared.appID = appId
 
-        if let token = clientToken, !token.isEmpty {
-          Settings.shared.clientToken = token
+          if let token = clientToken, !token.isEmpty {
+            Settings.shared.clientToken = token
+          }
+
+          Settings.shared.isAdvertiserTrackingEnabled = advertiserTrackingEnabled
+          Settings.shared.isAdvertiserIDCollectionEnabled = advertiserTrackingEnabled
+
+          ApplicationDelegate.shared.application(
+            UIApplication.shared,
+            didFinishLaunchingWithOptions: nil
+          )
+        }, error: &nativeError)
+
+        if !success, let error = nativeError {
+          promise.reject("meta_init_exception", error.localizedDescription)
+          return
         }
-
-        Settings.shared.isAdvertiserTrackingEnabled = advertiserTrackingEnabled
-        Settings.shared.isAdvertiserIDCollectionEnabled = advertiserTrackingEnabled
-
-        ApplicationDelegate.shared.application(
-          UIApplication.shared,
-          didFinishLaunchingWithOptions: nil
-        )
 
         promise.resolve(true)
       }
     }
 
     AsyncFunction("fetchDeferredAppLink") { (promise: Promise) in
-      AppLinkUtility.fetchDeferredAppLink { url, error in
-        if error != nil {
-          promise.resolve(nil)
-          return
-        }
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        AppLinkUtility.fetchDeferredAppLink { url, error in
+          if error != nil {
+            promise.resolve(nil)
+            return
+          }
 
-        if let url = url {
-          promise.resolve(url.absoluteString)
-        } else {
-          promise.resolve(nil)
+          if let url = url {
+            promise.resolve(url.absoluteString)
+          } else {
+            promise.resolve(nil)
+          }
         }
+      }, error: &nativeError)
+
+      if !success {
+        promise.resolve(nil)
       }
     }
 
@@ -53,12 +68,20 @@ public class DatalyrNativeModule: Module {
         }
       }
 
-      if let value = valueToSum {
-        AppEvents.shared.logEvent(AppEvents.Name(eventName), valueToSum: value, parameters: params)
-      } else if params.isEmpty {
-        AppEvents.shared.logEvent(AppEvents.Name(eventName))
-      } else {
-        AppEvents.shared.logEvent(AppEvents.Name(eventName), parameters: params)
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        if let value = valueToSum {
+          AppEvents.shared.logEvent(AppEvents.Name(eventName), valueToSum: value, parameters: params)
+        } else if params.isEmpty {
+          AppEvents.shared.logEvent(AppEvents.Name(eventName))
+        } else {
+          AppEvents.shared.logEvent(AppEvents.Name(eventName), parameters: params)
+        }
+      }, error: &nativeError)
+
+      if !success, let error = nativeError {
+        promise.reject("meta_exception", error.localizedDescription)
+        return
       }
 
       promise.resolve(true)
@@ -73,33 +96,68 @@ public class DatalyrNativeModule: Module {
         }
       }
 
-      AppEvents.shared.logPurchase(amount: amount, currency: currency, parameters: params)
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        AppEvents.shared.logPurchase(amount: amount, currency: currency, parameters: params)
+      }, error: &nativeError)
+
+      if !success, let error = nativeError {
+        promise.reject("meta_exception", error.localizedDescription)
+        return
+      }
+
       promise.resolve(true)
     }
 
     AsyncFunction("setMetaUserData") { (userData: [String: Any], promise: Promise) in
-      AppEvents.shared.setUserData(userData["email"] as? String, forType: .email)
-      AppEvents.shared.setUserData(userData["firstName"] as? String, forType: .firstName)
-      AppEvents.shared.setUserData(userData["lastName"] as? String, forType: .lastName)
-      AppEvents.shared.setUserData(userData["phone"] as? String, forType: .phone)
-      AppEvents.shared.setUserData(userData["dateOfBirth"] as? String, forType: .dateOfBirth)
-      AppEvents.shared.setUserData(userData["gender"] as? String, forType: .gender)
-      AppEvents.shared.setUserData(userData["city"] as? String, forType: .city)
-      AppEvents.shared.setUserData(userData["state"] as? String, forType: .state)
-      AppEvents.shared.setUserData(userData["zip"] as? String, forType: .zip)
-      AppEvents.shared.setUserData(userData["country"] as? String, forType: .country)
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        AppEvents.shared.setUserData(userData["email"] as? String, forType: .email)
+        AppEvents.shared.setUserData(userData["firstName"] as? String, forType: .firstName)
+        AppEvents.shared.setUserData(userData["lastName"] as? String, forType: .lastName)
+        AppEvents.shared.setUserData(userData["phone"] as? String, forType: .phone)
+        AppEvents.shared.setUserData(userData["dateOfBirth"] as? String, forType: .dateOfBirth)
+        AppEvents.shared.setUserData(userData["gender"] as? String, forType: .gender)
+        AppEvents.shared.setUserData(userData["city"] as? String, forType: .city)
+        AppEvents.shared.setUserData(userData["state"] as? String, forType: .state)
+        AppEvents.shared.setUserData(userData["zip"] as? String, forType: .zip)
+        AppEvents.shared.setUserData(userData["country"] as? String, forType: .country)
+      }, error: &nativeError)
+
+      if !success, let error = nativeError {
+        promise.reject("meta_exception", error.localizedDescription)
+        return
+      }
 
       promise.resolve(true)
     }
 
     AsyncFunction("clearMetaUserData") { (promise: Promise) in
-      AppEvents.shared.clearUserData()
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        AppEvents.shared.clearUserData()
+      }, error: &nativeError)
+
+      if !success, let error = nativeError {
+        promise.reject("meta_exception", error.localizedDescription)
+        return
+      }
+
       promise.resolve(true)
     }
 
     AsyncFunction("updateMetaTrackingAuthorization") { (enabled: Bool, promise: Promise) in
-      Settings.shared.isAdvertiserTrackingEnabled = enabled
-      Settings.shared.isAdvertiserIDCollectionEnabled = enabled
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        Settings.shared.isAdvertiserTrackingEnabled = enabled
+        Settings.shared.isAdvertiserIDCollectionEnabled = enabled
+      }, error: &nativeError)
+
+      if !success, let error = nativeError {
+        promise.reject("meta_exception", error.localizedDescription)
+        return
+      }
+
       promise.resolve(true)
     }
 
@@ -118,46 +176,83 @@ public class DatalyrNativeModule: Module {
           config?.setLogLevel(TikTokLogLevelDebug)
         }
 
-        if let validConfig = config {
-          TikTokBusiness.initializeSdk(validConfig)
-          promise.resolve(true)
-        } else {
+        guard let validConfig = config else {
           promise.reject("tiktok_init_error", "Failed to create TikTok config")
+          return
         }
+
+        var nativeError: NSError?
+        let success = ObjCExceptionHelper.tryBlock({
+          TikTokBusiness.initializeSdk(validConfig)
+        }, error: &nativeError)
+
+        if !success, let error = nativeError {
+          promise.reject("tiktok_init_exception", error.localizedDescription)
+          return
+        }
+
+        promise.resolve(true)
       }
     }
 
     AsyncFunction("trackTikTokEvent") { (eventName: String, eventId: String?, properties: [String: Any]?, promise: Promise) in
-      let event: TikTokBaseEvent
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        let event: TikTokBaseEvent
 
-      if let eid = eventId, !eid.isEmpty {
-        event = TikTokBaseEvent(eventName: eventName, eventId: eid)
-      } else {
-        event = TikTokBaseEvent(eventName: eventName)
-      }
-
-      if let dict = properties {
-        for (key, value) in dict {
-          event.addProperty(withKey: key, value: value)
+        if let eid = eventId, !eid.isEmpty {
+          event = TikTokBaseEvent(eventName: eventName, eventId: eid)
+        } else {
+          event = TikTokBaseEvent(eventName: eventName)
         }
+
+        if let dict = properties {
+          for (key, value) in dict {
+            event.addProperty(withKey: key, value: value)
+          }
+        }
+
+        TikTokBusiness.trackTTEvent(event)
+      }, error: &nativeError)
+
+      if !success, let error = nativeError {
+        promise.reject("tiktok_exception", error.localizedDescription)
+        return
       }
 
-      TikTokBusiness.trackTTEvent(event)
       promise.resolve(true)
     }
 
     AsyncFunction("identifyTikTokUser") { (externalId: String, externalUserName: String, phoneNumber: String, email: String, promise: Promise) in
-      TikTokBusiness.identify(
-        withExternalID: externalId.isEmpty ? nil : externalId,
-        externalUserName: externalUserName.isEmpty ? nil : externalUserName,
-        phoneNumber: phoneNumber.isEmpty ? nil : phoneNumber,
-        email: email.isEmpty ? nil : email
-      )
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        TikTokBusiness.identify(
+          withExternalID: externalId.isEmpty ? nil : externalId,
+          externalUserName: externalUserName.isEmpty ? nil : externalUserName,
+          phoneNumber: phoneNumber.isEmpty ? nil : phoneNumber,
+          email: email.isEmpty ? nil : email
+        )
+      }, error: &nativeError)
+
+      if !success, let error = nativeError {
+        promise.reject("tiktok_exception", error.localizedDescription)
+        return
+      }
+
       promise.resolve(true)
     }
 
     AsyncFunction("logoutTikTok") { (promise: Promise) in
-      TikTokBusiness.logout()
+      var nativeError: NSError?
+      let success = ObjCExceptionHelper.tryBlock({
+        TikTokBusiness.logout()
+      }, error: &nativeError)
+
+      if !success, let error = nativeError {
+        promise.reject("tiktok_exception", error.localizedDescription)
+        return
+      }
+
       promise.resolve(true)
     }
 

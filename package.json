@@ -1,6 +1,6 @@
 {
   "name": "@datalyr/react-native",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Datalyr SDK for React Native & Expo - Server-side attribution tracking with bundled Meta and TikTok SDKs for iOS and Android",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
