@@ -8,6 +8,7 @@
  */
 
 import { NativeModules, Platform } from 'react-native';
+import { requireNativeModule } from 'expo-modules-core';
 
 /**
  * Apple Search Ads attribution data returned from AdServices API (iOS only)
@@ -107,11 +108,23 @@ interface PlayInstallReferrerModule {
 }
 
 // Native modules - available on both iOS and Android
-const DatalyrNative: DatalyrNativeModule | null = NativeModules.DatalyrNative ?? null;
+// iOS uses Expo Modules (new arch compatible), Android uses NativeModules (interop layer)
+let DatalyrNative: DatalyrNativeModule | null = null;
+if (Platform.OS === 'ios') {
+  try {
+    DatalyrNative = requireNativeModule<DatalyrNativeModule>('DatalyrNative');
+  } catch {
+    // Native module not available
+  }
+} else if (Platform.OS === 'android') {
+  DatalyrNative = NativeModules.DatalyrNative ?? null;
+}
 
-// Play Install Referrer - Android only
-const DatalyrPlayInstallReferrer: PlayInstallReferrerModule | null =
-  Platform.OS === 'android' ? NativeModules.DatalyrPlayInstallReferrer : null;
+// Play Install Referrer - Android only (stays on NativeModules)
+let DatalyrPlayInstallReferrer: PlayInstallReferrerModule | null = null;
+if (Platform.OS === 'android') {
+  DatalyrPlayInstallReferrer = NativeModules.DatalyrPlayInstallReferrer ?? null;
+}
 
 /**
  * Check if native module is available

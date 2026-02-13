@@ -19,7 +19,7 @@ Pod::Spec.new do |s|
   s.source_files = "ios/**/*.{h,m,swift}"
   s.swift_version = "5.0"
 
-  s.dependency "React-Core"
+  s.dependency "ExpoModulesCore"
   s.dependency "FBSDKCoreKit", "~> 18.0"
   s.dependency "TikTokBusinessSDK", "~> 1.6"
 

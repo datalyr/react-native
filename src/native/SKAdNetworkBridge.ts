@@ -1,4 +1,5 @@
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { requireNativeModule } from 'expo-modules-core';
 
 // SKAN 4.0 / AdAttributionKit coarse value type
 export type SKANCoarseValue = 'low' | 'medium' | 'high';
@@ -87,9 +88,15 @@ interface SKAdNetworkModule {
   ): Promise<OverlappingWindowPostbackResponse>;
 }
 
-const { DatalyrSKAdNetwork } = NativeModules as {
-  DatalyrSKAdNetwork?: SKAdNetworkModule
-};
+// SKAdNetwork is iOS-only, use Expo Modules for new arch compatibility
+let DatalyrSKAdNetwork: SKAdNetworkModule | undefined;
+if (Platform.OS === 'ios') {
+  try {
+    DatalyrSKAdNetwork = requireNativeModule<SKAdNetworkModule>('DatalyrSKAdNetwork');
+  } catch {
+    // Module not available
+  }
+}
 
 export class SKAdNetworkBridge {
   private static _isSKAN4Available: boolean | null = null;
