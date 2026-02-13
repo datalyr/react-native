@@ -21,7 +21,7 @@ Pod::Spec.new do |s|
 
   s.dependency "ExpoModulesCore"
   s.dependency "FBSDKCoreKit", "~> 18.0"
-  s.dependency "TikTokBusinessSDK", "~> 1.6"
+  s.dependency "TikTokBusinessSDK", "1.6.0"
 
   # Disable bitcode (required for TikTok SDK)
   s.pod_target_xcconfig = {

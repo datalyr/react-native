@@ -9,6 +9,7 @@
     "dev": "tsc --watch",
     "test": "jest",
     "lint": "eslint src --ext .ts,.tsx",
+    "validate:ios": "bash scripts/validate-ios.sh",
     "prepublishOnly": "npm run build"
   },
   "files": [
