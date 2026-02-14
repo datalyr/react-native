@@ -4,13 +4,16 @@ import TikTokBusinessSDK
 import AdServices
 
 public class DatalyrNativeModule: Module {
+  private var tiktokInitialized = false
+  private var metaInitialized = false
+
   public func definition() -> ModuleDefinition {
     Name("DatalyrNative")
 
     // MARK: - Meta (Facebook) SDK Methods
 
     AsyncFunction("initializeMetaSDK") { (appId: String, clientToken: String?, advertiserTrackingEnabled: Bool, promise: Promise) in
-      DispatchQueue.main.async {
+      DispatchQueue.main.async { [weak self] in
         Settings.shared.appID = appId
 
         if let token = clientToken, !token.isEmpty {
@@ -20,145 +23,246 @@ public class DatalyrNativeModule: Module {
         Settings.shared.isAdvertiserTrackingEnabled = advertiserTrackingEnabled
         Settings.shared.isAdvertiserIDCollectionEnabled = advertiserTrackingEnabled
 
-        ApplicationDelegate.shared.application(
-          UIApplication.shared,
-          didFinishLaunchingWithOptions: nil
-        )
+        var initError: NSError?
+        let success = DatalyrObjCExceptionCatcher.tryBlock({
+          ApplicationDelegate.shared.application(
+            UIApplication.shared,
+            didFinishLaunchingWithOptions: nil
+          )
+        }, error: &initError)
 
-        promise.resolve(true)
+        if success {
+          self?.metaInitialized = true
+          promise.resolve(true)
+        } else {
+          let message = initError?.localizedDescription ?? "Unknown ObjC exception during Meta SDK init"
+          promise.reject("meta_init_error", message)
+        }
       }
     }
 
     AsyncFunction("fetchDeferredAppLink") { (promise: Promise) in
-      AppLinkUtility.fetchDeferredAppLink { url, error in
-        if error != nil {
-          promise.resolve(nil)
-          return
-        }
+      DispatchQueue.main.async {
+        AppLinkUtility.fetchDeferredAppLink { url, error in
+          if error != nil {
+            promise.resolve(nil)
+            return
+          }
 
-        if let url = url {
-          promise.resolve(url.absoluteString)
-        } else {
-          promise.resolve(nil)
+          if let url = url {
+            promise.resolve(url.absoluteString)
+          } else {
+            promise.resolve(nil)
+          }
         }
       }
     }
 
     AsyncFunction("logMetaEvent") { (eventName: String, valueToSum: Double?, parameters: [String: Any]?, promise: Promise) in
-      var params: [AppEvents.ParameterName: Any] = [:]
+      guard self.metaInitialized else {
+        promise.reject("meta_not_initialized", "Meta SDK not initialized. Call initializeMetaSDK first.")
+        return
+      }
 
-      if let dict = parameters {
-        for (key, value) in dict {
-          params[AppEvents.ParameterName(key)] = value
+      DispatchQueue.main.async {
+        var params: [AppEvents.ParameterName: Any] = [:]
+
+        if let dict = parameters {
+          for (key, value) in dict {
+            params[AppEvents.ParameterName(key)] = value
+          }
+        }
+
+        var logError: NSError?
+        DatalyrObjCExceptionCatcher.tryBlock({
+          if let value = valueToSum {
+            AppEvents.shared.logEvent(AppEvents.Name(eventName), valueToSum: value, parameters: params)
+          } else if params.isEmpty {
+            AppEvents.shared.logEvent(AppEvents.Name(eventName))
+          } else {
+            AppEvents.shared.logEvent(AppEvents.Name(eventName), parameters: params)
+          }
+        }, error: &logError)
+
+        if let logError = logError {
+          promise.reject("meta_event_error", logError.localizedDescription)
+        } else {
+          promise.resolve(true)
         }
       }
-
-      if let value = valueToSum {
-        AppEvents.shared.logEvent(AppEvents.Name(eventName), valueToSum: value, parameters: params)
-      } else if params.isEmpty {
-        AppEvents.shared.logEvent(AppEvents.Name(eventName))
-      } else {
-        AppEvents.shared.logEvent(AppEvents.Name(eventName), parameters: params)
-      }
-
-      promise.resolve(true)
     }
 
     AsyncFunction("logMetaPurchase") { (amount: Double, currency: String, parameters: [String: Any]?, promise: Promise) in
-      var params: [AppEvents.ParameterName: Any] = [:]
-
-      if let dict = parameters {
-        for (key, value) in dict {
-          params[AppEvents.ParameterName(key)] = value
-        }
+      guard self.metaInitialized else {
+        promise.reject("meta_not_initialized", "Meta SDK not initialized. Call initializeMetaSDK first.")
+        return
       }
 
-      AppEvents.shared.logPurchase(amount: amount, currency: currency, parameters: params)
-      promise.resolve(true)
+      DispatchQueue.main.async {
+        var params: [AppEvents.ParameterName: Any] = [:]
+
+        if let dict = parameters {
+          for (key, value) in dict {
+            params[AppEvents.ParameterName(key)] = value
+          }
+        }
+
+        var logError: NSError?
+        DatalyrObjCExceptionCatcher.tryBlock({
+          AppEvents.shared.logPurchase(amount: amount, currency: currency, parameters: params)
+        }, error: &logError)
+
+        if let logError = logError {
+          promise.reject("meta_event_error", logError.localizedDescription)
+        } else {
+          promise.resolve(true)
+        }
+      }
     }
 
     AsyncFunction("setMetaUserData") { (userData: [String: Any], promise: Promise) in
-      AppEvents.shared.setUserData(userData["email"] as? String, forType: .email)
-      AppEvents.shared.setUserData(userData["firstName"] as? String, forType: .firstName)
-      AppEvents.shared.setUserData(userData["lastName"] as? String, forType: .lastName)
-      AppEvents.shared.setUserData(userData["phone"] as? String, forType: .phone)
-      AppEvents.shared.setUserData(userData["dateOfBirth"] as? String, forType: .dateOfBirth)
-      AppEvents.shared.setUserData(userData["gender"] as? String, forType: .gender)
-      AppEvents.shared.setUserData(userData["city"] as? String, forType: .city)
-      AppEvents.shared.setUserData(userData["state"] as? String, forType: .state)
-      AppEvents.shared.setUserData(userData["zip"] as? String, forType: .zip)
-      AppEvents.shared.setUserData(userData["country"] as? String, forType: .country)
+      guard self.metaInitialized else {
+        promise.reject("meta_not_initialized", "Meta SDK not initialized. Call initializeMetaSDK first.")
+        return
+      }
 
-      promise.resolve(true)
+      DispatchQueue.main.async {
+        if let email = userData["email"] as? String { AppEvents.shared.setUserData(email, forType: .email) }
+        if let firstName = userData["firstName"] as? String { AppEvents.shared.setUserData(firstName, forType: .firstName) }
+        if let lastName = userData["lastName"] as? String { AppEvents.shared.setUserData(lastName, forType: .lastName) }
+        if let phone = userData["phone"] as? String { AppEvents.shared.setUserData(phone, forType: .phone) }
+        if let dateOfBirth = userData["dateOfBirth"] as? String { AppEvents.shared.setUserData(dateOfBirth, forType: .dateOfBirth) }
+        if let gender = userData["gender"] as? String { AppEvents.shared.setUserData(gender, forType: .gender) }
+        if let city = userData["city"] as? String { AppEvents.shared.setUserData(city, forType: .city) }
+        if let state = userData["state"] as? String { AppEvents.shared.setUserData(state, forType: .state) }
+        if let zip = userData["zip"] as? String { AppEvents.shared.setUserData(zip, forType: .zip) }
+        if let country = userData["country"] as? String { AppEvents.shared.setUserData(country, forType: .country) }
+
+        promise.resolve(true)
+      }
     }
 
     AsyncFunction("clearMetaUserData") { (promise: Promise) in
-      AppEvents.shared.clearUserData()
-      promise.resolve(true)
+      guard self.metaInitialized else {
+        promise.reject("meta_not_initialized", "Meta SDK not initialized. Call initializeMetaSDK first.")
+        return
+      }
+
+      DispatchQueue.main.async {
+        AppEvents.shared.clearUserData()
+        promise.resolve(true)
+      }
     }
 
     AsyncFunction("updateMetaTrackingAuthorization") { (enabled: Bool, promise: Promise) in
-      Settings.shared.isAdvertiserTrackingEnabled = enabled
-      Settings.shared.isAdvertiserIDCollectionEnabled = enabled
-      promise.resolve(true)
+      guard self.metaInitialized else {
+        promise.reject("meta_not_initialized", "Meta SDK not initialized. Call initializeMetaSDK first.")
+        return
+      }
+
+      DispatchQueue.main.async {
+        Settings.shared.isAdvertiserTrackingEnabled = enabled
+        Settings.shared.isAdvertiserIDCollectionEnabled = enabled
+        promise.resolve(true)
+      }
     }
 
     // MARK: - TikTok SDK Methods
 
     AsyncFunction("initializeTikTokSDK") { (appId: String, tiktokAppId: String, accessToken: String?, debug: Bool, promise: Promise) in
-      DispatchQueue.main.async {
-        let config: TikTokConfig?
-        if let token = accessToken, !token.isEmpty {
-          config = TikTokConfig(accessToken: token, appId: appId, tiktokAppId: tiktokAppId)
-        } else {
-          config = TikTokConfig(appId: appId, tiktokAppId: tiktokAppId)
+      DispatchQueue.main.async { [weak self] in
+        guard let token = accessToken, !token.isEmpty else {
+          promise.reject("tiktok_init_error", "TikTok accessToken is required. The deprecated init without accessToken has been removed.")
+          return
         }
+
+        let config = TikTokConfig(accessToken: token, appId: appId, tiktokAppId: tiktokAppId)
 
         if debug {
           config?.setLogLevel(TikTokLogLevelDebug)
         }
 
-        if let validConfig = config {
+        guard let validConfig = config else {
+          promise.reject("tiktok_init_error", "Failed to create TikTok config")
+          return
+        }
+
+        var initError: NSError?
+        let success = DatalyrObjCExceptionCatcher.tryBlock({
           TikTokBusiness.initializeSdk(validConfig)
+        }, error: &initError)
+
+        if success {
+          self?.tiktokInitialized = true
           promise.resolve(true)
         } else {
-          promise.reject("tiktok_init_error", "Failed to create TikTok config")
+          let message = initError?.localizedDescription ?? "Unknown ObjC exception during TikTok SDK init"
+          promise.reject("tiktok_init_error", message)
         }
       }
     }
 
     AsyncFunction("trackTikTokEvent") { (eventName: String, eventId: String?, properties: [String: Any]?, promise: Promise) in
-      let event: TikTokBaseEvent
-
-      if let eid = eventId, !eid.isEmpty {
-        event = TikTokBaseEvent(eventName: eventName, eventId: eid)
-      } else {
-        event = TikTokBaseEvent(eventName: eventName)
+      guard self.tiktokInitialized else {
+        promise.reject("tiktok_not_initialized", "TikTok SDK not initialized. Call initializeTikTokSDK first.")
+        return
       }
 
-      if let dict = properties {
-        for (key, value) in dict {
-          event.addProperty(withKey: key, value: value)
+      DispatchQueue.main.async {
+        let event: TikTokBaseEvent
+
+        if let eid = eventId, !eid.isEmpty {
+          event = TikTokBaseEvent(eventName: eventName, eventId: eid)
+        } else {
+          event = TikTokBaseEvent(eventName: eventName)
+        }
+
+        if let dict = properties {
+          for (key, value) in dict {
+            event.addProperty(withKey: key, value: value)
+          }
+        }
+
+        var trackError: NSError?
+        DatalyrObjCExceptionCatcher.tryBlock({
+          TikTokBusiness.trackTTEvent(event)
+        }, error: &trackError)
+
+        if let trackError = trackError {
+          promise.reject("tiktok_event_error", trackError.localizedDescription)
+        } else {
+          promise.resolve(true)
         }
       }
-
-      TikTokBusiness.trackTTEvent(event)
-      promise.resolve(true)
     }
 
     AsyncFunction("identifyTikTokUser") { (externalId: String, externalUserName: String, phoneNumber: String, email: String, promise: Promise) in
-      TikTokBusiness.identify(
-        withExternalID: externalId.isEmpty ? nil : externalId,
-        externalUserName: externalUserName.isEmpty ? nil : externalUserName,
-        phoneNumber: phoneNumber.isEmpty ? nil : phoneNumber,
-        email: email.isEmpty ? nil : email
-      )
-      promise.resolve(true)
+      guard self.tiktokInitialized else {
+        promise.reject("tiktok_not_initialized", "TikTok SDK not initialized. Call initializeTikTokSDK first.")
+        return
+      }
+
+      DispatchQueue.main.async {
+        TikTokBusiness.identify(
+          withExternalID: externalId.isEmpty ? nil : externalId,
+          externalUserName: externalUserName.isEmpty ? nil : externalUserName,
+          phoneNumber: phoneNumber.isEmpty ? nil : phoneNumber,
+          email: email.isEmpty ? nil : email
+        )
+        promise.resolve(true)
+      }
     }
 
     AsyncFunction("logoutTikTok") { (promise: Promise) in
-      TikTokBusiness.logout()
-      promise.resolve(true)
+      guard self.tiktokInitialized else {
+        promise.reject("tiktok_not_initialized", "TikTok SDK not initialized. Call initializeTikTokSDK first.")
+        return
+      }
+
+      DispatchQueue.main.async {
+        TikTokBusiness.logout()
+        promise.resolve(true)
+      }
     }
 
     AsyncFunction("updateTikTokTrackingAuthorization") { (enabled: Bool, promise: Promise) in
