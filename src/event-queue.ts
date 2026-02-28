@@ -262,7 +262,7 @@ export const createEventQueue = (httpClient: HttpClient, config?: Partial<QueueC
   const defaultConfig: QueueConfig = {
     maxQueueSize: 100,
     batchSize: 10,
-    flushInterval: 10000, // 10 seconds
+    flushInterval: 30000, // 30 seconds — matches SDK constructor defaults and docs
     maxRetryCount: 3,
   };
 

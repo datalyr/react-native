@@ -8,4 +8,6 @@ export {
   getSDKAvailability,
   MetaNativeBridge,
   TikTokNativeBridge,
+  AdvertiserInfoBridge,
 } from './DatalyrNativeBridge';
+export type { AdvertiserInfo } from './DatalyrNativeBridge';

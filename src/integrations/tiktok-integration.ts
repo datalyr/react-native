@@ -76,9 +76,11 @@ export class TikTokIntegration {
       if (success) {
         this.initialized = true;
         this.log(`TikTok SDK initialized with App ID: ${config.tiktokAppId}`);
+      } else {
+        console.warn('[Datalyr/TikTok] TikTok SDK not initialized (accessToken may be missing). Events will still be sent server-side via Datalyr postbacks.');
       }
     } catch (error) {
-      this.logError('Failed to initialize TikTok SDK:', error);
+      console.warn('[Datalyr/TikTok] TikTok SDK init failed. Events will still be sent server-side via Datalyr postbacks.', error);
     }
   }
 

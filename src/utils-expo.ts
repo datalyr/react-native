@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, Dimensions } from 'react-native';
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as Network from 'expo-network';
@@ -84,10 +84,14 @@ export interface DeviceInfo {
   isEmulator: boolean;
 }
 
-export const getDeviceInfo = async (): Promise<DeviceInfo> => {
+// Cached device info to avoid repeated async calls (matches utils.ts pattern)
+let cachedDeviceInfo: DeviceInfo | null = null;
+let deviceInfoPromise: Promise<DeviceInfo> | null = null;
+
+const fetchDeviceInfoInternal = async (): Promise<DeviceInfo> => {
   try {
     const deviceId = await getOrCreateDeviceId();
-    
+
     return {
       deviceId,
       model: Device.modelName || Device.deviceName || 'Unknown',
@@ -96,10 +100,10 @@ export const getDeviceInfo = async (): Promise<DeviceInfo> => {
       appVersion: Application.nativeApplicationVersion || '1.0.0',
       buildNumber: Application.nativeBuildVersion || '1',
       bundleId: Application.applicationId || 'unknown.bundle.id',
-      screenWidth: 0, // Would need Dimensions from react-native
-      screenHeight: 0, // Would need Dimensions from react-native  
+      screenWidth: Dimensions.get('window').width,
+      screenHeight: Dimensions.get('window').height,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      locale: 'en-US', // Would need expo-localization for full locale
+      locale: Intl.DateTimeFormat().resolvedOptions().locale || 'en-US',
       carrier: undefined, // Not available in Expo managed workflow
       isEmulator: !Device.isDevice,
     };
@@ -113,12 +117,25 @@ export const getDeviceInfo = async (): Promise<DeviceInfo> => {
       appVersion: '1.0.0',
       buildNumber: '1',
       bundleId: 'unknown.bundle.id',
-      screenWidth: 0,
-      screenHeight: 0,
+      screenWidth: Dimensions.get('window').width,
+      screenHeight: Dimensions.get('window').height,
       timezone: 'UTC',
       locale: 'en-US',
       isEmulator: true,
     };
+  }
+};
+
+export const getDeviceInfo = async (): Promise<DeviceInfo> => {
+  if (cachedDeviceInfo) return cachedDeviceInfo;
+  if (deviceInfoPromise) return deviceInfoPromise;
+
+  deviceInfoPromise = fetchDeviceInfoInternal();
+  try {
+    cachedDeviceInfo = await deviceInfoPromise;
+    return cachedDeviceInfo;
+  } finally {
+    deviceInfoPromise = null;
   }
 };
 
@@ -246,30 +263,49 @@ export const createFingerprintData = async () => {
 // IDFA/GAID collection has been removed for privacy compliance
 // Modern attribution tracking relies on privacy-safe methods:
 
-// Network type detection using Expo Network
-export const getNetworkType = async (): Promise<string> => {
+// Cached network type to avoid per-event native bridge calls
+let cachedNetworkType = 'unknown';
+let networkTypeLastFetched = 0;
+const NETWORK_TYPE_CACHE_MS = 30000; // Refresh every 30s
+
+// Network type detection using Expo Network — cached to avoid per-event async calls
+export const getNetworkType = (): string => {
+  // Trigger background refresh if stale, but always return cached value synchronously
+  const now = Date.now();
+  if (now - networkTypeLastFetched > NETWORK_TYPE_CACHE_MS) {
+    networkTypeLastFetched = now;
+    refreshNetworkType();
+  }
+  return cachedNetworkType;
+};
+
+const refreshNetworkType = async (): Promise<void> => {
   try {
     const networkState = await Network.getNetworkStateAsync();
-    
+
     if (!networkState.isConnected) {
-      return 'none';
+      cachedNetworkType = 'none';
+      return;
     }
-    
+
     switch (networkState.type) {
       case Network.NetworkStateType.WIFI:
-        return 'wifi';
+        cachedNetworkType = 'wifi';
+        break;
       case Network.NetworkStateType.CELLULAR:
-        return 'cellular';
+        cachedNetworkType = 'cellular';
+        break;
       case Network.NetworkStateType.ETHERNET:
-        return 'ethernet';
+        cachedNetworkType = 'ethernet';
+        break;
       case Network.NetworkStateType.BLUETOOTH:
-        return 'bluetooth';
+        cachedNetworkType = 'bluetooth';
+        break;
       default:
-        return 'unknown';
+        cachedNetworkType = 'unknown';
     }
   } catch (error) {
     debugLog('Error getting network type:', error);
-    return 'unknown';
   }
 };
 

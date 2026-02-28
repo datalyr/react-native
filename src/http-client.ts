@@ -72,7 +72,7 @@ export class HttpClient {
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': `@datalyr/react-native/1.0.2`,
+        'User-Agent': `@datalyr/react-native/1.4.8`,
       };
 
       // Server-side tracking uses X-API-Key header
@@ -188,7 +188,7 @@ export class HttpClient {
     return {
       event: payload.eventName,
       userId: payload.userId || payload.visitorId,
-      anonymousId: payload.visitorId,
+      anonymousId: payload.anonymousId || payload.visitorId,
       properties: {
         ...payload.eventData,
         sessionId: payload.sessionId,
@@ -197,7 +197,7 @@ export class HttpClient {
       },
       context: {
         library: '@datalyr/react-native',
-        version: '1.0.5',
+        version: '1.4.8',
         source: 'mobile_app',  // Explicitly set source for mobile
         userProperties: payload.userProperties,
       },

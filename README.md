@@ -478,11 +478,23 @@ await Datalyr.initialize({
 await Datalyr.initialize({
   apiKey: 'dk_your_api_key',
   tiktok: {
-    appId: 'your_app_id',
-    tiktokAppId: '7123456789',
+    appId: 'your_app_id',                    // Events API App ID
+    tiktokAppId: '7123456789',               // TikTok App ID (Developer Portal)
+    accessToken: 'your_access_token',        // Events API Access Token
     enableAppEvents: true,
   },
 });
+```
+
+**Where to find your TikTok credentials:**
+
+| Credential | Where to get it |
+|------------|----------------|
+| `tiktokAppId` | [TikTok Developer Portal](https://developers.tiktok.com) → Your App → App ID |
+| `appId` | TikTok Business Center → Assets → Events → Your App → App ID |
+| `accessToken` | TikTok Business Center → Assets → Events → Your App → Settings → Access Token |
+
+> **Note:** The `accessToken` enables client-side TikTok SDK features (enhanced attribution, real-time event forwarding). Without it, events are still tracked server-side via Datalyr postbacks — you'll see a warning in debug mode.
 ```
 
 ### Apple Search Ads
@@ -667,12 +679,17 @@ Check status: `Datalyr.getPlatformIntegrationStatus()`
 
 ### TikTok SDK Not Working
 
+1. Make sure you have all three TikTok credentials (see [TikTok setup](#tiktok))
+2. The `accessToken` is required for client-side SDK — without it, you'll see a warning but server-side tracking still works
+3. Check status: `Datalyr.getPlatformIntegrationStatus()`
+
 ```typescript
 await Datalyr.initialize({
   apiKey: 'dk_your_api_key',
   tiktok: {
     appId: 'your_app_id',
     tiktokAppId: '7123456789012345',
+    accessToken: 'your_access_token',
   },
 });
 ```

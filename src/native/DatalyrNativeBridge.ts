@@ -90,6 +90,15 @@ interface DatalyrNativeModule {
   logoutTikTok(): Promise<boolean>;
   updateTikTokTrackingAuthorization(enabled: boolean): Promise<boolean>;
 
+  // Advertiser Info (IDFA, IDFV, GAID, ATT Status)
+  getAdvertiserInfo(): Promise<{
+    idfa?: string;
+    idfv?: string;
+    gaid?: string;
+    att_status: number;
+    advertiser_tracking_enabled: boolean;
+  } | null>;
+
   // Apple Search Ads Methods (iOS only)
   getAppleSearchAdsAttribution(): Promise<AppleSearchAdsAttribution | null>;
 
@@ -369,6 +378,34 @@ export const AppleSearchAdsNativeBridge = {
       return await DatalyrNative.getAppleSearchAdsAttribution();
     } catch (error) {
       console.error('[Datalyr/AppleSearchAds] Get attribution failed:', error);
+      return null;
+    }
+  },
+};
+
+// MARK: - Advertiser Info Bridge
+
+export interface AdvertiserInfo {
+  idfa?: string;
+  idfv?: string;
+  gaid?: string;
+  att_status: number;
+  advertiser_tracking_enabled: boolean;
+}
+
+export const AdvertiserInfoBridge = {
+  /**
+   * Get advertiser info (IDFA, IDFV, ATT status)
+   * IDFA is only available when ATT is authorized (iOS 14+)
+   * IDFV is always available on iOS
+   */
+  async getAdvertiserInfo(): Promise<AdvertiserInfo | null> {
+    if (!DatalyrNative) return null;
+
+    try {
+      return await DatalyrNative.getAdvertiserInfo();
+    } catch (error) {
+      console.error('[Datalyr/AdvertiserInfo] Get advertiser info failed:', error);
       return null;
     }
   },

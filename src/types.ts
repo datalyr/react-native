@@ -105,10 +105,10 @@ export interface DatalyrConfig {
   /** Respect browser Do Not Track setting. Default: true */
   respectDoNotTrack?: boolean;
 
-  /** Enable automatic event tracking (sessions, app lifecycle). Default: false */
+  /** Enable automatic event tracking (sessions, app lifecycle). Default: true */
   enableAutoEvents?: boolean;
 
-  /** Enable attribution tracking (deep links, install referrer). Default: false */
+  /** Enable attribution tracking (deep links, install referrer). Default: true */
   enableAttribution?: boolean;
 
   /** Enable web-to-app attribution matching via email. Default: true */

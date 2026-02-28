@@ -2,6 +2,8 @@ import ExpoModulesCore
 import FBSDKCoreKit
 import TikTokBusinessSDK
 import AdServices
+import AppTrackingTransparency
+import AdSupport
 
 public class DatalyrNativeModule: Module {
   private var tiktokInitialized = false
@@ -278,6 +280,44 @@ public class DatalyrNativeModule: Module {
         "tiktok": true,
         "appleSearchAds": true
       ])
+    }
+
+    // MARK: - Advertiser Info (IDFA, IDFV, ATT Status)
+
+    AsyncFunction("getAdvertiserInfo") { (promise: Promise) in
+      var result: [String: Any] = [:]
+
+      // IDFV is always available
+      if let idfv = UIDevice.current.identifierForVendor?.uuidString {
+        result["idfv"] = idfv
+      }
+
+      // ATT status
+      if #available(iOS 14, *) {
+        let status = ATTrackingManager.trackingAuthorizationStatus
+        result["att_status"] = status.rawValue
+        result["advertiser_tracking_enabled"] = status == .authorized
+
+        // IDFA only if ATT authorized
+        if status == .authorized {
+          let idfa = ASIdentifierManager.shared().advertisingIdentifier.uuidString
+          let zeroUUID = "00000000-0000-0000-0000-000000000000"
+          if idfa != zeroUUID {
+            result["idfa"] = idfa
+          }
+        }
+      } else {
+        // Pre-iOS 14, tracking allowed by default
+        result["att_status"] = 3  // .authorized equivalent
+        result["advertiser_tracking_enabled"] = true
+        let idfa = ASIdentifierManager.shared().advertisingIdentifier.uuidString
+        let zeroUUID = "00000000-0000-0000-0000-000000000000"
+        if idfa != zeroUUID {
+          result["idfa"] = idfa
+        }
+      }
+
+      promise.resolve(result)
     }
 
     // MARK: - Apple Search Ads Attribution

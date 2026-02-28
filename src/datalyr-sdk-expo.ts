@@ -34,9 +34,9 @@ import { journeyManager } from './journey';
 import { createAutoEventsManager, AutoEventsManager } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
-import { metaIntegration, tiktokIntegration, appleSearchAdsIntegration } from './integrations';
+import { metaIntegration, tiktokIntegration, appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
 import { DeferredDeepLinkResult } from './types';
-import { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
+import { AppleSearchAdsAttribution, AdvertiserInfoBridge } from './native/DatalyrNativeBridge';
 
 export class DatalyrSDKExpo {
   private state: SDKState;
@@ -44,6 +44,7 @@ export class DatalyrSDKExpo {
   private eventQueue: EventQueue;
   private autoEventsManager: AutoEventsManager | null = null;
   private appStateSubscription: any = null;
+  private cachedAdvertiserInfo: any = null;
   private static conversionEncoder?: ConversionValueEncoder;
   private static debugEnabled = false;
 
@@ -59,9 +60,11 @@ export class DatalyrSDKExpo {
         maxRetries: 3,
         retryDelay: 1000,
         batchSize: 10,
-        flushInterval: 10000,
+        flushInterval: 30000,
         maxQueueSize: 100,
         respectDoNotTrack: true,
+        enableAutoEvents: true,
+        enableAttribution: true,
       },
       visitorId: '',
       anonymousId: '',
@@ -198,10 +201,22 @@ export class DatalyrSDKExpo {
 
       // Initialize Apple Search Ads attribution (iOS only, auto-fetches on init)
       await appleSearchAdsIntegration.initialize(config.debug);
+
+      // Initialize Play Install Referrer (Android only)
+      await playInstallReferrerIntegration.initialize();
+
+      // Cache advertiser info (IDFA/GAID, ATT status) once at init to avoid per-event native bridge calls
+      try {
+        this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
+      } catch (error) {
+        errorLog('Failed to cache advertiser info:', error as Error);
+      }
+
       debugLog('Platform integrations initialized', {
         meta: metaIntegration.isAvailable(),
         tiktok: tiktokIntegration.isAvailable(),
         appleSearchAds: appleSearchAdsIntegration.isAvailable(),
+        playInstallReferrer: playInstallReferrerIntegration.isAvailable(),
       });
 
       this.state.initialized = true;
@@ -210,7 +225,7 @@ export class DatalyrSDKExpo {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS,
-          sdk_version: '1.1.0',
+          sdk_version: '1.4.9',
           sdk_variant: 'expo',
           ...installData,
         });
@@ -694,12 +709,21 @@ export class DatalyrSDKExpo {
     return null;
   }
 
-  getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean } {
+  getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean; playInstallReferrer: boolean } {
     return {
       meta: metaIntegration.isAvailable(),
       tiktok: tiktokIntegration.isAvailable(),
       appleSearchAds: appleSearchAdsIntegration.isAvailable(),
+      playInstallReferrer: playInstallReferrerIntegration.isAvailable(),
     };
+  }
+
+  /**
+   * Get Play Install Referrer data (Android only)
+   */
+  getPlayInstallReferrer(): Record<string, any> | null {
+    const data = playInstallReferrerIntegration.getReferrerData();
+    return data ? playInstallReferrerIntegration.getAttributionData() : null;
   }
 
   /**
@@ -716,6 +740,13 @@ export class DatalyrSDKExpo {
     }
     if (tiktokIntegration.isAvailable()) {
       tiktokIntegration.updateTrackingAuthorization(authorized);
+    }
+
+    // Refresh cached advertiser info after ATT status change
+    try {
+      this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
+    } catch (error) {
+      errorLog('Failed to refresh advertiser info:', error as Error);
     }
   }
 
@@ -759,7 +790,7 @@ export class DatalyrSDKExpo {
     const deviceInfo = await getDeviceInfo();
     const fingerprintData = await createFingerprintData();
     const attributionData = attributionManager.getAttributionData();
-    const networkType = await getNetworkType();
+    const networkType = getNetworkType();
 
     // Get Apple Search Ads attribution if available
     const asaAttribution = appleSearchAdsIntegration.getAttributionData();
@@ -777,6 +808,9 @@ export class DatalyrSDKExpo {
       asa_country_or_region: asaAttribution.countryOrRegion,
     } : {};
 
+    // Use cached advertiser info (IDFA/GAID, ATT status) — cached at init, refreshed on ATT change
+    const advertiserInfo = this.cachedAdvertiserInfo;
+
     const payload: EventPayload = {
       workspaceId: this.state.config.workspaceId || 'mobile_sdk',
       visitorId: this.state.visitorId,
@@ -792,9 +826,25 @@ export class DatalyrSDKExpo {
         device_model: deviceInfo.model,
         app_version: deviceInfo.appVersion,
         app_build: deviceInfo.buildNumber,
+        app_name: deviceInfo.bundleId,
+        app_namespace: deviceInfo.bundleId,
+        screen_width: deviceInfo.screenWidth,
+        screen_height: deviceInfo.screenHeight,
+        locale: deviceInfo.locale,
+        timezone: deviceInfo.timezone,
+        carrier: deviceInfo.carrier,
         network_type: networkType,
         timestamp: Date.now(),
+        sdk_version: '1.4.9',
         sdk_variant: 'expo',
+        // Advertiser data (IDFA/GAID, ATT status) for Meta CAPI / TikTok Events API
+        ...(advertiserInfo ? {
+          idfa: advertiserInfo.idfa,
+          idfv: advertiserInfo.idfv,
+          gaid: advertiserInfo.gaid,
+          att_status: advertiserInfo.att_status,
+          advertiser_tracking_enabled: advertiserInfo.advertiser_tracking_enabled,
+        } : {}),
         ...attributionData,
         // Apple Search Ads attribution
         ...asaData,
@@ -1030,8 +1080,12 @@ export class DatalyrExpo {
     return datalyrExpo.getDeferredAttributionData();
   }
 
-  static getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean } {
+  static getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean; playInstallReferrer: boolean } {
     return datalyrExpo.getPlatformIntegrationStatus();
+  }
+
+  static getPlayInstallReferrer(): Record<string, any> | null {
+    return datalyrExpo.getPlayInstallReferrer();
   }
 
   static getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null {

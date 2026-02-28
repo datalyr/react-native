@@ -32,7 +32,7 @@ import { createAutoEventsManager, AutoEventsManager, SessionData } from './auto-
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 import { metaIntegration, tiktokIntegration, appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
-import { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
+import { AppleSearchAdsAttribution, AdvertiserInfoBridge } from './native/DatalyrNativeBridge';
 import { networkStatusManager } from './network-status';
 
 export class DatalyrSDK {
@@ -42,6 +42,7 @@ export class DatalyrSDK {
   private autoEventsManager: AutoEventsManager | null = null;
   private appStateSubscription: any = null;
   private networkStatusUnsubscribe: (() => void) | null = null;
+  private cachedAdvertiserInfo: any = null;
   private static conversionEncoder?: ConversionValueEncoder;
   private static debugEnabled = false;
 
@@ -58,9 +59,11 @@ export class DatalyrSDK {
         maxRetries: 3,
         retryDelay: 1000,
         batchSize: 10,
-        flushInterval: 10000,
+        flushInterval: 30000,
         maxQueueSize: 100,
         respectDoNotTrack: true,
+        enableAutoEvents: true,
+        enableAttribution: true,
       },
       visitorId: '',
       anonymousId: '',  // Persistent anonymous identifier
@@ -221,6 +224,13 @@ export class DatalyrSDK {
       // Wait for all platform integrations to complete
       await Promise.all(platformInitPromises);
 
+      // Cache advertiser info (IDFA/GAID, ATT status) once at init to avoid per-event native bridge calls
+      try {
+        this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
+      } catch (error) {
+        errorLog('Failed to cache advertiser info:', error as Error);
+      }
+
       debugLog('Platform integrations initialized', {
         meta: metaIntegration.isAvailable(),
         tiktok: tiktokIntegration.isAvailable(),
@@ -236,7 +246,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.0.2',
+          sdk_version: '1.4.9',
           ...installData,
         });
       }
@@ -939,6 +949,13 @@ export class DatalyrSDK {
     metaIntegration.updateTrackingAuthorization(enabled);
     tiktokIntegration.updateTrackingAuthorization(enabled);
 
+    // Refresh cached advertiser info after ATT status change
+    try {
+      this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
+    } catch (error) {
+      errorLog('Failed to refresh advertiser info:', error as Error);
+    }
+
     // Track ATT status event
     await this.track('$att_status', {
       authorized: enabled,
@@ -1022,6 +1039,9 @@ export class DatalyrSDK {
       asa_country_or_region: asaAttribution.countryOrRegion,
     } : {};
 
+    // Use cached advertiser info (IDFA/GAID, ATT status) — cached at init, refreshed on ATT change
+    const advertiserInfo = this.cachedAdvertiserInfo;
+
     const payload: EventPayload = {
       workspaceId: this.state.config.workspaceId || 'mobile_sdk',
       visitorId: this.state.visitorId,
@@ -1039,8 +1059,24 @@ export class DatalyrSDK {
         device_model: deviceInfo.model,
         app_version: deviceInfo.appVersion,
         app_build: deviceInfo.buildNumber,
+        app_name: deviceInfo.bundleId,  // Best available app name
+        app_namespace: deviceInfo.bundleId,
+        screen_width: deviceInfo.screenWidth,
+        screen_height: deviceInfo.screenHeight,
+        locale: deviceInfo.locale,
+        timezone: deviceInfo.timezone,
+        carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
         timestamp: Date.now(),
+        sdk_version: '1.4.9',
+        // Advertiser data (IDFA/GAID, ATT status) for Meta CAPI / TikTok Events API
+        ...(advertiserInfo ? {
+          idfa: advertiserInfo.idfa,
+          idfv: advertiserInfo.idfv,
+          gaid: advertiserInfo.gaid,
+          att_status: advertiserInfo.att_status,
+          advertiser_tracking_enabled: advertiserInfo.advertiser_tracking_enabled,
+        } : {}),
         // Attribution data
         ...attributionData,
         // Apple Search Ads attribution
