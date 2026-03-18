@@ -243,6 +243,12 @@ export class DatalyrSDK {
 
       // Check for app install (after SDK is marked as initialized)
       if (attributionManager.isInstall()) {
+        // iOS: Attempt deferred web-to-app attribution via IP matching before tracking install
+        // Android: Play Store referrer is handled by playInstallReferrerIntegration
+        if (Platform.OS === 'ios') {
+          await this.fetchDeferredWebAttribution();
+        }
+
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
@@ -450,6 +456,88 @@ export class DatalyrSDK {
     } catch (error) {
       errorLog('Error fetching web attribution:', error as Error);
       // Non-blocking - continue even if attribution fetch fails
+    }
+  }
+
+  /**
+   * Fetch deferred web attribution on first app install.
+   * Uses IP-based matching (iOS) or Play Store referrer (Android) to recover
+   * attribution data (fbclid, utm_*, etc.) from a prelander web visit.
+   * Called automatically during initialize() when a fresh install is detected.
+   */
+  private async fetchDeferredWebAttribution(): Promise<void> {
+    if (!this.state.config?.apiKey) {
+      debugLog('API key not available for deferred attribution fetch');
+      return;
+    }
+
+    try {
+      debugLog('Fetching deferred web attribution via IP matching...');
+
+      const baseUrl = this.state.config.endpoint || 'https://api.datalyr.com';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(`${baseUrl}/attribution/deferred-lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Datalyr-API-Key': this.state.config.apiKey,
+        },
+        body: JSON.stringify({ platform: Platform.OS }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        debugLog('Deferred attribution lookup failed:', response.status);
+        return;
+      }
+
+      const result = await response.json() as { found: boolean; attribution?: any };
+
+      if (!result.found || !result.attribution) {
+        debugLog('No deferred web attribution found for this IP');
+        return;
+      }
+
+      const webAttribution = result.attribution;
+      debugLog('Deferred web attribution found:', {
+        visitor_id: webAttribution.visitor_id,
+        has_fbclid: !!webAttribution.fbclid,
+        has_gclid: !!webAttribution.gclid,
+        utm_source: webAttribution.utm_source,
+      });
+
+      // Merge web attribution into current session
+      attributionManager.mergeWebAttribution(webAttribution);
+
+      // Track match event for analytics
+      await this.track('$web_attribution_matched', {
+        web_visitor_id: webAttribution.visitor_id,
+        web_user_id: webAttribution.user_id,
+        fbclid: webAttribution.fbclid,
+        gclid: webAttribution.gclid,
+        ttclid: webAttribution.ttclid,
+        gbraid: webAttribution.gbraid,
+        wbraid: webAttribution.wbraid,
+        fbp: webAttribution.fbp,
+        fbc: webAttribution.fbc,
+        utm_source: webAttribution.utm_source,
+        utm_medium: webAttribution.utm_medium,
+        utm_campaign: webAttribution.utm_campaign,
+        utm_content: webAttribution.utm_content,
+        utm_term: webAttribution.utm_term,
+        web_timestamp: webAttribution.timestamp,
+        match_method: 'ip',
+      });
+
+      debugLog('Successfully merged deferred web attribution');
+
+    } catch (error) {
+      errorLog('Error fetching deferred web attribution:', error as Error);
+      // Non-blocking - email-based fallback will catch this on identify()
     }
   }
 
