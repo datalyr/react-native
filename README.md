@@ -19,6 +19,7 @@ Mobile analytics and attribution SDK for React Native and Expo. Track events, id
 - [Attribution](#attribution)
   - [Automatic Capture](#automatic-capture)
   - [Deferred Deep Links](#deferred-deep-links)
+  - [Web-to-App Attribution](#web-to-app-attribution)
 - [Event Queue](#event-queue)
 - [Auto Events](#auto-events)
 - [SKAdNetwork](#skadnetwork)
@@ -355,6 +356,23 @@ if (deferred) {
   console.log(deferred.campaignId);  // Campaign ID
 }
 ```
+
+### Web-to-App Attribution
+
+Automatically recover attribution from a web prelander when users install the app from an ad.
+
+**How it works:**
+- **Android**: Attribution params are passed through the Play Store `referrer` URL parameter (set by the web SDK's `trackAppDownloadClick()`). The mobile SDK reads these via the Play Install Referrer API — deterministic, ~95% accuracy.
+- **iOS**: On first install, the SDK calls the Datalyr API to match the device's IP against recent `$app_download_click` web events within 24 hours — ~90%+ accuracy for immediate installs.
+
+No additional mobile code is needed. Attribution is recovered automatically during `initialize()` on first install, before the `app_install` event fires.
+
+After a match, the SDK:
+1. Merges web attribution (click IDs, UTMs, cookies) into the mobile session
+2. Tracks a `$web_attribution_matched` event for analytics
+3. All subsequent events (including purchases) carry the matched attribution
+
+**Fallback:** If IP matching misses (e.g., VPN toggle during install), email-based attribution is still recovered when `identify()` is called with the user's email.
 
 ### Manual Attribution
 
