@@ -594,7 +594,7 @@ await Datalyr.trackPurchase(99.99, 'USD');
 Pass Datalyr attribution data to Superwall to personalize paywalls by ad source, campaign, ad set, and keyword.
 
 ```typescript
-import Datalyr from '@datalyr/react-native';
+import { Datalyr } from '@datalyr/react-native';
 import Superwall from '@superwall/react-native-superwall';
 
 // After both SDKs are initialized
@@ -611,7 +611,7 @@ Call after `Datalyr.initialize()` completes. If using ATT on iOS, call again aft
 Pass Datalyr attribution data to RevenueCat for revenue attribution and offering targeting.
 
 ```typescript
-import Datalyr from '@datalyr/react-native';
+import { Datalyr } from '@datalyr/react-native';
 import Purchases from 'react-native-purchases';
 
 // After both SDKs are configured
