@@ -319,8 +319,8 @@ export const validateEventName = (eventName: string): boolean => {
     return false;
   }
   
-  // Allow letters, numbers, underscores, and hyphens
-  const validPattern = /^[a-zA-Z0-9_-]+$/;
+  // Allow letters, numbers, underscores, hyphens, and $ prefix (for system events like $identify)
+  const validPattern = /^\$?[a-zA-Z0-9_-]+$/;
   return validPattern.test(eventName);
 };
 

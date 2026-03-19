@@ -72,7 +72,7 @@ export class HttpClient {
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': `@datalyr/react-native/1.4.8`,
+        'User-Agent': `@datalyr/react-native/1.5.0`,
       };
 
       // Server-side tracking uses X-API-Key header
@@ -197,7 +197,7 @@ export class HttpClient {
       },
       context: {
         library: '@datalyr/react-native',
-        version: '1.4.8',
+        version: '1.5.0',
         source: 'mobile_app',  // Explicitly set source for mobile
         userProperties: payload.userProperties,
       },

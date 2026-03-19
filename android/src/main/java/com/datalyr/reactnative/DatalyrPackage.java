@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * React Native Package for Datalyr SDK
- * Registers all native modules (Meta, TikTok, Play Install Referrer)
+ * Registers native modules (Datalyr, Play Install Referrer)
  */
 public class DatalyrPackage implements ReactPackage {
 

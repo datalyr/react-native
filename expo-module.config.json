@@ -1,6 +1,9 @@
 {
-  "platforms": ["ios"],
+  "platforms": ["ios", "android"],
   "ios": {
     "modules": ["DatalyrNativeModule", "DatalyrSKAdNetworkModule"]
+  },
+  "android": {
+    "modules": ["com.datalyr.reactnative.DatalyrPackage"]
   }
 }

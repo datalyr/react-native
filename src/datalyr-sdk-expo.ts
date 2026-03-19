@@ -34,7 +34,7 @@ import { journeyManager } from './journey';
 import { createAutoEventsManager, AutoEventsManager } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
-import { metaIntegration, tiktokIntegration, appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
+import { appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
 import { DeferredDeepLinkResult } from './types';
 import { AppleSearchAdsAttribution, AdvertiserInfoBridge } from './native/DatalyrNativeBridge';
 
@@ -172,33 +172,6 @@ export class DatalyrSDKExpo {
         }
       }
 
-      // Initialize platform SDKs (Meta/TikTok) if configured
-      if (config.meta) {
-        try {
-          await metaIntegration.initialize(config.meta, config.debug || false);
-          debugLog('Meta SDK initialized');
-
-          // Fetch deferred deep link data
-          if (config.meta.enableDeferredDeepLink) {
-            const deferredData = await metaIntegration.fetchDeferredDeepLink();
-            if (deferredData) {
-              await this.handleDeferredDeepLink(deferredData);
-            }
-          }
-        } catch (error) {
-          errorLog('Failed to initialize Meta SDK:', error as Error);
-        }
-      }
-
-      if (config.tiktok) {
-        try {
-          await tiktokIntegration.initialize(config.tiktok, config.debug || false);
-          debugLog('TikTok SDK initialized');
-        } catch (error) {
-          errorLog('Failed to initialize TikTok SDK:', error as Error);
-        }
-      }
-
       // Initialize Apple Search Ads attribution (iOS only, auto-fetches on init)
       await appleSearchAdsIntegration.initialize(config.debug);
 
@@ -213,8 +186,6 @@ export class DatalyrSDKExpo {
       }
 
       debugLog('Platform integrations initialized', {
-        meta: metaIntegration.isAvailable(),
-        tiktok: tiktokIntegration.isAvailable(),
         appleSearchAds: appleSearchAdsIntegration.isAvailable(),
         playInstallReferrer: playInstallReferrerIntegration.isAvailable(),
       });
@@ -225,7 +196,7 @@ export class DatalyrSDKExpo {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS,
-          sdk_version: '1.4.9',
+          sdk_version: '1.6.0',
           sdk_variant: 'expo',
           ...installData,
         });
@@ -309,30 +280,6 @@ export class DatalyrSDKExpo {
         if (email) {
           await this.fetchAndMergeWebAttribution(email);
         }
-      }
-
-      // Forward user data to platform SDKs for Advanced Matching
-      if (metaIntegration.isAvailable() && properties) {
-        metaIntegration.setUserData({
-          email: properties.email,
-          phone: properties.phone,
-          firstName: properties.firstName || properties.first_name,
-          lastName: properties.lastName || properties.last_name,
-          city: properties.city,
-          state: properties.state,
-          zip: properties.zip || properties.zipCode || properties.postalCode,
-          country: properties.country,
-          gender: properties.gender,
-          dateOfBirth: properties.dateOfBirth || properties.dob || properties.birthday,
-        });
-      }
-
-      if (tiktokIntegration.isAvailable()) {
-        tiktokIntegration.identify(
-          properties?.email,
-          properties?.phone,
-          userId
-        );
       }
 
     } catch (error) {
@@ -435,11 +382,6 @@ export class DatalyrSDKExpo {
       await Storage.removeItem(STORAGE_KEYS.USER_PROPERTIES);
 
       this.state.sessionId = await getOrCreateSessionId();
-
-      // Clear user data from platform SDKs
-      if (metaIntegration.isAvailable()) {
-        metaIntegration.clearUserData();
-      }
 
       debugLog('User data reset completed');
 
@@ -567,14 +509,6 @@ export class DatalyrSDKExpo {
     if (productId) properties.product_id = productId;
 
     await this.trackWithSKAdNetwork('purchase', properties);
-
-    // Forward to platform SDKs
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logPurchase(value, currency, { productId });
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logPurchase(value, currency, productId);
-    }
   }
 
   async trackSubscription(value: number, currency = 'USD', plan?: string): Promise<void> {
@@ -582,14 +516,6 @@ export class DatalyrSDKExpo {
     if (plan) properties.plan = plan;
 
     await this.trackWithSKAdNetwork('subscribe', properties);
-
-    // Forward to platform SDKs
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logEvent('Subscribe', { value, currency, content_id: plan });
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logSubscription(value, currency, plan);
-    }
   }
 
   // Standard e-commerce events with platform forwarding
@@ -600,13 +526,6 @@ export class DatalyrSDKExpo {
     if (contentName) properties.content_name = contentName;
 
     await this.track('add_to_cart', properties);
-
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logEvent('AddToCart', { value, currency, content_id: contentId, content_name: contentName });
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logAddToCart(value, currency, contentId, contentName);
-    }
   }
 
   async trackViewContent(contentId: string, contentName?: string, contentType?: string, value?: number, currency?: string): Promise<void> {
@@ -617,13 +536,6 @@ export class DatalyrSDKExpo {
     if (currency) properties.currency = currency;
 
     await this.track('view_content', properties);
-
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logEvent('ViewContent', properties);
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logViewContent(contentId, contentName, contentType, value, currency);
-    }
   }
 
   async trackInitiateCheckout(value?: number, currency?: string, numItems?: number, contentIds?: string[]): Promise<void> {
@@ -634,13 +546,6 @@ export class DatalyrSDKExpo {
     if (contentIds) properties.content_ids = contentIds;
 
     await this.track('initiate_checkout', properties);
-
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logEvent('InitiateCheckout', properties);
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logInitiateCheckout(value, currency, numItems, contentIds);
-    }
   }
 
   async trackCompleteRegistration(registrationMethod?: string): Promise<void> {
@@ -648,13 +553,6 @@ export class DatalyrSDKExpo {
     if (registrationMethod) properties.registration_method = registrationMethod;
 
     await this.track('complete_registration', properties);
-
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logEvent('CompleteRegistration', properties);
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logCompleteRegistration(registrationMethod);
-    }
   }
 
   async trackSearch(searchString: string, contentIds?: string[]): Promise<void> {
@@ -662,13 +560,6 @@ export class DatalyrSDKExpo {
     if (contentIds) properties.content_ids = contentIds;
 
     await this.track('search', properties);
-
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logEvent('Search', properties);
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logSearch(searchString, contentIds);
-    }
   }
 
   async trackLead(value?: number, currency?: string): Promise<void> {
@@ -677,13 +568,6 @@ export class DatalyrSDKExpo {
     if (currency) properties.currency = currency;
 
     await this.track('lead', properties);
-
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logEvent('Lead', properties);
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logLead(value, currency);
-    }
   }
 
   async trackAddPaymentInfo(success?: boolean): Promise<void> {
@@ -691,28 +575,16 @@ export class DatalyrSDKExpo {
     if (success !== undefined) properties.success = success;
 
     await this.track('add_payment_info', properties);
-
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.logEvent('AddPaymentInfo', properties);
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.logAddPaymentInfo(success);
-    }
   }
 
   // Platform integration methods
 
   getDeferredAttributionData(): DeferredDeepLinkResult | null {
-    if (metaIntegration.isAvailable()) {
-      return metaIntegration.getDeferredDeepLinkData();
-    }
     return null;
   }
 
-  getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean; playInstallReferrer: boolean } {
+  getPlatformIntegrationStatus(): { appleSearchAds: boolean; playInstallReferrer: boolean } {
     return {
-      meta: metaIntegration.isAvailable(),
-      tiktok: tiktokIntegration.isAvailable(),
       appleSearchAds: appleSearchAdsIntegration.isAvailable(),
       playInstallReferrer: playInstallReferrerIntegration.isAvailable(),
     };
@@ -735,13 +607,6 @@ export class DatalyrSDKExpo {
   }
 
   async updateTrackingAuthorization(authorized: boolean): Promise<void> {
-    if (metaIntegration.isAvailable()) {
-      metaIntegration.updateTrackingAuthorization(authorized);
-    }
-    if (tiktokIntegration.isAvailable()) {
-      tiktokIntegration.updateTrackingAuthorization(authorized);
-    }
-
     // Refresh cached advertiser info after ATT status change
     try {
       this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
@@ -835,9 +700,9 @@ export class DatalyrSDKExpo {
         carrier: deviceInfo.carrier,
         network_type: networkType,
         timestamp: Date.now(),
-        sdk_version: '1.4.9',
+        sdk_version: '1.6.0',
         sdk_variant: 'expo',
-        // Advertiser data (IDFA/GAID, ATT status) for Meta CAPI / TikTok Events API
+        // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
           idfa: advertiserInfo.idfa,
           idfv: advertiserInfo.idfv,
@@ -1080,7 +945,7 @@ export class DatalyrExpo {
     return datalyrExpo.getDeferredAttributionData();
   }
 
-  static getPlatformIntegrationStatus(): { meta: boolean; tiktok: boolean; appleSearchAds: boolean; playInstallReferrer: boolean } {
+  static getPlatformIntegrationStatus(): { appleSearchAds: boolean; playInstallReferrer: boolean } {
     return datalyrExpo.getPlatformIntegrationStatus();
   }
 

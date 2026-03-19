@@ -7,29 +7,13 @@ export interface AutoEventConfig {
   sessionTimeoutMs?: number;
 }
 
-// Meta (Facebook) SDK Configuration
-export interface MetaConfig {
-  appId: string;                     // Facebook App ID
-  clientToken?: string;              // Client Token for advanced features
-  enableDeferredDeepLink?: boolean;  // Default: true
-  enableAppEvents?: boolean;         // Default: true
-  advertiserTrackingEnabled?: boolean; // iOS ATT status (auto-detected if not set)
-}
-
-// TikTok SDK Configuration
-export interface TikTokConfig {
-  appId: string;                     // Your App ID (for Datalyr)
-  tiktokAppId: string;               // TikTok App ID
-  accessToken?: string;              // Access Token for Events API
-  enableAppEvents?: boolean;         // Default: true
-}
-
-// Deferred Deep Link Result (from platform SDKs)
+// Deferred Deep Link Result (from Play Install Referrer on Android)
 export interface DeferredDeepLinkResult {
   url?: string;
   source?: string;
   fbclid?: string;
   ttclid?: string;
+  gclid?: string;
   utmSource?: string;
   utmMedium?: string;
   utmCampaign?: string;
@@ -51,8 +35,6 @@ export interface DeferredDeepLinkResult {
  *   enableAutoEvents: true,
  *   enableAttribution: true,
  *   skadTemplate: 'ecommerce',
- *   meta: { appId: 'FB_APP_ID' },
- *   tiktok: { appId: 'APP_ID', tiktokAppId: 'TIKTOK_APP_ID' },
  * });
  * ```
  */
@@ -135,11 +117,6 @@ export interface DatalyrConfig {
   /** SKAdNetwork template for automatic conversion value encoding (iOS only) */
   skadTemplate?: 'ecommerce' | 'gaming' | 'subscription';
 
-  /** Meta (Facebook) SDK Configuration */
-  meta?: MetaConfig;
-
-  /** TikTok SDK Configuration */
-  tiktok?: TikTokConfig;
 }
 // Event Types
 export interface EventData {

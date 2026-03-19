@@ -5,6 +5,45 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-03
+
+### Removed
+- **Meta (Facebook) SDK** - Removed FBSDKCoreKit (iOS) and facebook-android-sdk (Android) dependencies
+- **TikTok Business SDK** - Removed TikTokBusinessSDK (iOS) and tiktok-business-android-sdk (Android) dependencies
+- Removed ByteDance maven repository from Android build
+- Removed `MetaConfig`, `TikTokConfig` TypeScript interfaces
+- Removed `MetaNativeBridge`, `TikTokNativeBridge` native bridge modules
+- Removed all client-side event forwarding to Meta/TikTok
+- Removed `meta-integration.ts`, `tiktok-integration.ts`, `DatalyrObjCExceptionCatcher`
+
+### Changed
+- Conversion event routing to Meta (CAPI), TikTok (Events API), and Google Ads is now handled entirely server-side via the Datalyr postback system
+- IDFA/ATT and GAID now use native Apple/Google frameworks directly
+- `getPlatformIntegrationStatus()` returns only `appleSearchAds` and `playInstallReferrer`
+
+### Migration from v1.5.x
+Remove `meta` and `tiktok` config objects from your `initialize()` call:
+```typescript
+// Before (v1.5.x)
+await Datalyr.initialize({
+  apiKey: 'dk_...',
+  meta: { appId: 'FB_APP_ID', clientToken: '...' },     // REMOVE
+  tiktok: { appId: '...', tiktokAppId: '...' },          // REMOVE
+});
+
+// After (v1.6.0)
+await Datalyr.initialize({
+  apiKey: 'dk_...',
+});
+```
+No other code changes needed. All tracking methods (`trackPurchase`, `trackAddToCart`, etc.) work the same — events are routed to ad platforms server-side via your Datalyr postback rules.
+
+If you were importing `metaIntegration` or `tiktokIntegration` directly, remove those imports — they no longer exist.
+
+iOS: Remove from Info.plist: `FacebookAppID`, `FacebookClientToken`, `FacebookDisplayName`, and `LSApplicationQueriesSchemes` entries for TikTok.
+
+Android: No changes needed — Meta/TikTok dependencies are automatically removed on `pod install` / gradle sync.
+
 ## [1.3.1] - 2026-01
 
 ### Added

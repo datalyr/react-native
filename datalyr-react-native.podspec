@@ -7,9 +7,9 @@ Pod::Spec.new do |s|
   s.version      = package['version']
   s.summary      = package['description']
   s.description  = <<-DESC
-    Datalyr SDK for React Native with bundled Meta (Facebook) and TikTok SDKs.
-    Provides deferred deep linking, event forwarding, and advanced attribution
-    without requiring users to install additional packages.
+    Datalyr SDK for React Native with server-side attribution tracking.
+    Provides event capture, Apple Search Ads attribution, and Play Install
+    Referrer support. Conversion routing handled server-side via postback.
   DESC
   s.homepage     = package['homepage']
   s.license      = package['license']
@@ -20,12 +20,8 @@ Pod::Spec.new do |s|
   s.swift_version = "5.0"
 
   s.dependency "ExpoModulesCore"
-  s.dependency "FBSDKCoreKit", "~> 18.0"
-  s.dependency "TikTokBusinessSDK", "1.6.0"
 
-  # Disable bitcode (required for TikTok SDK)
   s.pod_target_xcconfig = {
-    'ENABLE_BITCODE' => 'NO',
     'DEFINES_MODULE' => 'YES'
   }
 end

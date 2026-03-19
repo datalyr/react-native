@@ -18,14 +18,11 @@ Mobile analytics and attribution SDK for React Native and Expo. Track events, id
   - [User Properties](#user-properties)
 - [Attribution](#attribution)
   - [Automatic Capture](#automatic-capture)
-  - [Deferred Deep Links](#deferred-deep-links)
   - [Web-to-App Attribution](#web-to-app-attribution)
 - [Event Queue](#event-queue)
 - [Auto Events](#auto-events)
 - [SKAdNetwork](#skadnetwork)
 - [Platform Integrations](#platform-integrations)
-  - [Meta](#meta-facebook)
-  - [TikTok](#tiktok)
   - [Apple Search Ads](#apple-search-ads)
 - [Expo Support](#expo-support)
 - [TypeScript](#typescript)
@@ -44,38 +41,6 @@ npm install @datalyr/react-native
 
 ```bash
 cd ios && pod install
-```
-
-This installs the SDK with bundled Meta and TikTok native SDKs.
-
-Add to `ios/YourApp/Info.plist`:
-
-```xml
-<!-- Meta SDK -->
-<key>FacebookAppID</key>
-<string>YOUR_FACEBOOK_APP_ID</string>
-<key>FacebookClientToken</key>
-<string>YOUR_CLIENT_TOKEN</string>
-<key>FacebookDisplayName</key>
-<string>Your App Name</string>
-
-<key>CFBundleURLTypes</key>
-<array>
-  <dict>
-    <key>CFBundleURLSchemes</key>
-    <array>
-      <string>fbYOUR_FACEBOOK_APP_ID</string>
-    </array>
-  </dict>
-</array>
-
-<!-- TikTok SDK -->
-<key>LSApplicationQueriesSchemes</key>
-<array>
-  <string>tiktok</string>
-  <string>snssdk1180</string>
-  <string>snssdk1233</string>
-</array>
 ```
 
 ### Android Setup
@@ -171,9 +136,6 @@ await Datalyr.initialize({
   // iOS
   skadTemplate?: 'ecommerce' | 'gaming' | 'subscription',
 
-  // Platform SDKs
-  meta?: MetaConfig,
-  tiktok?: TikTokConfig,
 });
 ```
 
@@ -221,7 +183,7 @@ await Datalyr.screen('Product Details', {
 
 ### E-Commerce Events
 
-Standard e-commerce events that also forward to Meta and TikTok:
+Standard e-commerce events:
 
 ```typescript
 // View product
@@ -283,7 +245,6 @@ await Datalyr.identify('user_123', {
 After `identify()`:
 - All future events include `user_id`
 - Historical anonymous events can be linked server-side
-- User data is forwarded to Meta/TikTok for Advanced Matching
 
 ### User Properties
 
@@ -335,27 +296,6 @@ Captured parameters:
 | UTM | `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` |
 | Click IDs | `fbclid`, `gclid`, `ttclid`, `twclid`, `li_click_id`, `msclkid` |
 | Campaign | `campaign_id`, `adset_id`, `ad_id` |
-
-### Deferred Deep Links
-
-Capture attribution from App Store installs (iOS):
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  meta: {
-    appId: '1234567890',
-    enableDeferredDeepLink: true,
-  },
-});
-
-// Check for deferred attribution
-const deferred = Datalyr.getDeferredAttributionData();
-if (deferred) {
-  console.log(deferred.fbclid);      // Facebook click ID
-  console.log(deferred.campaignId);  // Campaign ID
-}
-```
 
 ### Web-to-App Attribution
 
@@ -474,46 +414,7 @@ await Datalyr.trackPurchase(99.99, 'USD');
 
 ## Platform Integrations
 
-Bundled Meta and TikTok SDKs for iOS. No extra npm packages needed.
-
-### Meta (Facebook)
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  meta: {
-    appId: '1234567890',
-    clientToken: 'abc123',
-    enableDeferredDeepLink: true,
-    enableAppEvents: true,
-  },
-});
-```
-
-### TikTok
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  tiktok: {
-    appId: 'your_app_id',                    // Events API App ID
-    tiktokAppId: '7123456789',               // TikTok App ID (Developer Portal)
-    accessToken: 'your_access_token',        // Events API Access Token
-    enableAppEvents: true,
-  },
-});
-```
-
-**Where to find your TikTok credentials:**
-
-| Credential | Where to get it |
-|------------|----------------|
-| `tiktokAppId` | [TikTok Developer Portal](https://developers.tiktok.com) → Your App → App ID |
-| `appId` | TikTok Business Center → Assets → Events → Your App → App ID |
-| `accessToken` | TikTok Business Center → Assets → Events → Your App → Settings → Access Token |
-
-> **Note:** The `accessToken` enables client-side TikTok SDK features (enhanced attribution, real-time event forwarding). Without it, events are still tracked server-side via Datalyr postbacks — you'll see a warning in debug mode.
-```
+Conversion event routing to Meta, TikTok, and Google is handled server-side via the postback system. No client-side SDK configuration is needed for these platforms.
 
 ### Apple Search Ads
 
@@ -554,7 +455,7 @@ await Datalyr.updateTrackingAuthorization(status === 'granted');
 
 ```typescript
 const status = Datalyr.getPlatformIntegrationStatus();
-// { meta: true, tiktok: true, appleSearchAds: true }
+// { appleSearchAds: true }
 ```
 
 ---
@@ -681,35 +582,6 @@ npm install && cd ios && pod install
 ```bash
 cd android && ./gradlew clean
 npx react-native run-android
-```
-
-### Meta SDK Not Working
-
-Verify Info.plist:
-```xml
-<key>FacebookAppID</key>
-<string>YOUR_APP_ID</string>
-<key>FacebookClientToken</key>
-<string>YOUR_CLIENT_TOKEN</string>
-```
-
-Check status: `Datalyr.getPlatformIntegrationStatus()`
-
-### TikTok SDK Not Working
-
-1. Make sure you have all three TikTok credentials (see [TikTok setup](#tiktok))
-2. The `accessToken` is required for client-side SDK — without it, you'll see a warning but server-side tracking still works
-3. Check status: `Datalyr.getPlatformIntegrationStatus()`
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  tiktok: {
-    appId: 'your_app_id',
-    tiktokAppId: '7123456789012345',
-    accessToken: 'your_access_token',
-  },
-});
 ```
 
 ### SKAdNetwork Not Updating
