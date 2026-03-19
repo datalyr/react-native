@@ -646,6 +646,8 @@ A real landing page with a download button. Better ad platform compliance, highe
 
 Instant redirect — no visible content, user goes straight to app store.
 
+> **Note:** Some ad platforms (particularly Meta) may flag redirect pages with no visible content as low-quality landing pages or cloaking. Use the prelander option if compliance is a concern.
+
 ```html
 <!DOCTYPE html>
 <html>
@@ -682,7 +684,7 @@ Add UTM parameters to the URL so attribution flows through:
 
 - The page **must load JavaScript**. Server-side redirects (301/302, nginx, Cloudflare Page Rules) will NOT work.
 - Host on your own domain — do not use `datalyr.com` or shared domains.
-- The redirect page adds ~300-500ms for the SDK to load. Prelander has no latency since the user clicks a button.
+- The redirect page adds ~100-200ms for the SDK to load. Prelander has no latency since the user clicks a button.
 
 ---
 
