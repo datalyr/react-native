@@ -606,6 +606,87 @@ export class DatalyrSDKExpo {
     return appleSearchAdsIntegration.getAttributionData();
   }
 
+  // MARK: - Third-Party Integration Methods
+
+  /**
+   * Get attribution data formatted for Superwall's setUserAttributes()
+   */
+  getSuperwallAttributes(): Record<string, string> {
+    const attribution = attributionManager.getAttributionData();
+    const advertiser = this.cachedAdvertiserInfo;
+    const attrs: Record<string, string> = {};
+
+    const set = (key: string, value: any) => {
+      if (value != null && String(value) !== '') attrs[key] = String(value);
+    };
+
+    set('datalyr_id', this.state.visitorId);
+    set('media_source', attribution.utm_source);
+    set('campaign', attribution.utm_campaign);
+    set('adgroup', attribution.adset_id || attribution.utm_content);
+    set('ad', attribution.ad_id);
+    set('keyword', attribution.keyword);
+    set('network', attribution.network);
+    set('utm_source', attribution.utm_source);
+    set('utm_medium', attribution.utm_medium);
+    set('utm_campaign', attribution.utm_campaign);
+    set('utm_term', attribution.utm_term);
+    set('utm_content', attribution.utm_content);
+    set('lyr', attribution.lyr);
+    set('fbclid', attribution.fbclid);
+    set('gclid', attribution.gclid);
+    set('ttclid', attribution.ttclid);
+    set('idfa', advertiser?.idfa);
+    set('gaid', advertiser?.gaid);
+    set('att_status', advertiser?.att_status);
+
+    return attrs;
+  }
+
+  /**
+   * Get attribution data formatted for RevenueCat's Purchases.setAttributes()
+   */
+  getRevenueCatAttributes(): Record<string, string> {
+    const attribution = attributionManager.getAttributionData();
+    const advertiser = this.cachedAdvertiserInfo;
+    const attrs: Record<string, string> = {};
+
+    const set = (key: string, value: any) => {
+      if (value != null && String(value) !== '') attrs[key] = String(value);
+    };
+
+    // Reserved attributes ($ prefix)
+    set('$datalyrId', this.state.visitorId);
+    set('$mediaSource', attribution.utm_source);
+    set('$campaign', attribution.utm_campaign);
+    set('$adGroup', attribution.adset_id);
+    set('$ad', attribution.ad_id);
+    set('$keyword', attribution.keyword);
+    set('$idfa', advertiser?.idfa);
+    set('$gpsAdId', advertiser?.gaid);
+    if (advertiser?.att_status != null) {
+      const statusMap: Record<number, string> = { 0: 'notDetermined', 1: 'restricted', 2: 'denied', 3: 'authorized' };
+      set('$attConsentStatus', statusMap[advertiser.att_status] || String(advertiser.att_status));
+    }
+
+    // Custom attributes
+    set('utm_source', attribution.utm_source);
+    set('utm_medium', attribution.utm_medium);
+    set('utm_campaign', attribution.utm_campaign);
+    set('utm_term', attribution.utm_term);
+    set('utm_content', attribution.utm_content);
+    set('lyr', attribution.lyr);
+    set('fbclid', attribution.fbclid);
+    set('gclid', attribution.gclid);
+    set('ttclid', attribution.ttclid);
+    set('wbraid', attribution.wbraid);
+    set('gbraid', attribution.gbraid);
+    set('network', attribution.network);
+    set('creative_id', attribution.creative_id);
+
+    return attrs;
+  }
+
   async updateTrackingAuthorization(authorized: boolean): Promise<void> {
     // Refresh cached advertiser info after ATT status change
     try {
@@ -959,6 +1040,16 @@ export class DatalyrExpo {
 
   static async updateTrackingAuthorization(authorized: boolean): Promise<void> {
     await datalyrExpo.updateTrackingAuthorization(authorized);
+  }
+
+  // Third-party integration methods
+
+  static getSuperwallAttributes(): Record<string, string> {
+    return datalyrExpo.getSuperwallAttributes();
+  }
+
+  static getRevenueCatAttributes(): Record<string, string> {
+    return datalyrExpo.getRevenueCatAttributes();
   }
 }
 

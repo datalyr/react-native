@@ -227,4 +227,12 @@ export interface AttributionData {
   content?: string;
   clickId?: string;
   installTime?: string;
-} 
+}
+
+// Third-Party Integration Attributes
+
+/** Flat dictionary for Superwall's setUserAttributes() */
+export type SuperwallAttributes = Record<string, string>;
+
+/** Flat dictionary for RevenueCat's Purchases.setAttributes() */
+export type RevenueCatAttributes = Record<string, string>;

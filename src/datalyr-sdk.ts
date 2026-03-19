@@ -862,8 +862,91 @@ export class DatalyrSDK {
     return data ? playInstallReferrerIntegration.getAttributionData() : null;
   }
 
+  // MARK: - Third-Party Integration Methods
+
   /**
-   * Update tracking authorization status on all platform SDKs
+   * Get attribution data formatted for Superwall's setUserAttributes()
+   * Returns a flat Record<string, string> with only non-empty values
+   */
+  getSuperwallAttributes(): Record<string, string> {
+    const attribution = attributionManager.getAttributionData();
+    const advertiser = this.cachedAdvertiserInfo;
+    const attrs: Record<string, string> = {};
+
+    const set = (key: string, value: any) => {
+      if (value != null && String(value) !== '') attrs[key] = String(value);
+    };
+
+    set('datalyr_id', this.state.visitorId);
+    set('media_source', attribution.utm_source);
+    set('campaign', attribution.utm_campaign);
+    set('adgroup', attribution.adset_id || attribution.utm_content);
+    set('ad', attribution.ad_id);
+    set('keyword', attribution.keyword);
+    set('network', attribution.network);
+    set('utm_source', attribution.utm_source);
+    set('utm_medium', attribution.utm_medium);
+    set('utm_campaign', attribution.utm_campaign);
+    set('utm_term', attribution.utm_term);
+    set('utm_content', attribution.utm_content);
+    set('lyr', attribution.lyr);
+    set('fbclid', attribution.fbclid);
+    set('gclid', attribution.gclid);
+    set('ttclid', attribution.ttclid);
+    set('idfa', advertiser?.idfa);
+    set('gaid', advertiser?.gaid);
+    set('att_status', advertiser?.att_status);
+
+    return attrs;
+  }
+
+  /**
+   * Get attribution data formatted for RevenueCat's Purchases.setAttributes()
+   * Returns a flat Record<string, string> with $-prefixed reserved keys
+   */
+  getRevenueCatAttributes(): Record<string, string> {
+    const attribution = attributionManager.getAttributionData();
+    const advertiser = this.cachedAdvertiserInfo;
+    const attrs: Record<string, string> = {};
+
+    const set = (key: string, value: any) => {
+      if (value != null && String(value) !== '') attrs[key] = String(value);
+    };
+
+    // Reserved attributes ($ prefix)
+    set('$datalyrId', this.state.visitorId);
+    set('$mediaSource', attribution.utm_source);
+    set('$campaign', attribution.utm_campaign);
+    set('$adGroup', attribution.adset_id);
+    set('$ad', attribution.ad_id);
+    set('$keyword', attribution.keyword);
+    set('$idfa', advertiser?.idfa);
+    set('$gpsAdId', advertiser?.gaid);
+    if (advertiser?.att_status != null) {
+      const statusMap: Record<number, string> = { 0: 'notDetermined', 1: 'restricted', 2: 'denied', 3: 'authorized' };
+      set('$attConsentStatus', statusMap[advertiser.att_status] || String(advertiser.att_status));
+    }
+
+    // Custom attributes
+    set('utm_source', attribution.utm_source);
+    set('utm_medium', attribution.utm_medium);
+    set('utm_campaign', attribution.utm_campaign);
+    set('utm_term', attribution.utm_term);
+    set('utm_content', attribution.utm_content);
+    set('lyr', attribution.lyr);
+    set('fbclid', attribution.fbclid);
+    set('gclid', attribution.gclid);
+    set('ttclid', attribution.ttclid);
+    set('wbraid', attribution.wbraid);
+    set('gbraid', attribution.gbraid);
+    set('network', attribution.network);
+    set('creative_id', attribution.creative_id);
+
+    return attrs;
+  }
+
+  /**
+   * Update tracking authorization status
    * Call this AFTER the user responds to the ATT permission dialog
    */
   async updateTrackingAuthorization(enabled: boolean): Promise<void> {
@@ -1363,6 +1446,16 @@ export class Datalyr {
 
   static async updateTrackingAuthorization(enabled: boolean): Promise<void> {
     await datalyr.updateTrackingAuthorization(enabled);
+  }
+
+  // Third-party integration methods
+
+  static getSuperwallAttributes(): Record<string, string> {
+    return datalyr.getSuperwallAttributes();
+  }
+
+  static getRevenueCatAttributes(): Record<string, string> {
+    return datalyr.getRevenueCatAttributes();
   }
 }
 
