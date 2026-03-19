@@ -821,27 +821,27 @@ Call after `Datalyr.initialize()` completes. If using ATT on iOS, call again aft
 
 **Returned attribute keys:**
 
-| Key | Source |
-|-----|--------|
-| `datalyr_id` | Datalyr visitor ID |
-| `media_source` | `utm_source` |
-| `campaign` | `utm_campaign` |
-| `adgroup` | `adset_id` or `utm_content` |
-| `ad` | `ad_id` |
-| `keyword` | Search keyword |
-| `network` | Ad network |
-| `utm_source` | UTM source |
-| `utm_medium` | UTM medium |
-| `utm_campaign` | UTM campaign |
-| `utm_term` | UTM term |
-| `utm_content` | UTM content |
-| `lyr` | Datalyr link ID |
-| `fbclid` | Facebook click ID |
-| `gclid` | Google click ID |
-| `ttclid` | TikTok click ID |
-| `idfa` | iOS Identifier for Advertisers |
-| `gaid` | Google Advertising ID (Android) |
-| `att_status` | ATT authorization status |
+| Key | Description |
+|-----|-------------|
+| `datalyr_id` | The user's DATALYR visitor ID |
+| `media_source` | Traffic source (e.g., `facebook`, `google`) |
+| `campaign` | Campaign name from the ad |
+| `adgroup` | Ad group or ad set name |
+| `ad` | Individual ad ID |
+| `keyword` | Search keyword that triggered the ad |
+| `network` | Ad network name |
+| `utm_source` | UTM source parameter |
+| `utm_medium` | UTM medium parameter (e.g., `cpc`) |
+| `utm_campaign` | UTM campaign parameter |
+| `utm_term` | UTM term parameter |
+| `utm_content` | UTM content parameter |
+| `lyr` | DATALYR tracking link ID |
+| `fbclid` | Meta click ID from the ad URL |
+| `gclid` | Google click ID from the ad URL |
+| `ttclid` | TikTok click ID from the ad URL |
+| `idfa` | Apple advertising ID (only if ATT authorized) |
+| `gaid` | Google advertising ID (Android) |
+| `att_status` | App Tracking Transparency status (`0`-`3`) |
 
 Only non-empty values are included.
 
@@ -861,17 +861,17 @@ Call after configuring the Purchases SDK and before the first purchase. If using
 
 **Reserved attributes (`$`-prefixed):**
 
-| Key | Source |
-|-----|--------|
-| `$datalyrId` | Datalyr visitor ID |
-| `$mediaSource` | `utm_source` |
-| `$campaign` | `utm_campaign` |
-| `$adGroup` | `adset_id` |
-| `$ad` | `ad_id` |
-| `$keyword` | Search keyword |
-| `$idfa` | iOS Identifier for Advertisers |
-| `$gpsAdId` | Google Advertising ID (Android) |
-| `$attConsentStatus` | ATT status (see mapping below) |
+| Key | Description |
+|-----|-------------|
+| `$datalyrId` | The user's DATALYR visitor ID |
+| `$mediaSource` | Traffic source (e.g., `facebook`, `google`) |
+| `$campaign` | Campaign name from the ad |
+| `$adGroup` | Ad group or ad set name |
+| `$ad` | Individual ad ID |
+| `$keyword` | Search keyword that triggered the ad |
+| `$idfa` | Apple advertising ID (only if ATT authorized) |
+| `$gpsAdId` | Google advertising ID (Android) |
+| `$attConsentStatus` | ATT consent status (see mapping below) |
 
 **ATT status mapping for `$attConsentStatus`:**
 
@@ -884,19 +884,19 @@ Call after configuring the Purchases SDK and before the first purchase. If using
 
 **Custom attributes:**
 
-| Key | Source |
-|-----|--------|
-| `utm_source` | UTM source |
-| `utm_medium` | UTM medium |
-| `utm_campaign` | UTM campaign |
-| `utm_term` | UTM term |
-| `utm_content` | UTM content |
-| `lyr` | Datalyr link ID |
-| `fbclid` | Facebook click ID |
-| `gclid` | Google click ID |
-| `ttclid` | TikTok click ID |
-| `wbraid` | Google privacy-safe click ID (Web-to-App) |
-| `gbraid` | Google privacy-safe click ID (iOS App) |
+| Key | Description |
+|-----|-------------|
+| `utm_source` | UTM source parameter |
+| `utm_medium` | UTM medium parameter (e.g., `cpc`) |
+| `utm_campaign` | UTM campaign parameter |
+| `utm_term` | UTM term parameter |
+| `utm_content` | UTM content parameter |
+| `lyr` | DATALYR tracking link ID |
+| `fbclid` | Meta click ID from the ad URL |
+| `gclid` | Google click ID from the ad URL |
+| `ttclid` | TikTok click ID from the ad URL |
+| `wbraid` | Google web-to-app click ID |
+| `gbraid` | Google app click ID |
 | `network` | Ad network |
 | `creative_id` | Creative ID |
 
