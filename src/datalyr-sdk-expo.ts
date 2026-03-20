@@ -248,11 +248,22 @@ export class DatalyrSDKExpo {
       ...properties,
     };
 
-    await this.track('pageview', screenData);
-
+    // Enrich with session data (pageview count, previous screen) if available.
+    // User-provided properties take precedence over enrichment.
     if (this.autoEventsManager) {
-      await this.autoEventsManager.trackScreenView(screenName, properties);
+      const enrichment = this.autoEventsManager.getScreenViewEnrichment();
+      if (enrichment) {
+        for (const [key, value] of Object.entries(enrichment)) {
+          if (!(key in screenData)) {
+            screenData[key] = value;
+          }
+        }
+      }
+      // Update session counters (does NOT fire a second event)
+      await this.autoEventsManager.recordScreenView(screenName);
     }
+
+    await this.track('pageview', screenData);
   }
 
   async identify(userId: string, properties?: UserProperties): Promise<void> {

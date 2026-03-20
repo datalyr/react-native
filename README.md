@@ -27,6 +27,7 @@ Mobile analytics and attribution SDK for React Native and Expo. Track events, id
   - [Deferred Attribution](#deferred-attribution)
 - [Customer Journey](#customer-journey)
 - [Event Queue](#event-queue)
+- [Automatic Screen Tracking](#automatic-screen-tracking)
 - [Auto Events](#auto-events)
 - [SKAdNetwork](#skadnetwork)
 - [Platform Integrations](#platform-integrations)
@@ -178,10 +179,10 @@ await Datalyr.initialize({
 
 ```typescript
 interface AutoEventConfig {
-  trackSessions?: boolean;       // Track session_start / session_end
-  trackScreenViews?: boolean;    // Track screen views automatically
-  trackAppUpdates?: boolean;     // Track app_update events
-  trackPerformance?: boolean;    // Track performance metrics
+  trackSessions?: boolean;       // Track session_start / session_end (default: true)
+  trackScreenViews?: boolean;    // Enable screen view events via screen() (default: true)
+  trackAppUpdates?: boolean;     // Track app_update events (default: true)
+  trackPerformance?: boolean;    // Track performance metrics (default: false)
   sessionTimeoutMs?: number;     // Session timeout in ms
 }
 ```
@@ -232,6 +233,8 @@ await Datalyr.screen('Product Details', {
   source: 'search',
 });
 ```
+
+Each `screen()` call fires a single `pageview` event with the `screen` property set. Session data (`session_id`, `pageviews_in_session`, `previous_screen`) is automatically attached.
 
 ### E-Commerce Events
 
@@ -501,6 +504,98 @@ When the device is offline:
 - Events are stored locally
 - Queue persists across app restarts
 - Events are sent when connectivity returns
+
+---
+
+## Automatic Screen Tracking
+
+Track screen views automatically when using React Navigation (v5+/v6+). The `datalyrScreenTracking` helper wires into the navigation container and fires a `pageview` event on every route change.
+
+### React Navigation
+
+```tsx
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
+import { datalyrScreenTracking } from '@datalyr/react-native';
+
+function App() {
+  const navigationRef = useNavigationContainerRef();
+  const screenTracking = datalyrScreenTracking(navigationRef);
+
+  return (
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={screenTracking.onReady}
+      onStateChange={screenTracking.onStateChange}
+    >
+      {/* ...screens */}
+    </NavigationContainer>
+  );
+}
+```
+
+### Expo with React Navigation
+
+For Expo projects using React Navigation, import from the Expo entry point:
+
+```tsx
+import { datalyrScreenTracking } from '@datalyr/react-native/expo';
+```
+
+The API is identical to the React Navigation example above.
+
+### Expo Router
+
+Expo Router does not expose a `NavigationContainer`, so automatic tracking is not available. Use `datalyr.screen()` manually in your layout files instead:
+
+```tsx
+import { datalyr } from '@datalyr/react-native/expo';
+import { usePathname } from 'expo-router';
+import { useEffect } from 'react';
+
+export default function RootLayout() {
+  const pathname = usePathname();
+
+  useEffect(() => {
+    datalyr.screen(pathname);
+  }, [pathname]);
+
+  return <Slot />;
+}
+```
+
+### Configuration
+
+You can customize screen name transforms, filtering, and property extraction:
+
+```typescript
+const screenTracking = datalyrScreenTracking(navigationRef, {
+  // Clean up route names
+  transformScreenName: (name) => name.replace('Screen', ''),
+
+  // Skip certain screens
+  shouldTrackScreen: (name) => !['Splash', 'Loading'].includes(name),
+
+  // Extract route params as event properties
+  extractProperties: (name, params) => ({
+    product_id: params?.productId,
+  }),
+});
+```
+
+### Advanced: Custom Tracking Function
+
+If you need to control which SDK instance is used, use `createScreenTrackingListeners` instead:
+
+```typescript
+import { createScreenTrackingListeners } from '@datalyr/react-native';
+
+const { onReady, onStateChange } = createScreenTrackingListeners(
+  navigationRef,
+  (screenName, properties) => myCustomSdk.screen(screenName, properties),
+);
+```
+
+> **Note:** If you enable automatic screen tracking, avoid also calling `Datalyr.screen()` manually for the same screens, as this will produce duplicate events.
 
 ---
 

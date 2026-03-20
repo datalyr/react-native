@@ -56,6 +56,39 @@ export * from './event-queue';
 export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 
+// Export automatic screen tracking for React Navigation
+export { createScreenTrackingListeners } from './screen-tracking';
+export type { ScreenTrackingConfig, NavigationContainerRef } from './screen-tracking';
+
+// Expo-specific convenience: auto-wires to the Expo singleton
+import { createScreenTrackingListeners as _createListeners } from './screen-tracking';
+import type { NavigationContainerRef as _NavRef, ScreenTrackingConfig as _Config } from './screen-tracking';
+
+/**
+ * Auto-wire screen tracking to the Expo Datalyr singleton.
+ *
+ * ```tsx
+ * const navigationRef = useNavigationContainerRef();
+ * const screenTracking = datalyrScreenTracking(navigationRef);
+ *
+ * <NavigationContainer
+ *   ref={navigationRef}
+ *   onReady={screenTracking.onReady}
+ *   onStateChange={screenTracking.onStateChange}
+ * />
+ * ```
+ */
+export function datalyrScreenTracking(
+  navigationRef: _NavRef,
+  config?: _Config,
+): { onReady: () => void; onStateChange: () => void } {
+  return _createListeners(
+    navigationRef,
+    (screenName, properties) => datalyrExpo.screen(screenName, properties),
+    config,
+  );
+}
+
 // Export platform integrations
 export { appleSearchAdsIntegration } from './integrations';
 export type { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';

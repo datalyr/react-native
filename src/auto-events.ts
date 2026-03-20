@@ -195,37 +195,42 @@ export class AutoEventsManager {
   }
 
   /**
-   * Track automatic pageview
+   * Update session counters for a screen view.
+   * The actual pageview event is fired by the SDK's screen() method —
+   * this only updates internal session state to avoid double-firing.
    */
-  async trackScreenView(screenName: string, properties?: Record<string, any>): Promise<void> {
+  async recordScreenView(screenName: string): Promise<void> {
     try {
       if (!this.config.trackScreenViews) return;
-      
-      // Don't track the same screen twice in a row
-      if (this.lastScreenName === screenName) return;
-      
-      const screenProperties: Record<string, any> = {
-        screen_name: screenName,
-        previous_screen: this.lastScreenName,
-        timestamp: Date.now(),
-        ...properties,
-      };
 
-      // Add session data if available
+      // Don't count the same screen twice in a row
+      if (this.lastScreenName === screenName) return;
+
+      // Update session counters (no event fired here)
       if (this.currentSession) {
         this.currentSession.screenViews++;
-        screenProperties.session_id = this.currentSession.sessionId;
-        screenProperties.pageviews_in_session = this.currentSession.screenViews;
+        this.currentSession.lastActivity = Date.now();
       }
 
-      await this.trackEvent('pageview', screenProperties);
-      
       this.lastScreenName = screenName;
-      debugLog('Pageview tracked:', screenName);
+      debugLog('Screen view counted:', screenName);
 
     } catch (error) {
-      errorLog('Error tracking screen view:', error as Error);
+      errorLog('Error updating screen view:', error as Error);
     }
+  }
+
+  /**
+   * Get session data to enrich a pageview event.
+   * Called by the SDK's screen() method to attach session info.
+   */
+  getScreenViewEnrichment(): Record<string, any> | null {
+    if (!this.currentSession) return null;
+    return {
+      session_id: this.currentSession.sessionId,
+      pageviews_in_session: this.currentSession.screenViews,
+      previous_screen: this.lastScreenName,
+    };
   }
 
   /**

@@ -24,6 +24,13 @@ export * from './event-queue';
 // Also export the SDK class for advanced usage
 export { DatalyrSDK };
 
+// Export automatic screen tracking for React Navigation
+export {
+  datalyrScreenTracking,
+  createScreenTrackingListeners,
+} from './screen-tracking';
+export type { ScreenTrackingConfig, NavigationContainerRef } from './screen-tracking';
+
 // Export SKAdNetwork components
 export { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 export { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
