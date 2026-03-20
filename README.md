@@ -271,6 +271,8 @@ await Datalyr.trackAddPaymentInfo(true);
 
 ### Revenue Events
 
+> **Important:** If you use **Superwall** or **RevenueCat**, do not use `trackPurchase()`, `trackSubscription()`, or `trackRevenue()` for revenue attribution. These fire client-side before payment is confirmed, so trials and failed payments get counted as revenue. Use the [Superwall](https://docs.datalyr.com/integrations/superwall) or [RevenueCat](https://docs.datalyr.com/integrations/revenuecat) webhook integration for revenue events instead — they only fire when real money changes hands. Use the SDK for behavioral events only (`track('paywall_view')`, `track('trial_start')`, `screen()`, `identify()`, etc.).
+
 Track revenue with automatic SKAdNetwork encoding:
 
 ```typescript
