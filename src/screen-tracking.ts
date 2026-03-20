@@ -7,30 +7,22 @@
  * import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
  * import { datalyrScreenTracking } from '@datalyr/react-native';
  *
- * function App() {
- *   const navigationRef = useNavigationContainerRef();
- *   const screenTracking = datalyrScreenTracking(navigationRef);
+ * const navigationRef = useNavigationContainerRef();
+ * const screenTracking = datalyrScreenTracking(navigationRef);
  *
- *   return (
- *     <NavigationContainer
- *       ref={navigationRef}
- *       onReady={screenTracking.onReady}
- *       onStateChange={screenTracking.onStateChange}
- *     >
- *       {/* screens */}
- *     </NavigationContainer>
- *   );
- * }
+ * <NavigationContainer
+ *   ref={navigationRef}
+ *   onReady={screenTracking.onReady}
+ *   onStateChange={screenTracking.onStateChange}
+ * />
  * ```
  *
  * Note: If you enable automatic screen tracking, avoid also calling
  * `Datalyr.screen()` / `datalyr.screen()` manually for the same screens,
  * as this will produce duplicate events.
  *
- * For Expo Router (file-based routing), automatic tracking is not needed —
- * Expo Router uses React Navigation internally but does not expose
- * NavigationContainer. Use the `datalyr.screen()` method in your layout
- * files instead.
+ * For Expo Router (file-based routing), automatic tracking is not needed.
+ * Use the `datalyr.screen()` method in your layout files instead.
  */
 
 import { debugLog, errorLog } from './utils';
@@ -189,14 +181,21 @@ export function datalyrScreenTracking(
   navigationRef: NavigationContainerRef,
   config?: ScreenTrackingConfig,
 ): { onReady: () => void; onStateChange: () => void } {
-  // Import singleton directly from datalyr-sdk (not index.ts) to avoid circular deps.
-  // The DatalyrSDK module creates a module-level singleton — by the time onReady fires
-  // the SDK will be initialized.
-  const sdk = require('./datalyr-sdk').default;
+  // Lazily resolved reference to the SDK singleton.
+  // We avoid a top-level import to prevent circular deps (index.ts re-exports this file).
+  let sdk: { screen: (name: string, props?: Record<string, any>) => Promise<void> } | null = null;
+
+  const getSdk = () => {
+    if (!sdk) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      sdk = (require('./datalyr-sdk') as { default: typeof sdk }).default;
+    }
+    return sdk!;
+  };
 
   return createScreenTrackingListeners(
     navigationRef,
-    (screenName, properties) => sdk.screen(screenName, properties),
+    (screenName, properties) => getSdk().screen(screenName, properties),
     config,
   );
 }
