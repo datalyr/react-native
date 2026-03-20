@@ -187,6 +187,7 @@ export class HttpClient {
   private transformForServerAPI(payload: EventPayload): any {
     return {
       event: payload.eventName,
+      eventId: payload.eventId,
       userId: payload.userId || payload.visitorId,
       anonymousId: payload.anonymousId || payload.visitorId,
       properties: {
@@ -197,8 +198,8 @@ export class HttpClient {
       },
       context: {
         library: '@datalyr/react-native',
-        version: '1.5.0',
-        source: 'mobile_app',  // Explicitly set source for mobile
+        version: '1.6.2',
+        source: 'mobile_app',
         userProperties: payload.userProperties,
       },
       timestamp: payload.timestamp,
