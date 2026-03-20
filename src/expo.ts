@@ -89,6 +89,49 @@ export function datalyrScreenTracking(
   );
 }
 
+// Export automatic screen tracking for Expo Router
+export { useExpoRouterTracking } from './expo-router-tracking';
+export type { ExpoRouterTrackingConfig } from './expo-router-tracking';
+
+import { useExpoRouterTracking as _useExpoRouterTracking } from './expo-router-tracking';
+import type { ExpoRouterTrackingConfig as _ExpoRouterConfig } from './expo-router-tracking';
+
+// Lazy-resolved expo-router hook. Resolved once at first call, not inside the
+// hook body, so that hook call count stays stable across renders.
+let _usePathname: (() => string) | null = null;
+function getUsePathname(): () => string {
+  if (!_usePathname) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    _usePathname = (require('expo-router') as { usePathname: () => string }).usePathname;
+  }
+  return _usePathname;
+}
+
+/**
+ * Drop-in screen tracking for Expo Router — wires to the Expo Datalyr singleton.
+ *
+ * ```tsx
+ * // app/_layout.tsx
+ * import { useDatalyrScreenTracking } from '@datalyr/react-native/expo';
+ *
+ * export default function RootLayout() {
+ *   useDatalyrScreenTracking();
+ *   return <Stack />;
+ * }
+ * ```
+ *
+ * Screen names are raw pathnames (e.g. "/onboarding/paywall").
+ *
+ * @param config  Optional path transforms and filters.
+ */
+export function useDatalyrScreenTracking(config?: _ExpoRouterConfig): void {
+  _useExpoRouterTracking(
+    (screenName, properties) => datalyrExpo.screen(screenName, properties),
+    getUsePathname(),
+    config,
+  );
+}
+
 // Export platform integrations
 export { appleSearchAdsIntegration } from './integrations';
 export type { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';

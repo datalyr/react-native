@@ -222,13 +222,14 @@ export class AutoEventsManager {
 
   /**
    * Get session data to enrich a pageview event.
-   * Called by the SDK's screen() method to attach session info.
+   * Called by the SDK's screen() method *before* recordScreenView(),
+   * so we add 1 to account for the current view being tracked.
    */
   getScreenViewEnrichment(): Record<string, any> | null {
     if (!this.currentSession) return null;
     return {
       session_id: this.currentSession.sessionId,
-      pageviews_in_session: this.currentSession.screenViews,
+      pageviews_in_session: this.currentSession.screenViews + 1,
       previous_screen: this.lastScreenName,
     };
   }

@@ -545,22 +545,43 @@ The API is identical to the React Navigation example above.
 
 ### Expo Router
 
-Expo Router does not expose a `NavigationContainer`, so automatic tracking is not available. Use `datalyr.screen()` manually in your layout files instead:
+For Expo Router apps, use the `useDatalyrScreenTracking` hook in your root layout. It automatically tracks every route change as a `pageview` event:
 
 ```tsx
-import { datalyr } from '@datalyr/react-native/expo';
-import { usePathname } from 'expo-router';
-import { useEffect } from 'react';
+// app/_layout.tsx
+import { useDatalyrScreenTracking } from '@datalyr/react-native/expo';
+import { Stack } from 'expo-router';
 
 export default function RootLayout() {
-  const pathname = usePathname();
-
-  useEffect(() => {
-    datalyr.screen(pathname);
-  }, [pathname]);
-
-  return <Slot />;
+  useDatalyrScreenTracking();
+  return <Stack />;
 }
+```
+
+Screen names are raw pathnames (e.g. `/onboarding/paywall`, `/(app)/chat`). You can map specific paths to friendly names:
+
+```tsx
+useDatalyrScreenTracking({
+  screenNames: {
+    '/onboarding/paywall': 'Paywall',
+    '/(app)/chat': 'Chat',
+  },
+});
+```
+
+Additional options:
+
+```tsx
+useDatalyrScreenTracking({
+  // Map specific paths to friendly names (checked first)
+  screenNames: { '/': 'Home' },
+
+  // Transform all other pathnames (e.g. strip route groups)
+  transformPathname: (path) => path.replace(/\(.*?\)\//g, ''),
+
+  // Skip tracking for certain paths
+  shouldTrackPath: (path) => !path.startsWith('/modal'),
+});
 ```
 
 ### Configuration
