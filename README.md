@@ -150,7 +150,7 @@ await Datalyr.initialize({
   debug?: boolean,                         // Console logging (default: false)
 
   // Network
-  endpoint?: string,                       // API endpoint URL (default: 'https://api.datalyr.com')
+  endpoint?: string,                       // API endpoint URL (default: 'https://ingest.datalyr.com/track')
   useServerTracking?: boolean,             // Use server-side tracking (default: true)
   maxRetries?: number,                     // Max retry attempts for failed requests (default: 3)
   retryDelay?: number,                     // Delay between retries in ms (default: 1000)
