@@ -49,12 +49,12 @@ export interface DatalyrConfig {
   debug?: boolean;
 
   /**
-   * API endpoint URL. Default: 'https://api.datalyr.com'
+   * API endpoint URL. Default: 'https://ingest.datalyr.com/track'
    * @deprecated Use `endpoint` instead
    */
   apiUrl?: string;
 
-  /** API endpoint URL. Default: 'https://api.datalyr.com' */
+  /** API endpoint URL. Default: 'https://ingest.datalyr.com/track' */
   endpoint?: string;
 
   /** Use server-side tracking. Default: true */

@@ -26,8 +26,8 @@ export class HttpClient {
 
   constructor(endpoint: string, config: HttpClientConfig) {
     // Use server-side API if flag is set (default to true for v1.0.0)
-    this.endpoint = config.useServerTracking !== false 
-      ? 'https://api.datalyr.com'
+    this.endpoint = config.useServerTracking !== false
+      ? 'https://ingest.datalyr.com/track'
       : endpoint;
     this.config = config;
   }

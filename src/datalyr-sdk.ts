@@ -54,7 +54,7 @@ export class DatalyrSDK {
         workspaceId: '',
         apiKey: '',
         debug: false,
-        endpoint: 'https://api.datalyr.com', // Updated to server-side API
+        endpoint: 'https://ingest.datalyr.com/track',
         useServerTracking: true, // Default to server-side
         maxRetries: 3,
         retryDelay: 1000,
@@ -99,7 +99,7 @@ export class DatalyrSDK {
       this.state.config = { ...this.state.config, ...config };
 
       // Initialize HTTP client with server-side API
-      this.httpClient = new HttpClient(this.state.config.endpoint || 'https://api.datalyr.com', {
+      this.httpClient = new HttpClient(this.state.config.endpoint || 'https://ingest.datalyr.com/track', {
         maxRetries: this.state.config.maxRetries || 3,
         retryDelay: this.state.config.retryDelay || 1000,
         timeout: this.state.config.timeout || 15000,
@@ -425,11 +425,10 @@ export class DatalyrSDK {
     try {
       debugLog('Fetching deferred web attribution via IP matching...');
 
-      const baseUrl = this.state.config.endpoint || 'https://api.datalyr.com';
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
 
-      const response = await fetch(`${baseUrl}/attribution/deferred-lookup`, {
+      const response = await fetch('https://api.datalyr.com/attribution/deferred-lookup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

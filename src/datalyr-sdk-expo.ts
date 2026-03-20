@@ -55,7 +55,7 @@ export class DatalyrSDKExpo {
         workspaceId: '',
         apiKey: '',
         debug: false,
-        endpoint: 'https://api.datalyr.com',
+        endpoint: 'https://ingest.datalyr.com/track',
         useServerTracking: true,
         maxRetries: 3,
         retryDelay: 1000,
@@ -92,7 +92,7 @@ export class DatalyrSDKExpo {
 
       this.state.config = { ...this.state.config, ...config };
 
-      this.httpClient = new HttpClient(this.state.config.endpoint || 'https://api.datalyr.com', {
+      this.httpClient = new HttpClient(this.state.config.endpoint || 'https://ingest.datalyr.com/track', {
         maxRetries: this.state.config.maxRetries || 3,
         retryDelay: this.state.config.retryDelay || 1000,
         timeout: this.state.config.timeout || 15000,
