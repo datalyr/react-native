@@ -47,6 +47,9 @@ export class DatalyrSDKExpo {
   private cachedAdvertiserInfo: any = null;
   private static conversionEncoder?: ConversionValueEncoder;
   private static debugEnabled = false;
+  /** Events that arrived before initialize() completed. Flushed once init finishes. */
+  private preInitQueue: Array<{ eventName: string; eventData?: EventData }> = [];
+  private static readonly PRE_INIT_QUEUE_MAX = 50;
 
   constructor() {
     this.state = {
@@ -192,11 +195,21 @@ export class DatalyrSDKExpo {
 
       this.state.initialized = true;
 
+      // Flush any events that were queued before init completed (e.g. screen tracking)
+      if (this.preInitQueue.length > 0) {
+        debugLog(`Flushing ${this.preInitQueue.length} pre-init event(s)`);
+        const queued = [...this.preInitQueue];
+        this.preInitQueue = [];
+        for (const { eventName, eventData } of queued) {
+          await this.track(eventName, eventData);
+        }
+      }
+
       if (attributionManager.isInstall()) {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS,
-          sdk_version: '1.7.1',
+          sdk_version: '1.7.2',
           sdk_variant: 'expo',
           ...installData,
         });
@@ -218,7 +231,12 @@ export class DatalyrSDKExpo {
   async track(eventName: string, eventData?: EventData): Promise<void> {
     try {
       if (!this.state.initialized) {
-        errorLog('SDK not initialized. Call initialize() first.');
+        if (this.preInitQueue.length < DatalyrSDKExpo.PRE_INIT_QUEUE_MAX) {
+          debugLog(`Queuing pre-init event: ${eventName}`);
+          this.preInitQueue.push({ eventName, eventData });
+        } else {
+          errorLog('Pre-init event queue full, dropping event:', eventName as unknown as Error);
+        }
         return;
       }
 
@@ -792,7 +810,7 @@ export class DatalyrSDKExpo {
         carrier: deviceInfo.carrier,
         network_type: networkType,
         timestamp: Date.now(),
-        sdk_version: '1.7.1',
+        sdk_version: '1.7.2',
         sdk_variant: 'expo',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {

@@ -45,6 +45,9 @@ export class DatalyrSDK {
   private cachedAdvertiserInfo: any = null;
   private static conversionEncoder?: ConversionValueEncoder;
   private static debugEnabled = false;
+  /** Events that arrived before initialize() completed. Flushed once init finishes. */
+  private preInitQueue: Array<{ eventName: string; eventData?: EventData }> = [];
+  private static readonly PRE_INIT_QUEUE_MAX = 50;
 
   constructor() {
     // Initialize state with defaults
@@ -217,6 +220,16 @@ export class DatalyrSDK {
       // SDK initialized successfully - set state before tracking install event
       this.state.initialized = true;
 
+      // Flush any events that were queued before init completed (e.g. screen tracking)
+      if (this.preInitQueue.length > 0) {
+        debugLog(`Flushing ${this.preInitQueue.length} pre-init event(s)`);
+        const queued = [...this.preInitQueue];
+        this.preInitQueue = [];
+        for (const { eventName, eventData } of queued) {
+          await this.track(eventName, eventData);
+        }
+      }
+
       // Check for app install (after SDK is marked as initialized)
       if (attributionManager.isInstall()) {
         // iOS: Attempt deferred web-to-app attribution via IP matching before tracking install
@@ -228,7 +241,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.7.1',
+          sdk_version: '1.7.2',
           ...installData,
         });
       }
@@ -252,7 +265,13 @@ export class DatalyrSDK {
   async track(eventName: string, eventData?: EventData): Promise<void> {
     try {
       if (!this.state.initialized) {
-        errorLog('SDK not initialized. Call initialize() first.');
+        // Queue events that arrive before init completes instead of dropping them
+        if (this.preInitQueue.length < DatalyrSDK.PRE_INIT_QUEUE_MAX) {
+          debugLog(`Queuing pre-init event: ${eventName}`);
+          this.preInitQueue.push({ eventName, eventData });
+        } else {
+          errorLog('Pre-init event queue full, dropping event:', eventName as unknown as Error);
+        }
         return;
       }
 
@@ -1086,7 +1105,7 @@ export class DatalyrSDK {
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
         timestamp: Date.now(),
-        sdk_version: '1.7.1',
+        sdk_version: '1.7.2',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
           idfa: advertiserInfo.idfa,
