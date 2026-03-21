@@ -847,7 +847,7 @@ A real landing page with a download button. Better ad platform compliance, highe
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Download Your App</title>
-  <script src="https://cdn.datalyr.com/dl.js" data-workspace="YOUR_WORKSPACE_ID"></script>
+  <script src="https://track.datalyr.com/dl.js" data-workspace-id="YOUR_WORKSPACE_ID"></script>
 </head>
 <body>
   <h1>Download Our App</h1>
@@ -882,7 +882,7 @@ Instant redirect -- no visible content, user goes straight to app store.
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="https://cdn.datalyr.com/dl.js" data-workspace="YOUR_WORKSPACE_ID"></script>
+  <script src="https://track.datalyr.com/dl.js" data-workspace-id="YOUR_WORKSPACE_ID"></script>
   <script>
     window.addEventListener('DOMContentLoaded', function() {
       var isAndroid = /android/i.test(navigator.userAgent);
