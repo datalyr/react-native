@@ -12,7 +12,6 @@ Mobile analytics and attribution SDK for React Native and Expo. Track events, id
   - [Custom Events](#custom-events)
   - [Screen Views](#screen-views)
   - [E-Commerce Events](#e-commerce-events)
-  - [Revenue Events](#revenue-events)
 - [User Identity](#user-identity)
   - [Anonymous ID](#anonymous-id)
   - [Identifying Users](#identifying-users)
@@ -181,8 +180,7 @@ await Datalyr.initialize({
 interface AutoEventConfig {
   trackSessions?: boolean;       // Track session_start / session_end (default: true)
   trackScreenViews?: boolean;    // Enable screen view events via screen() (default: true)
-  trackAppUpdates?: boolean;     // Track app_update events (default: true)
-  trackPerformance?: boolean;    // Track performance metrics (default: false)
+  trackAppInstall?: boolean;     // Track app_install on first open (default: true)
   sessionTimeoutMs?: number;     // Session timeout in ms
 }
 ```
@@ -271,25 +269,7 @@ await Datalyr.trackAddPaymentInfo(true);
 
 ### Revenue Events
 
-> **Important:** If you use **Superwall** or **RevenueCat**, do not use `trackPurchase()`, `trackSubscription()`, or `trackRevenue()` for revenue attribution. These fire client-side before payment is confirmed, so trials and failed payments get counted as revenue. Use the [Superwall](https://docs.datalyr.com/integrations/superwall) or [RevenueCat](https://docs.datalyr.com/integrations/revenuecat) webhook integration for revenue events instead — they only fire when real money changes hands. Use the SDK for behavioral events only (`track('paywall_view')`, `track('trial_start')`, `screen()`, `identify()`, etc.).
-
-Track revenue with automatic SKAdNetwork encoding:
-
-```typescript
-await Datalyr.trackRevenue('in_app_purchase', {
-  value: 4.99,
-  currency: 'USD',
-  product_id: 'gems_500',
-});
-```
-
-### App Update Tracking
-
-Manually track version changes:
-
-```typescript
-await Datalyr.trackAppUpdate('1.0.0', '1.1.0');
-```
+> **Important:** If you use **Superwall** or **RevenueCat**, do not track revenue client-side. Use the [Superwall](https://docs.datalyr.com/integrations/superwall) or [RevenueCat](https://docs.datalyr.com/integrations/revenuecat) webhook integration instead — they only fire when real money changes hands. Use the SDK for behavioral events only (`track('paywall_view')`, `track('trial_start')`, `screen()`, `identify()`, etc.).
 
 ---
 
@@ -636,10 +616,6 @@ await Datalyr.initialize({
 | Event | Trigger |
 |-------|---------|
 | `app_install` | First app open |
-| `app_open` | App launch |
-| `app_background` | App enters background |
-| `app_foreground` | App returns to foreground |
-| `app_update` | App version changes |
 | `session_start` | New session begins |
 | `session_end` | Session expires (30 min inactivity) |
 
@@ -1120,7 +1096,6 @@ All methods are static on the `Datalyr` class unless noted otherwise.
 | `trackWithSKAdNetwork(event, properties?)` | Track event with SKAN conversion value encoding |
 | `trackPurchase(value, currency?, productId?)` | Track a purchase |
 | `trackSubscription(value, currency?, plan?)` | Track a subscription |
-| `trackRevenue(eventName, properties?)` | Track a revenue event |
 | `trackAddToCart(value, currency?, productId?, productName?)` | Track add-to-cart |
 | `trackViewContent(contentId?, contentName?, contentType?, value?, currency?)` | Track content view |
 | `trackInitiateCheckout(value, currency?, numItems?, productIds?)` | Track checkout start |
@@ -1128,7 +1103,6 @@ All methods are static on the `Datalyr` class unless noted otherwise.
 | `trackSearch(query, resultIds?)` | Track a search |
 | `trackLead(value?, currency?)` | Track a lead |
 | `trackAddPaymentInfo(success?)` | Track payment info added |
-| `trackAppUpdate(previousVersion, currentVersion)` | Track an app version update |
 
 ### User Identity
 
