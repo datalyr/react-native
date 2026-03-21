@@ -588,6 +588,53 @@ Datalyr sends conversions to ad platforms **server-side** via their APIs (Meta C
 3. Authorize your Google Ads account
 4. Select your **conversion actions**
 
+### Apple Search Ads
+
+Apple Search Ads attribution is handled automatically by the Datalyr SDK. No dashboard setup required — the SDK uses Apple's AdServices framework to fetch attribution data on first launch (iOS 14.3+).
+
+**What happens automatically:**
+- On first app launch, the SDK checks if the install came from an Apple Search Ads campaign
+- If attributed, the data is included in all events with the `asa_` prefix
+- No additional code or configuration needed
+
+**Access the data in your code:**
+```javascript
+const asaAttribution = Datalyr.getAppleSearchAdsAttribution();
+
+if (asaAttribution?.attribution) {
+  console.log(asaAttribution.campaignId);    // Campaign ID
+  console.log(asaAttribution.campaignName);  // Campaign name
+  console.log(asaAttribution.adGroupId);     // Ad group ID
+  console.log(asaAttribution.adGroupName);   // Ad group name
+  console.log(asaAttribution.keyword);       // Search keyword that triggered the ad
+  console.log(asaAttribution.keywordId);     // Keyword ID
+  console.log(asaAttribution.clickDate);     // Click date
+  console.log(asaAttribution.conversionType); // "Download" or "Redownload"
+  console.log(asaAttribution.orgId);         // Organization ID
+  console.log(asaAttribution.orgName);       // Organization name
+  console.log(asaAttribution.region);        // Region/country code
+}
+```
+
+**Fields automatically added to all events:**
+
+| Event Field | Description |
+|---|---|
+| `asa_campaign_id` | Campaign ID |
+| `asa_campaign_name` | Campaign name |
+| `asa_ad_group_id` | Ad group ID |
+| `asa_ad_group_name` | Ad group name |
+| `asa_keyword_id` | Keyword ID |
+| `asa_keyword` | Search keyword |
+| `asa_org_id` | Organization ID |
+| `asa_org_name` | Organization name |
+| `asa_click_date` | Date of the ad click |
+| `asa_conversion_type` | Conversion type |
+
+These fields are included automatically — you don't need to pass them manually. They flow through to your conversion rules and postbacks so your Apple Search Ads campaigns get proper attribution.
+
+> **Note:** Apple Search Ads attribution is iOS only. On Android, this returns `null`.
+
 **Links:** [Meta Ads](https://docs.datalyr.com/integrations/meta-ads) | [TikTok Ads](https://docs.datalyr.com/integrations/tiktok-ads) | [Google Ads](https://docs.datalyr.com/integrations/google-ads)
 
 ---
