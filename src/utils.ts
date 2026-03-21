@@ -11,7 +11,7 @@ try {
 import { v4 as uuidv4 } from 'uuid';
 import 'react-native-get-random-values'; // Required for uuid
 
-import { DeviceInfo as DeviceInfoType, FingerprintData } from './types';
+import { DeviceInfo as DeviceInfoType, DeviceContext } from './types';
 
 // Storage Keys
 export const STORAGE_KEYS = {
@@ -250,9 +250,9 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
 };
 
 /**
- * Create fingerprint data for attribution
+ * Create device context for attribution
  */
-export const createFingerprintData = async (): Promise<FingerprintData> => {
+export const createDeviceContext = async (): Promise<DeviceContext> => {
   const deviceInfo = await getDeviceInfo();
   
   return {

@@ -224,8 +224,8 @@ export const getOrCreateSessionId = async (): Promise<string> => {
   }
 };
 
-// Fingerprint data creation using Expo APIs
-export const createFingerprintData = async () => {
+// Device context creation using Expo APIs
+export const createDeviceContext = async () => {
   try {
     const deviceInfo = await getDeviceInfo();
     
@@ -243,7 +243,7 @@ export const createFingerprintData = async () => {
       },
     };
   } catch (error) {
-    errorLog('Error creating fingerprint data:', error as Error);
+    errorLog('Error creating device context:', error as Error);
     const deviceInfo = await getDeviceInfo();
     return {
       deviceId: deviceInfo.deviceId,

@@ -133,7 +133,7 @@ export interface EventData {
   network_type?: string;
 }
 
-export interface FingerprintData {
+export interface DeviceContext {
   deviceId?: string;
   deviceInfo?: {
     model: string;
@@ -155,7 +155,7 @@ export interface EventPayload {
   eventId: string;
   eventName: string;
   eventData?: EventData;
-  fingerprintData?: FingerprintData;
+  deviceContext?: DeviceContext;
   source: 'mobile_app';
   timestamp: string;
   userId?: string;

@@ -13,7 +13,7 @@ import {
   getOrCreateVisitorId,
   getOrCreateAnonymousId,
   getOrCreateSessionId,
-  createFingerprintData,
+  createDeviceContext,
   generateUUID,
   getDeviceInfo,
   getNetworkType,
@@ -241,7 +241,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.7.2',
+          sdk_version: '1.7.5',
           ...installData,
         });
       }
@@ -1049,7 +1049,7 @@ export class DatalyrSDK {
    */
   private async createEventPayload(eventName: string, eventData?: EventData): Promise<EventPayload> {
     const deviceInfo = await getDeviceInfo();
-    const fingerprintData = await createFingerprintData();
+    const deviceContext = await createDeviceContext();
     const attributionData = attributionManager.getAttributionData();
 
     // Get Apple Search Ads attribution if available
@@ -1097,7 +1097,7 @@ export class DatalyrSDK {
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
         timestamp: Date.now(),
-        sdk_version: '1.7.2',
+        sdk_version: '1.7.5',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
           idfa: advertiserInfo.idfa,
@@ -1111,7 +1111,7 @@ export class DatalyrSDK {
         // Apple Search Ads attribution
         ...asaData,
       },
-      fingerprintData,
+      deviceContext,
       source: 'mobile_app',
       timestamp: new Date().toISOString(),
     };

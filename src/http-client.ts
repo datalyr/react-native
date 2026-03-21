@@ -194,11 +194,11 @@ export class HttpClient {
         ...payload.eventData,
         sessionId: payload.sessionId,
         source: payload.source || 'mobile_app',
-        fingerprint: payload.fingerprintData,
+        fingerprint: payload.deviceContext,
       },
       context: {
         library: '@datalyr/react-native',
-        version: '1.6.2',
+        version: '1.7.5',
         source: 'mobile_app',
         userProperties: payload.userProperties,
       },

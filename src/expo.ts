@@ -38,7 +38,7 @@ export {
   getOrCreateVisitorId,
   getOrCreateAnonymousId,
   getOrCreateSessionId,
-  createFingerprintData,
+  createDeviceContext,
   getNetworkType,
   validateEventName,
   validateEventData,

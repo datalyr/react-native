@@ -3,7 +3,7 @@
  * Both utils.ts and utils-expo.ts implement this interface
  */
 
-import { DeviceInfo, FingerprintData } from './types';
+import { DeviceInfo, DeviceContext } from './types';
 
 export interface SDKUtils {
   STORAGE_KEYS: {
@@ -22,7 +22,7 @@ export interface SDKUtils {
   getOrCreateAnonymousId: () => Promise<string>;
   getOrCreateSessionId: () => Promise<string>;
   getDeviceInfo: () => Promise<DeviceInfo>;
-  createFingerprintData: () => Promise<FingerprintData>;
+  createDeviceContext: () => Promise<DeviceContext>;
   getNetworkType: () => string | Promise<string>;
   validateEventName: (eventName: string) => boolean;
   validateEventData: (eventData: any) => boolean;
