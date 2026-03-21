@@ -489,15 +489,10 @@ export class DatalyrSDKExpo {
   }
 
   async trackAppUpdate(previousVersion: string, currentVersion: string): Promise<void> {
-    if (this.autoEventsManager) {
-      await this.autoEventsManager.trackAppUpdate(previousVersion, currentVersion);
-    }
-  }
-
-  async trackRevenue(eventName: string, properties?: EventData): Promise<void> {
-    if (this.autoEventsManager) {
-      await this.autoEventsManager.trackRevenueEvent(eventName, properties);
-    }
+    await this.track('app_update', {
+      previous_version: previousVersion,
+      current_version: currentVersion,
+    });
   }
 
   updateAutoEventsConfig(config: Partial<AutoEventConfig>): void {
@@ -1009,10 +1004,6 @@ export class DatalyrExpo {
 
   static async trackAppUpdate(previousVersion: string, currentVersion: string): Promise<void> {
     await datalyrExpo.trackAppUpdate(previousVersion, currentVersion);
-  }
-
-  static async trackRevenue(eventName: string, properties?: EventData): Promise<void> {
-    await datalyrExpo.trackRevenue(eventName, properties);
   }
 
   static updateAutoEventsConfig(config: Partial<AutoEventConfig>): void {

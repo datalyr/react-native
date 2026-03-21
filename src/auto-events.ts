@@ -20,8 +20,6 @@ export class AutoEventsManager {
   private config: AutoEventConfig;
   private currentSession: SessionData | null = null;
   private lastScreenName: string | null = null;
-  private performanceMarks: Map<string, number> = new Map();
-  
   // Event tracking callback
   private trackEvent: (eventName: string, properties: Record<string, any>) => Promise<void>;
 
@@ -53,10 +51,8 @@ export class AutoEventsManager {
         this.setupSessionMonitoring();
       }
 
-      // Track app launch performance
-      if (this.config.trackPerformance) {
-        this.trackAppLaunchTime();
-      }
+      // Auto events: session_start, session_end only
+      // app_install is tracked by the SDK directly, not via AutoEventsManager
 
       debugLog('Automatic events manager initialized');
       
@@ -237,68 +233,9 @@ export class AutoEventsManager {
   /**
    * Track app launch performance
    */
-  private trackAppLaunchTime(): void {
-    try {
-      // Mark app launch start
-      this.performanceMarks.set('app_launch_start', Date.now());
-      
-      // Track when app is fully loaded (after a short delay)
-      setTimeout(async () => {
-        const launchStart = this.performanceMarks.get('app_launch_start');
-        if (launchStart) {
-          const launchTime = Date.now() - launchStart;
-          
-          await this.trackEvent('app_launch_performance', {
-            launch_time_ms: launchTime,
-            launch_time_seconds: launchTime / 1000,
-          });
-          
-          debugLog('App launch time tracked:', launchTime);
-        }
-      }, 2000); // Wait 2 seconds for app to fully load
-
-    } catch (error) {
-      errorLog('Error tracking app launch performance:', error as Error);
-    }
-  }
-
-  /**
-   * Track automatic app update
-   */
-  async trackAppUpdate(previousVersion: string, currentVersion: string): Promise<void> {
-    try {
-      await this.trackEvent('app_update', {
-        previous_version: previousVersion,
-        current_version: currentVersion,
-        timestamp: Date.now(),
-      });
-      
-      debugLog('App update tracked:', { from: previousVersion, to: currentVersion });
-    } catch (error) {
-      errorLog('Error tracking app update:', error as Error);
-    }
-  }
-
-  /**
-   * Track revenue event (purchases, subscriptions)
-   */
-  async trackRevenueEvent(eventName: string, properties?: Record<string, any>): Promise<void> {
-    try {
-      await this.trackEvent('revenue_event', {
-        event_name: eventName,
-        session_id: this.currentSession?.sessionId,
-        timestamp: Date.now(),
-        ...properties,
-      });
-      
-      debugLog('Revenue event tracked:', eventName);
-    } catch (error) {
-      errorLog('Error tracking revenue event:', error as Error);
-    }
-  }
-
   /**
    * Track custom automatic event (called by SDK)
+   * Updates session counters for activity tracking
    */
   async onEvent(eventName: string): Promise<void> {
     try {
@@ -306,12 +243,6 @@ export class AutoEventsManager {
         this.currentSession.events++;
         this.currentSession.lastActivity = Date.now();
       }
-
-      // Track specific automatic events based on event name
-      if (eventName === 'purchase' || eventName === 'subscription' || eventName.includes('purchase')) {
-        await this.trackRevenueEvent(eventName);
-      }
-
     } catch (error) {
       errorLog('Error handling automatic event:', error as Error);
     }
