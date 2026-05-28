@@ -14,7 +14,10 @@ const ATTRIBUTION_PARAMS = [
   
   // Google Ads
   'gclid', 'wbraid', 'gbraid', 'dclid',
-  
+
+  // OpenAI Ads
+  'oppref',
+
   // UTM Parameters (Standard)
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
   'utm_id', 'utm_source_platform', 'utm_creative_format', 'utm_marketing_tactic',
@@ -54,8 +57,9 @@ export interface AttributionData {
   
   // Platform Click IDs
   fbclid?: string;                // Facebook Click ID
-  ttclid?: string;                // TikTok Click ID  
+  ttclid?: string;                // TikTok Click ID
   gclid?: string;                 // Google Click ID
+  oppref?: string;                // OpenAI Ads Click ID
   twclid?: string;                // Twitter Click ID
   li_click_id?: string;           // LinkedIn Click ID
   msclkid?: string;               // Microsoft Click ID
@@ -332,6 +336,9 @@ export class AttributionManager {
             case 'gclid':
               this.attributionData.gclid = value;
               break;
+            case 'oppref':
+              this.attributionData.oppref = value;
+              break;
             case 'twclid':
               this.attributionData.twclid = value;
               break;
@@ -459,6 +466,9 @@ export class AttributionManager {
     if (!this.attributionData.ttclid && webAttribution.ttclid) {
       this.attributionData.ttclid = webAttribution.ttclid;
     }
+    if (!this.attributionData.oppref && webAttribution.oppref) {
+      this.attributionData.oppref = webAttribution.oppref;
+    }
 
     // Merge UTM parameters
     if (!this.attributionData.utm_source && webAttribution.utm_source) {
@@ -519,6 +529,7 @@ export class AttributionManager {
     if (this.attributionData.fbclid) clickIds.push(`fbclid: ${this.attributionData.fbclid}`);
     if (this.attributionData.ttclid) clickIds.push(`ttclid: ${this.attributionData.ttclid}`);
     if (this.attributionData.gclid) clickIds.push(`gclid: ${this.attributionData.gclid}`);
+    if (this.attributionData.oppref) clickIds.push(`oppref: ${this.attributionData.oppref}`);
     
     return {
       hasAttribution: Object.keys(this.attributionData).length > 2, // More than just install times
