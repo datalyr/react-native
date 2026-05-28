@@ -377,7 +377,7 @@ Captured parameters:
 | Type | Parameters |
 |------|------------|
 | UTM | `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` |
-| Click IDs | `fbclid`, `gclid`, `ttclid`, `twclid`, `li_click_id`, `msclkid` |
+| Click IDs | `fbclid`, `gclid`, `ttclid`, `oppref`, `twclid`, `li_click_id`, `msclkid` |
 | Campaign | `campaign_id`, `adset_id`, `ad_id` |
 
 ### Manual Attribution
@@ -704,6 +704,20 @@ Conversions are sent to Google via the [Google Ads API](https://developers.googl
 
 No Google SDK needed in your app beyond the Play Install Referrer (already included for Android).
 
+### OpenAI Ads
+
+Conversions are sent to OpenAI via the [OpenAI Conversions API](https://developers.openai.com/ads/conversions-api).
+
+**What the SDK does:** Captures `oppref` from ad click URLs (and the `__oppref` first-party cookie if it's present on shared web sessions). Forwards to the Datalyr backend on every event.
+
+**What the backend does:** Maps datalyr events to one of OpenAI's 11 standard event types (`order_created`, `checkout_started`, `items_added`, etc.), or sends as `custom` with a normalized `custom_event_name`. Money is converted to cents, timestamps to ms, and PII is SHA-256 hashed.
+
+**Setup:**
+1. Connect your OpenAI Ads account in the Datalyr dashboard (Settings > Connections > OpenAI Ads — paste your API key + pixel ID)
+2. Create postback rules mapping your events to OpenAI types (e.g. `purchase` → `order_created`)
+
+No OpenAI SDK needed in your app — server-side only.
+
 ### Apple Search Ads
 
 Attribution for users who install from Apple Search Ads (iOS 14.3+). Automatically fetched on initialization.
@@ -801,7 +815,7 @@ Run mobile app ads through web campaigns (Meta Sales, TikTok Traffic, Google Ads
 ### How It Works
 
 1. User clicks your ad -> lands on a page on your domain with the Datalyr web SDK (`dl.js`)
-2. SDK captures attribution (fbclid, ttclid, gclid, UTMs, ad cookies like `_fbp`/`_fbc`/`_ttp`)
+2. SDK captures attribution (fbclid, ttclid, gclid, oppref, UTMs, ad cookies like `_fbp`/`_fbc`/`_ttp`/`__oppref`)
 3. User redirects to app store (via button click or auto-redirect)
 4. User installs app -> mobile SDK matches via Play Store referrer (Android, ~95%) or IP matching (iOS, ~90%+)
 5. In-app events fire -> conversions sent to Meta/TikTok/Google server-side via postbacks
