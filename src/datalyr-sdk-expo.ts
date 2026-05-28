@@ -215,7 +215,7 @@ export class DatalyrSDKExpo {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS,
-          sdk_version: '1.7.5',
+          sdk_version: '1.7.6',
           sdk_variant: 'expo',
           ...installData,
         });
@@ -897,7 +897,7 @@ export class DatalyrSDKExpo {
         carrier: deviceInfo.carrier,
         network_type: networkType,
         timestamp: Date.now(),
-        sdk_version: '1.7.5',
+        sdk_version: '1.7.6',
         sdk_variant: 'expo',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
