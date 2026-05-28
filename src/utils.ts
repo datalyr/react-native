@@ -36,6 +36,31 @@ export const generateUUID = (): string => {
 };
 
 /**
+ * Derive an ISO-3166-1 alpha-2 country code from a BCP-47 locale tag.
+ *
+ * Server webhooks (Superwall/RevenueCat) have NULL geo on their own row — only
+ * the matched web visitor's lander pageview carries geo via the bridge. For
+ * users who land directly in-app (no web prelander), there's no bridge to
+ * inherit from. Device locale ('en-US', 'pt_BR') is the only zero-config
+ * country signal the SDK can stamp; meta.js USER_DATA_PATHS.country picks up
+ * top-level `country` as its first match key, so this hash slots into CAPI's
+ * `country` user_data field without further changes.
+ *
+ * Returns null when the locale doesn't carry a region (e.g. 'en' alone), so
+ * the caller can decide whether to omit or fall back.
+ */
+export const deriveCountryFromLocale = (locale: string | undefined | null): string | null => {
+  if (!locale) return null;
+  // BCP-47 uses '-', POSIX uses '_'; some platforms return either.
+  const region = locale.split(/[-_]/)[1];
+  if (!region) return null;
+  const upper = region.toUpperCase();
+  // ISO-3166-1 alpha-2 is exactly two letters. Reject script tags ('Latn'),
+  // UN M.49 numerics ('001'), and malformed input.
+  return /^[A-Z]{2}$/.test(upper) ? upper : null;
+};
+
+/**
  * Generate a session ID with timestamp
  */
 export const generateSessionId = (): string => {

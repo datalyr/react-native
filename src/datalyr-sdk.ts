@@ -17,6 +17,7 @@ import {
   generateUUID,
   getDeviceInfo,
   getNetworkType,
+  deriveCountryFromLocale,
   validateEventName,
   validateEventData,
   debugLog,
@@ -1094,6 +1095,13 @@ export class DatalyrSDK {
         screen_height: deviceInfo.screenHeight,
         locale: deviceInfo.locale,
         timezone: deviceInfo.timezone,
+        // ISO-3166-1 alpha-2 derived from device locale ('en-US' → 'US'). For
+        // users who skip the web lander entirely (no web→app bridge to inherit
+        // geo from), this is the only zero-config country signal — meta.js
+        // USER_DATA_PATHS.country picks it up at the top level and hashes for
+        // CAPI's `country` match key. Bridge-recovered geo still overrides
+        // when present (server-side spread order).
+        country: deriveCountryFromLocale(deviceInfo.locale) || undefined,
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
         timestamp: Date.now(),

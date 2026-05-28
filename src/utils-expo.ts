@@ -38,6 +38,20 @@ export const generateUUID = (): string => {
   return uuidv4();
 };
 
+/**
+ * Derive an ISO-3166-1 alpha-2 country code from a BCP-47 locale tag.
+ * Mirrors utils.ts — see that file for the rationale. Kept duplicated rather
+ * than re-exported because the Expo build deliberately doesn't pull from
+ * utils.ts (which transitively imports react-native-device-info).
+ */
+export const deriveCountryFromLocale = (locale: string | undefined | null): string | null => {
+  if (!locale) return null;
+  const region = locale.split(/[-_]/)[1];
+  if (!region) return null;
+  const upper = region.toUpperCase();
+  return /^[A-Z]{2}$/.test(upper) ? upper : null;
+};
+
 // Storage utilities
 export const Storage = {
   async getItem<T>(key: string): Promise<T | null> {

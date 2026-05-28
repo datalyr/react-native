@@ -20,6 +20,7 @@ import {
   generateUUID,
   getDeviceInfo,
   getNetworkType,
+  deriveCountryFromLocale,
   validateEventName,
   validateEventData,
   debugLog,
@@ -888,6 +889,11 @@ export class DatalyrSDKExpo {
         screen_height: deviceInfo.screenHeight,
         locale: deviceInfo.locale,
         timezone: deviceInfo.timezone,
+        // ISO-3166-1 alpha-2 from device locale. Mirror of datalyr-sdk.ts —
+        // see that file for rationale (meta.js USER_DATA_PATHS.country picks
+        // top-level `country` as its first match; bridge-recovered geo still
+        // wins server-side when present).
+        country: deriveCountryFromLocale(deviceInfo.locale) || undefined,
         carrier: deviceInfo.carrier,
         network_type: networkType,
         timestamp: Date.now(),
