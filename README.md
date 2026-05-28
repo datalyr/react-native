@@ -796,7 +796,7 @@ const status = Datalyr.getPlatformIntegrationStatus();
 
 ## Enhanced App Campaigns
 
-Run mobile app ads through web campaigns (Meta Sales, TikTok Traffic, Google Ads) that redirect users to the app store through your own domain. This bypasses SKAN restrictions, ATT requirements, and adset limits -- ad platforms treat these as regular web campaigns.
+Run mobile app ads through web campaigns (Meta Sales, TikTok Traffic, Google Ads) that redirect users to the app store through your own domain. Because these are real web campaigns landing on a page you own, ad platforms treat them as regular website traffic — full-funnel attribution and no per-campaign adset cap.
 
 ### How It Works
 
@@ -877,7 +877,7 @@ Instant redirect -- no visible content, user goes straight to app store.
 
 **3. Set up your ad campaign:**
 
-- **Meta Ads**: Campaign objective -> Sales, conversion location -> Website, placements -> Mobile only. Paste your page URL as the Website URL. No SKAN, no ATT, no adset limits.
+- **Meta Ads**: Campaign objective -> Sales, conversion location -> Website, placements -> Mobile only. Paste your page URL as the Website URL. Runs as a regular web campaign with no per-campaign adset cap.
 - **TikTok Ads**: Campaign objective -> Website Conversions, paste your page URL as destination. Select your TikTok Pixel from Datalyr.
 - **Google Ads**: Performance Max or Search campaign. Use your page URL as the landing page.
 
