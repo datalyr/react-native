@@ -242,7 +242,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.7.7',
+          sdk_version: '1.7.8',
           ...installData,
         });
       }
@@ -410,8 +410,13 @@ export class DatalyrSDK {
         utm_source: webAttribution.utm_source,
       });
 
-      // Merge web attribution into current session
-      await this.track('$web_attribution_merged', {
+      // Emit the canonical web→app bridge event. The email/identify path and the
+      // IP/deferred path BOTH fire `$web_attribution_matched`, distinguished only
+      // by `match_method` — so server bridges (Meta CAPI recovery, lyr) and match
+      // dashboards see one event name. (Historically this path fired a separate
+      // `$web_attribution_merged` that no server reader consumed, so email-only
+      // matches silently never bridged webhook conversions.)
+      await this.track('$web_attribution_matched', {
         web_visitor_id: webAttribution.visitor_id,
         web_user_id: webAttribution.user_id,
         fbclid: webAttribution.fbclid,
@@ -427,6 +432,7 @@ export class DatalyrSDK {
         utm_content: webAttribution.utm_content,
         utm_term: webAttribution.utm_term,
         web_timestamp: webAttribution.timestamp,
+        match_method: 'email',
       });
 
       // Update attribution manager with web data
@@ -1105,7 +1111,7 @@ export class DatalyrSDK {
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
         timestamp: Date.now(),
-        sdk_version: '1.7.7',
+        sdk_version: '1.7.8',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
           idfa: advertiserInfo.idfa,

@@ -215,7 +215,7 @@ export class DatalyrSDKExpo {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS,
-          sdk_version: '1.7.7',
+          sdk_version: '1.7.8',
           sdk_variant: 'expo',
           ...installData,
         });
@@ -355,7 +355,11 @@ export class DatalyrSDKExpo {
         utm_source: webAttribution.utm_source,
       });
 
-      await this.track('$web_attribution_merged', {
+      // Canonical web→app bridge event — email and IP paths both fire
+      // `$web_attribution_matched`, distinguished by `match_method`, so server
+      // bridges and dashboards see one event name. (Previously this path fired a
+      // separate `$web_attribution_merged` that no reader consumed.)
+      await this.track('$web_attribution_matched', {
         web_visitor_id: webAttribution.visitor_id,
         web_user_id: webAttribution.user_id,
         fbclid: webAttribution.fbclid,
@@ -371,6 +375,7 @@ export class DatalyrSDKExpo {
         utm_content: webAttribution.utm_content,
         utm_term: webAttribution.utm_term,
         web_timestamp: webAttribution.timestamp,
+        match_method: 'email',
       });
 
       attributionManager.mergeWebAttribution(webAttribution);
@@ -897,7 +902,7 @@ export class DatalyrSDKExpo {
         carrier: deviceInfo.carrier,
         network_type: networkType,
         timestamp: Date.now(),
-        sdk_version: '1.7.7',
+        sdk_version: '1.7.8',
         sdk_variant: 'expo',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
