@@ -1,10 +1,13 @@
 // Main entry point for React Native CLI
 // Import with: import { Datalyr } from '@datalyr/react-native';
 
-import { DatalyrSDK, Datalyr } from './datalyr-sdk';
+import datalyrSingleton, { DatalyrSDK, Datalyr } from './datalyr-sdk';
 
-// Create singleton instance for easy usage
-export const datalyr = new DatalyrSDK();
+// Re-export the CANONICAL singleton (datalyr-sdk.ts default export) — the same
+// instance the `Datalyr` static facade and screen-tracking already use. Previously
+// this did `new DatalyrSDK()`, creating a SECOND, never-initialized instance, so
+// mixing `import { datalyr }` with `Datalyr.*` stranded events in a pre-init queue.
+export const datalyr = datalyrSingleton;
 
 // Export enhanced static class for SKAdNetwork usage
 export { Datalyr };

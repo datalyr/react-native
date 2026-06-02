@@ -322,8 +322,28 @@ export class DatalyrSDKExpo {
     }
   }
 
+  /** Stable (cross-launch) non-crypto hash (FNV-1a) so we store no raw email. */
+  private stableEmailHash(email: string): string {
+    let h = 0x811c9dc5;
+    const s = email.toLowerCase();
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0).toString(16);
+  }
+
   private async fetchAndMergeWebAttribution(email: string): Promise<void> {
     try {
+      // Web→app attribution is a one-time, install-time fact — resolve it AT MOST
+      // ONCE per email per install. Apps call identify(email) every session; without
+      // this, each one re-fires /attribution/lookup (~100k/day from a single app,
+      // 99.7% misses). Skip if we've already definitively resolved/checked this email.
+      const emailHash = this.stableEmailHash(email);
+      const checkedKey = 'datalyr_web_attribution_checked';
+      const checked = (await Storage.getItem<string[]>(checkedKey)) || [];
+      if (checked.includes(emailHash)) {
+        debugLog('Web attribution already checked this install for this email; skipping lookup');
+        return;
+      }
+
       debugLog('Fetching web attribution for email:', email);
 
       const response = await fetch('https://api.datalyr.com/attribution/lookup', {
@@ -337,8 +357,13 @@ export class DatalyrSDKExpo {
 
       if (!response.ok) {
         debugLog('Failed to fetch web attribution:', response.status);
-        return;
+        return; // transient/non-200 — don't mark checked, retry on next identify
       }
+
+      // Definitive 200 answer (found or not) — record it so repeated identify(email)
+      // calls don't re-run this immutable, install-time lookup. (Capped to bound
+      // growth from rare account switches.)
+      await Storage.setItem(checkedKey, [...checked, emailHash].slice(-20));
 
       const result = await response.json() as { found: boolean; attribution?: any };
 
@@ -913,8 +938,15 @@ export class DatalyrSDKExpo {
           advertiser_tracking_enabled: advertiserInfo.advertiser_tracking_enabled,
         } : {}),
         ...attributionData,
-        // Apple Search Ads attribution
+        // Apple Search Ads attribution (iOS)
         ...asaData,
+        // Google Play Install Referrer (Android) — gclid/gbraid/wbraid/utm_*. Fill it
+        // ONLY when the web→app bridge hasn't already recovered ad attribution, so a
+        // web-sourced gclid/utm isn't clobbered. (Was fetched at init but never merged
+        // at all, dropping Android Google Ads install attribution.)
+        ...((attributionData.gclid || attributionData.utm_source)
+          ? {}
+          : playInstallReferrerIntegration.getAttributionData()),
       },
       deviceContext,
       source: 'mobile_app',
