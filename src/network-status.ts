@@ -192,7 +192,11 @@ class NetworkStatusManager {
   private pollingInterval: NodeJS.Timeout | null = null;
 
   private startExpoNetworkPolling(): void {
-    // Poll every 5 seconds for network changes
+    // Poll every 30s (was 5s). expo-network has no listener API so we must poll, but a
+    // 5s interval for the whole app lifetime is a needless battery/CPU drain on the host
+    // app; 30s matches the queue flush cadence and is plenty for connectivity changes.
+    // (Apps that need faster detection can call networkStatusManager.refresh() on
+    // AppState foreground.)
     this.pollingInterval = setInterval(async () => {
       try {
         if (this.expoNetworkModule) {
@@ -202,7 +206,7 @@ class NetworkStatusManager {
       } catch (error) {
         // Ignore polling errors
       }
-    }, 5000);
+    }, 30000);
   }
 
   /**

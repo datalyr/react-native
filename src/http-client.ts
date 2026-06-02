@@ -21,8 +21,8 @@ interface HttpResponse {
 export class HttpClient {
   private config: HttpClientConfig;
   private endpoint: string;
-  private lastRequestTime = 0;
-  private requestCount = 0;
+  // Timestamps of recent sends for a sliding-window rate limit (see enforceRateLimit).
+  private requestTimes: number[] = [];
 
   constructor(endpoint: string, config: HttpClientConfig) {
     // Use server-side API if flag is set (default to true for v1.0.0)
@@ -53,17 +53,11 @@ export class HttpClient {
    */
   private async sendWithRetry(payload: EventPayload, retryCount: number): Promise<HttpResponse> {
     try {
-      // Basic rate limiting: max 100 requests per minute
-      const now = Date.now();
-      if (now - this.lastRequestTime < 60000) {
-        this.requestCount++;
-        if (this.requestCount > 100) {
-          throw new Error('Rate limit exceeded: max 100 requests per minute');
-        }
-      } else {
-        this.requestCount = 1;
-        this.lastRequestTime = now;
-      }
+      // Sliding-window rate limit (max 100/min) with BACKPRESSURE, not drop. The old
+      // fixed-window code threw a non-retryable error at >100/min, which made the queue
+      // give up and DROP the event (silent data loss under a burst). Now we wait until
+      // the window has room so a burst is paced out instead of lost.
+      await this.enforceRateLimit();
 
       debugLog(`Sending event: ${payload.eventName} (attempt ${retryCount + 1})`);
       
@@ -136,6 +130,28 @@ export class HttpClient {
         error: (error as Error).message,
       };
     }
+  }
+
+  /**
+   * Sliding-window rate limiter with backpressure. Keeps timestamps of recent sends;
+   * once the window is full it WAITS until the oldest falls out instead of throwing/
+   * dropping, so a burst slows down rather than losing events. Bounded: after the wait
+   * the oldest is guaranteed outside the window, so the recursion terminates.
+   */
+  private async enforceRateLimit(): Promise<void> {
+    const WINDOW_MS = 60000;
+    const MAX_PER_WINDOW = 100;
+
+    const now = Date.now();
+    this.requestTimes = this.requestTimes.filter((t) => now - t < WINDOW_MS);
+
+    if (this.requestTimes.length >= MAX_PER_WINDOW) {
+      const waitMs = WINDOW_MS - (now - this.requestTimes[0]) + 5;
+      await this.delay(Math.min(Math.max(waitMs, 0), WINDOW_MS));
+      return this.enforceRateLimit();
+    }
+
+    this.requestTimes.push(Date.now());
   }
 
   /**

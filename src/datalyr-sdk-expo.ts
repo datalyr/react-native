@@ -38,6 +38,7 @@ import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 import { appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
 import { DeferredDeepLinkResult } from './types';
 import { AppleSearchAdsAttribution, AdvertiserInfoBridge } from './native/DatalyrNativeBridge';
+import { networkStatusManager } from './network-status';
 
 export class DatalyrSDKExpo {
   private state: SDKState;
@@ -45,6 +46,7 @@ export class DatalyrSDKExpo {
   private eventQueue: EventQueue;
   private autoEventsManager: AutoEventsManager | null = null;
   private appStateSubscription: any = null;
+  private networkStatusUnsubscribe: (() => void) | null = null;
   private cachedAdvertiserInfo: any = null;
   private static conversionEncoder?: ConversionValueEncoder;
   private static debugEnabled = false;
@@ -163,6 +165,11 @@ export class DatalyrSDKExpo {
           errorLog('Error setting up app state monitoring:', error as Error);
         }
       }, 50);
+
+      // RN-18: wire network status into the event queue. Expo previously had NO network
+      // monitoring, so the queue stayed isOnline=true forever — offline events failed,
+      // burned their retries, and were dropped, and nothing re-sent on reconnect.
+      void this.initializeNetworkMonitoring();
 
       if (config.skadTemplate) {
         const template = ConversionTemplates[config.skadTemplate];
@@ -1015,6 +1022,10 @@ export class DatalyrSDKExpo {
           }
         } else if (nextAppState === 'active') {
           this.refreshSession();
+          // Refresh network status on foreground (expo-network has no listener API and
+          // we poll at 30s, so a foreground refresh picks up changes that happened in
+          // the background promptly).
+          networkStatusManager.refresh();
           if (this.autoEventsManager) {
             this.autoEventsManager.handleAppForeground();
           }
@@ -1023,6 +1034,31 @@ export class DatalyrSDKExpo {
 
     } catch (error) {
       errorLog('Error setting up app state monitoring:', error as Error);
+    }
+  }
+
+  /**
+   * Initialize network status monitoring and keep the event queue's online flag in
+   * sync, so offline events wait instead of failing/dropping and are re-sent on
+   * reconnect. Non-blocking; defaults to online if no network module is available.
+   */
+  private async initializeNetworkMonitoring(): Promise<void> {
+    try {
+      await networkStatusManager.initialize();
+      this.state.isOnline = networkStatusManager.isOnline();
+      this.eventQueue.setOnlineStatus(this.state.isOnline);
+
+      this.networkStatusUnsubscribe = networkStatusManager.subscribe((state) => {
+        const isOnline = state.isConnected && (state.isInternetReachable !== false);
+        this.state.isOnline = isOnline;
+        this.eventQueue.setOnlineStatus(isOnline);
+      });
+
+      debugLog(`Network monitoring initialized, online: ${this.state.isOnline}`);
+    } catch (error) {
+      errorLog('Error initializing network monitoring (non-blocking):', error as Error);
+      this.state.isOnline = true;
+      this.eventQueue.setOnlineStatus(true);
     }
   }
 
@@ -1046,6 +1082,12 @@ export class DatalyrSDKExpo {
         this.appStateSubscription.remove();
         this.appStateSubscription = null;
       }
+
+      if (this.networkStatusUnsubscribe) {
+        this.networkStatusUnsubscribe();
+        this.networkStatusUnsubscribe = null;
+      }
+      networkStatusManager.destroy();
 
       this.eventQueue.destroy();
       this.state.initialized = false;

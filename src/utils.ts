@@ -51,13 +51,15 @@ export const generateUUID = (): string => {
  */
 export const deriveCountryFromLocale = (locale: string | undefined | null): string | null => {
   if (!locale) return null;
-  // BCP-47 uses '-', POSIX uses '_'; some platforms return either.
-  const region = locale.split(/[-_]/)[1];
-  if (!region) return null;
-  const upper = region.toUpperCase();
-  // ISO-3166-1 alpha-2 is exactly two letters. Reject script tags ('Latn'),
+  // BCP-47 uses '-', POSIX uses '_'; some platforms return either. A script subtag may
+  // sit before the region (e.g. zh-Hant-TW), so scan ALL post-language segments for the
+  // first ISO-3166-1 alpha-2 region, not just [1]. Reject script tags ('Latn'/'Hant'),
   // UN M.49 numerics ('001'), and malformed input.
-  return /^[A-Z]{2}$/.test(upper) ? upper : null;
+  for (const seg of locale.split(/[-_]/).slice(1)) {
+    const upper = seg.toUpperCase();
+    if (/^[A-Z]{2}$/.test(upper)) return upper;
+  }
+  return null;
 };
 
 /**

@@ -30,7 +30,11 @@ export const debugLog = (message: string, ...args: any[]) => {
 };
 
 export const errorLog = (message: string, error?: Error) => {
-  console.error(`[Datalyr Error] ${message}`, error);
+  // Gate on __DEV__ so the SDK never spams the host app's PRODUCTION console
+  // (matches the RN build's utils.ts errorLog). RN-22.
+  if (__DEV__) {
+    console.error(`[Datalyr Error] ${message}`, error);
+  }
 };
 
 // UUID generation
@@ -46,10 +50,13 @@ export const generateUUID = (): string => {
  */
 export const deriveCountryFromLocale = (locale: string | undefined | null): string | null => {
   if (!locale) return null;
-  const region = locale.split(/[-_]/)[1];
-  if (!region) return null;
-  const upper = region.toUpperCase();
-  return /^[A-Z]{2}$/.test(upper) ? upper : null;
+  // BCP-47 may include a script subtag before the region (e.g. zh-Hant-TW), so scan
+  // ALL post-language segments for the first ISO-3166-1 alpha-2 region, not just [1].
+  for (const seg of locale.split(/[-_]/).slice(1)) {
+    const upper = seg.toUpperCase();
+    if (/^[A-Z]{2}$/.test(upper)) return upper;
+  }
+  return null;
 };
 
 // Storage utilities
