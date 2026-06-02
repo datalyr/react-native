@@ -146,8 +146,12 @@ export class HttpClient {
     this.requestTimes = this.requestTimes.filter((t) => now - t < WINDOW_MS);
 
     if (this.requestTimes.length >= MAX_PER_WINDOW) {
+      // waitMs is mathematically <= WINDOW_MS + 5 (the oldest survived the filter, so
+      // now - requestTimes[0] < WINDOW_MS). Cap at WINDOW_MS + 100 — defensive against a
+      // corrupted future timestamp WITHOUT clipping the +5 margin, so after the wait the
+      // oldest is guaranteed outside the window and the recursion exits in one pass.
       const waitMs = WINDOW_MS - (now - this.requestTimes[0]) + 5;
-      await this.delay(Math.min(Math.max(waitMs, 0), WINDOW_MS));
+      await this.delay(Math.min(Math.max(waitMs, 0), WINDOW_MS + 100));
       return this.enforceRateLimit();
     }
 
