@@ -358,15 +358,10 @@ export class DatalyrSDK {
           await this.fetchAndMergeWebAttribution(email);
         }
       }
-
-      // Forward user data to platform SDKs for Advanced Matching
-      const email = properties?.email as string | undefined;
-      const phone = properties?.phone as string | undefined;
-      const firstName = (properties?.first_name || properties?.firstName) as string | undefined;
-      const lastName = (properties?.last_name || properties?.lastName) as string | undefined;
-      const dateOfBirth = (properties?.date_of_birth || properties?.dob || properties?.birthday) as string | undefined;
-      const gender = properties?.gender as string | undefined;
-      const city = properties?.city as string | undefined;
+      // RN-9: removed a dead "Advanced Matching" block here that destructured
+      // email/phone/name/dob/gender/city into locals and then discarded them (nothing
+      // was forwarded). The identify traits already ship to the backend via the
+      // $identify event above; the pixel-side advanced matching is handled server-side.
     } catch (error) {
       errorLog('Error identifying user:', error as Error);
     }

@@ -786,7 +786,12 @@ export class DatalyrSDKExpo {
     set('ttclid', attribution.ttclid);
     set('idfa', advertiser?.idfa);
     set('gaid', advertiser?.gaid);
-    set('att_status', advertiser?.att_status);
+    // RN-13: map the numeric ATT status to the same string the RN build sends, so
+    // Superwall audiences are consistent across the two builds (was raw number on Expo).
+    if (advertiser?.att_status != null) {
+      const statusMap: Record<number, string> = { 0: 'notDetermined', 1: 'restricted', 2: 'denied', 3: 'authorized' };
+      set('att_status', statusMap[advertiser.att_status] || String(advertiser.att_status));
+    }
 
     return attrs;
   }
