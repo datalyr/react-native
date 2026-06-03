@@ -1,0 +1,78 @@
+// Runtime tests for the 2026-06-03 e2e-review fixes. Exercises the REAL HttpClient +
+// EventQueue source (RN native modules mocked via jest moduleNameMapper). Previously the
+// SDK had no runtime tests — only tsc.
+import { HttpClient } from '../src/http-client';
+import { EventQueue } from '../src/event-queue';
+import { Storage, STORAGE_KEYS } from '../src/utils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { EventPayload } from '../src/types';
+
+const makePayload = (name: string, extra: Partial<EventPayload> = {}): EventPayload => ({
+  workspaceId: 'ws_1', visitorId: 'vis_1', anonymousId: 'anon_1', sessionId: 'sess_xyz',
+  eventId: 'id_' + name, eventName: name, source: 'mobile_app',
+  timestamp: '2026-06-03T10:00:00.000Z', ...extra,
+});
+
+beforeEach(async () => { await (AsyncStorage as any).clear(); });
+
+describe('wire contract — transformForServerAPI', () => {
+  test('session_id is in context (not just properties), version is current, click-ids survive', () => {
+    const client = new HttpClient('https://ingest.datalyr.com/track',
+      { apiKey: 'dk_test', useServerTracking: true } as any);
+    const payload = makePayload('$web_attribution_matched', {
+      eventData: { _fbp: 'fb.1.2.3', fbclid: 'fb_abc', revenue: 9.99 } as any,
+    });
+
+    const wire = (client as any).transformForServerAPI(payload);
+
+    // IOS-31 equivalent: ingest's server-track handler reads context.session_id.
+    expect(wire.context.session_id).toBe('sess_xyz');
+    // stale-version fix (was '1.7.5').
+    expect(wire.context.version).toBe('1.7.8');
+    expect(wire.context.source).toBe('mobile_app');
+    // properties still carry sessionId + the eventData (handleServerTrack spreads ...props).
+    expect(wire.properties.sessionId).toBe('sess_xyz');
+    expect(wire.properties._fbp).toBe('fb.1.2.3');
+    expect(wire.properties.fbclid).toBe('fb_abc');
+    expect(wire.event).toBe('$web_attribution_matched');
+    expect(wire.timestamp).toBe('2026-06-03T10:00:00.000Z');
+  });
+});
+
+describe('event queue', () => {
+  const cfg = { maxQueueSize: 1000, batchSize: 10, flushInterval: 600000, maxRetryCount: 3 };
+
+  test('flush() drains the WHOLE backlog, not just one batchSize batch (drain loop)', async () => {
+    const sent: string[] = [];
+    const client = { sendEvent: async (p: EventPayload) => { sent.push(p.eventName); return { success: true }; } } as any;
+    const q = new EventQueue(client, cfg);
+    try {
+      q.setOnlineStatus(false);
+      for (let i = 0; i < 25; i++) await q.enqueue(makePayload('evt' + i));
+      // Set online WITHOUT setOnlineStatus() (which fires its own un-awaited processQueue),
+      // so the awaited flush() is the sole drainer and the assertion isn't racing it.
+      (q as any).isOnline = true;
+      await q.flush();
+      expect(sent.length).toBe(25); // all 25 (>2 batches), not 10
+    } finally { q.destroy(); }
+  });
+
+  test('events that exhaust retries go to the dead-letter store, not silently dropped', async () => {
+    const client = { sendEvent: async () => ({ success: false, error: '500' }) } as any;
+    const q = new EventQueue(client, { ...cfg, maxRetryCount: 2 });
+    try {
+      q.setOnlineStatus(false);
+      await q.enqueue(makePayload('revenue_evt'));
+      (q as any).isOnline = true;
+      // Each flush advances retryCount by one (drain loop breaks on no-progress).
+      for (let i = 0; i < 4; i++) await q.flush();
+      const dl = await Storage.getItem<any[]>(STORAGE_KEYS.DEAD_LETTER_QUEUE);
+      expect(Array.isArray(dl)).toBe(true);
+      expect(dl!.length).toBe(1);
+      expect(dl![0].payload.eventName).toBe('revenue_evt');
+      // and it's no longer in the live queue
+      const live = await Storage.getItem<any[]>(STORAGE_KEYS.EVENT_QUEUE);
+      expect((live || []).length).toBe(0);
+    } finally { q.destroy(); }
+  });
+});
