@@ -81,50 +81,69 @@ export class EventQueue {
     debugLog(`Processing queue with ${this.queue.length} events`);
 
     try {
-      // Get events to process (up to batch size)
-      const eventsToProcess = this.queue.slice(0, this.config.batchSize);
-      const failedEvents: QueuedEvent[] = [];
+      // Drain in batches until the queue is empty or a batch makes no forward progress
+      // (offline / all events failing-and-requeued). Previously this sent ONE batchSize
+      // batch per call, so a flush()/reconnect with a >batchSize backlog left the rest —
+      // and on app-background the terminal session_end could sit behind older events and
+      // never send. The progress check prevents a busy-loop during a transient outage.
+      while (this.isOnline && this.queue.length > 0) {
+        const before = this.queue.length;
+        const eventsToProcess = this.queue.slice(0, this.config.batchSize);
 
-      // Process events
-      for (const queuedEvent of eventsToProcess) {
-        try {
-          const response = await this.httpClient.sendEvent(queuedEvent.payload);
-          
-          if (response.success) {
-            debugLog(`Event sent successfully: ${queuedEvent.payload.eventName}`);
-            // Remove from queue
-            this.removeFromQueue(queuedEvent);
-          } else {
-            // Increment retry count
-            queuedEvent.retryCount++;
-            
-            if (queuedEvent.retryCount >= this.config.maxRetryCount) {
-              debugLog(`Event exceeded max retries, dropping: ${queuedEvent.payload.eventName}`);
+        for (const queuedEvent of eventsToProcess) {
+          try {
+            const response = await this.httpClient.sendEvent(queuedEvent.payload);
+
+            if (response.success) {
+              debugLog(`Event sent successfully: ${queuedEvent.payload.eventName}`);
               this.removeFromQueue(queuedEvent);
             } else {
-              debugLog(`Event failed, will retry: ${queuedEvent.payload.eventName} (attempt ${queuedEvent.retryCount})`);
-              failedEvents.push(queuedEvent);
+              queuedEvent.retryCount++;
+              if (queuedEvent.retryCount >= this.config.maxRetryCount) {
+                // Don't silently drop revenue/conversion events — park in a capped
+                // dead-letter store (errorLog + recoverable) then remove from the queue.
+                await this.deadLetter(queuedEvent);
+                this.removeFromQueue(queuedEvent);
+              } else {
+                debugLog(`Event failed, will retry: ${queuedEvent.payload.eventName} (attempt ${queuedEvent.retryCount})`);
+              }
+            }
+          } catch (error) {
+            errorLog(`Error processing event: ${queuedEvent.payload.eventName}`, error as Error);
+            queuedEvent.retryCount++;
+            if (queuedEvent.retryCount >= this.config.maxRetryCount) {
+              await this.deadLetter(queuedEvent);
+              this.removeFromQueue(queuedEvent);
             }
           }
-        } catch (error) {
-          errorLog(`Error processing event: ${queuedEvent.payload.eventName}`, error as Error);
-          queuedEvent.retryCount++;
-          
-          if (queuedEvent.retryCount >= this.config.maxRetryCount) {
-            this.removeFromQueue(queuedEvent);
-          } else {
-            failedEvents.push(queuedEvent);
-          }
         }
-      }
 
-      // Persist updated queue
-      await this.persistQueue();
-      
+        // Persist after each batch so a mid-drain kill doesn't resurrect delivered events.
+        await this.persistQueue();
+
+        // No net progress (every event in this batch failed-and-requeued, not yet at max
+        // retries) → stop and let the timer / next reconnect retry. Avoids a tight loop.
+        if (this.queue.length >= before) break;
+      }
     } catch (error) {
       errorLog('Error processing event queue:', error as Error);
     } finally {
       this.isProcessing = false;
+    }
+  }
+
+  /**
+   * Park a permanently-failed event in a capped dead-letter store instead of silently
+   * dropping it — surfaced (errorLog) and recoverable for replay/inspection.
+   */
+  private async deadLetter(event: QueuedEvent): Promise<void> {
+    errorLog(`Event exceeded max retries (${this.config.maxRetryCount}); moved to dead-letter: ${event.payload.eventName}`);
+    try {
+      const existing = (await Storage.getItem<QueuedEvent[]>(STORAGE_KEYS.DEAD_LETTER_QUEUE)) || [];
+      existing.push(event);
+      await Storage.setItem(STORAGE_KEYS.DEAD_LETTER_QUEUE, existing.slice(-100));
+    } catch (error) {
+      errorLog('Failed to persist dead-letter event:', error as Error);
     }
   }
 

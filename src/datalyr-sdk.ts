@@ -444,8 +444,13 @@ export class DatalyrSDK {
         ttclid: webAttribution.ttclid,
         gbraid: webAttribution.gbraid,
         wbraid: webAttribution.wbraid,
+        // Emit `_fbp`/`_fbc` (the Meta cookie names the attribution MV + postback extract
+        // via JSONExtractString(event_data,'_fbp')) as well as the bare keys — the bare
+        // `fbp`/`fbc` alone have no reader, so recovered web fbp/fbc never reached Meta CAPI.
         fbp: webAttribution.fbp,
         fbc: webAttribution.fbc,
+        _fbp: webAttribution.fbp,
+        _fbc: webAttribution.fbc,
         utm_source: webAttribution.utm_source,
         utm_medium: webAttribution.utm_medium,
         utm_campaign: webAttribution.utm_campaign,
@@ -528,8 +533,13 @@ export class DatalyrSDK {
         ttclid: webAttribution.ttclid,
         gbraid: webAttribution.gbraid,
         wbraid: webAttribution.wbraid,
+        // Emit `_fbp`/`_fbc` (the Meta cookie names the attribution MV + postback extract
+        // via JSONExtractString(event_data,'_fbp')) as well as the bare keys — the bare
+        // `fbp`/`fbc` alone have no reader, so recovered web fbp/fbc never reached Meta CAPI.
         fbp: webAttribution.fbp,
         fbc: webAttribution.fbc,
+        _fbp: webAttribution.fbp,
+        _fbc: webAttribution.fbc,
         utm_source: webAttribution.utm_source,
         utm_medium: webAttribution.utm_medium,
         utm_campaign: webAttribution.utm_campaign,
@@ -559,6 +569,9 @@ export class DatalyrSDK {
 
       const aliasData = {
         newUserId,
+        // ingest's $alias link builder reads camelCase `userId`/`previousId`; `newUserId`
+        // alone wrote no link. Emit `userId` too. (Event name must be `$alias`, below.)
+        userId: newUserId,
         previousId: previousId || this.state.visitorId,
         visitorId: this.state.visitorId,
         anonymousId: this.state.anonymousId,  // Include for identity resolution
@@ -566,8 +579,9 @@ export class DatalyrSDK {
 
       debugLog('Aliasing user:', aliasData);
 
-      // Track alias event
-      await this.track('alias', aliasData);
+      // Track $alias (NOT 'alias' — ingest matches only the '$alias' event name, so the
+      // bare name wrote zero visitor_user_links: alias-based identity merges were dropped).
+      await this.track('$alias', aliasData);
 
       // Update current user ID
       await this.identify(newUserId);
@@ -762,7 +776,11 @@ export class DatalyrSDK {
     currency = 'USD',
     productId?: string
   ): Promise<void> {
-    const properties: Record<string, any> = { revenue: value, currency };
+    // Emit BOTH `value` and `revenue` — the conversion-rule/CAPI postback value extractor
+    // resolves a configured value_path (commonly `value`), while SKAN/value_usd read either;
+    // sending only `revenue` risked a $0 value on rules wired to `value`. Matches the other
+    // commerce helpers (trackAddToCart/etc.), which already use `value`.
+    const properties: Record<string, any> = { value, revenue: value, currency };
     if (productId) properties.product_id = productId;
 
     await this.trackWithSKAdNetwork('purchase', properties);
@@ -776,7 +794,11 @@ export class DatalyrSDK {
     currency = 'USD',
     plan?: string
   ): Promise<void> {
-    const properties: Record<string, any> = { revenue: value, currency };
+    // Emit BOTH `value` and `revenue` — the conversion-rule/CAPI postback value extractor
+    // resolves a configured value_path (commonly `value`), while SKAN/value_usd read either;
+    // sending only `revenue` risked a $0 value on rules wired to `value`. Matches the other
+    // commerce helpers (trackAddToCart/etc.), which already use `value`.
+    const properties: Record<string, any> = { value, revenue: value, currency };
     if (plan) properties.plan = plan;
 
     await this.trackWithSKAdNetwork('subscribe', properties);

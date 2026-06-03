@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Web→app email attribution now emits the canonical `$web_attribution_matched` event** (with `match_method: 'email'`) instead of the separate `$web_attribution_merged`. The email/`identify()` match path and the IP/deferred match path now fire the same event name, distinguished by `match_method` (`'email'` vs `'ip'`). This lets the server-side attribution bridges (Meta CAPI recovery, trackable-link `lyr`) recover web attribution for webhook conversions from email matches — previously only IP matches bridged, because no server reader consumed `$web_attribution_merged`. No API or integration changes required.
 
+### Fixed (end-to-end review, 2026-06-03 — prod-verified against real RN events)
+- **`session_id` now travels in `context`** (was in `properties`), where ingest's server-track handler reads it — otherwise ingest discarded the SDK's session and synthesized its own hour-bucketed one for every event.
+- **`alias()` now writes identity links.** It emitted event name `alias` (ingest matches only `$alias`) with key `newUserId` (ingest reads `userId`) — so alias-based merges wrote ZERO `visitor_user_links` (confirmed in prod: 0 `alias_event` rows). Now emits `$alias` + `userId`.
+- **Web→app bridge now emits `_fbp`/`_fbc`** (the Meta cookie names the attribution MV + postback extract) alongside bare `fbp`/`fbc` — the bare keys had no reader, so recovered web fbp/fbc never reached Meta CAPI (confirmed in prod: `fbp` populated, `_fbp` empty).
+- **Stale version markers corrected**: `context.version` `1.7.5` → `1.7.8`, `User-Agent` `@datalyr/react-native/1.5.0` → `1.7.8`.
+- **Event queue drains fully**: `flush()`/processing now loops until the queue is empty (was a single `batchSize` batch), so a backlog or the terminal `session_end` on background isn't left behind; persists per batch.
+- **Dead-letter instead of silent drop**: events that exhaust retries move to a capped (`@datalyr/dead_letter_queue`, 100) store with an error log, instead of vanishing.
+- **`trackPurchase`/`trackSubscription` now send `value` (and `revenue`)** so a conversion rule whose `value_path` is `value` doesn't forward a $0 conversion to ad platforms.
+- **Expo parity**: the Expo SDK now fires `$att_status` (with the `initialized` guard) and `$network_status_change` — both were RN-only and silently omitted on Expo.
+
+### Known (flagged, not changed — require decisions)
+- The SKAdNetwork conversion-value templates (`ConversionValueEncoder.ts`) assign bits 6 & 7, which overflow the 6-bit (0–63) fine value and clamp to 63 — so low-value events (`signup`/`view_item`) report a *higher* value than a `purchase`. Needs a schema redesign coordinated with the advertiser's SKAN dashboard. (Mirrors the iOS SDK.)
+- `mergeWebAttribution` is gap-fill-only despite a "web wins for first-touch" comment.
+
 ## [1.6.0] - 2026-03
 
 ### Removed

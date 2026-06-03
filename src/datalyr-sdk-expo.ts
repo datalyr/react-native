@@ -399,8 +399,12 @@ export class DatalyrSDKExpo {
         ttclid: webAttribution.ttclid,
         gbraid: webAttribution.gbraid,
         wbraid: webAttribution.wbraid,
+        // Emit `_fbp`/`_fbc` (the keys the attribution MV + Meta postback extract) as well
+        // as the bare keys — bare fbp/fbc alone have no reader. See datalyr-sdk.ts.
         fbp: webAttribution.fbp,
         fbc: webAttribution.fbc,
+        _fbp: webAttribution.fbp,
+        _fbc: webAttribution.fbc,
         utm_source: webAttribution.utm_source,
         utm_medium: webAttribution.utm_medium,
         utm_campaign: webAttribution.utm_campaign,
@@ -481,8 +485,12 @@ export class DatalyrSDKExpo {
         ttclid: webAttribution.ttclid,
         gbraid: webAttribution.gbraid,
         wbraid: webAttribution.wbraid,
+        // Emit `_fbp`/`_fbc` (the keys the attribution MV + Meta postback extract) as well
+        // as the bare keys — bare fbp/fbc alone have no reader. See datalyr-sdk.ts.
         fbp: webAttribution.fbp,
         fbc: webAttribution.fbc,
+        _fbp: webAttribution.fbp,
+        _fbc: webAttribution.fbc,
         utm_source: webAttribution.utm_source,
         utm_medium: webAttribution.utm_medium,
         utm_campaign: webAttribution.utm_campaign,
@@ -509,6 +517,9 @@ export class DatalyrSDKExpo {
 
       const aliasData = {
         newUserId,
+        // ingest's $alias link builder reads camelCase `userId`/`previousId`; `newUserId`
+        // alone wrote no link. Emit `userId` too. (Event name must be `$alias`, below.)
+        userId: newUserId,
         previousId: previousId || this.state.visitorId,
         visitorId: this.state.visitorId,
         anonymousId: this.state.anonymousId,
@@ -516,7 +527,8 @@ export class DatalyrSDKExpo {
 
       debugLog('Aliasing user:', aliasData);
 
-      await this.track('alias', aliasData);
+      // Track $alias (NOT 'alias' — ingest matches only the '$alias' event name).
+      await this.track('$alias', aliasData);
       await this.identify(newUserId);
 
     } catch (error) {
@@ -653,14 +665,18 @@ export class DatalyrSDKExpo {
   }
 
   async trackPurchase(value: number, currency = 'USD', productId?: string): Promise<void> {
-    const properties: Record<string, any> = { revenue: value, currency };
+    // Emit BOTH `value` and `revenue` (see datalyr-sdk.ts) so a rule's value_path='value'
+    // doesn't yield $0; SKAN/value_usd read either.
+    const properties: Record<string, any> = { value, revenue: value, currency };
     if (productId) properties.product_id = productId;
 
     await this.trackWithSKAdNetwork('purchase', properties);
   }
 
   async trackSubscription(value: number, currency = 'USD', plan?: string): Promise<void> {
-    const properties: Record<string, any> = { revenue: value, currency };
+    // Emit BOTH `value` and `revenue` (see datalyr-sdk.ts) so a rule's value_path='value'
+    // doesn't yield $0; SKAN/value_usd read either.
+    const properties: Record<string, any> = { value, revenue: value, currency };
     if (plan) properties.plan = plan;
 
     await this.trackWithSKAdNetwork('subscribe', properties);
@@ -841,12 +857,26 @@ export class DatalyrSDKExpo {
   }
 
   async updateTrackingAuthorization(authorized: boolean): Promise<void> {
+    if (!this.state.initialized) {
+      errorLog('SDK not initialized. Call initialize() first.');
+      return;
+    }
+
     // Refresh cached advertiser info after ATT status change
     try {
       this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
     } catch (error) {
       errorLog('Failed to refresh advertiser info:', error as Error);
     }
+
+    // Track ATT status event (parity with the RN SDK — Expo was silently omitting it).
+    await this.track('$att_status', {
+      authorized: authorized,
+      status: authorized ? 3 : 2,
+      status_name: authorized ? 'authorized' : 'denied',
+    });
+
+    debugLog(`ATT status updated: ${authorized ? 'authorized' : 'denied'}`);
   }
 
   private async handleDeferredDeepLink(data: DeferredDeepLinkResult): Promise<void> {
@@ -1057,6 +1087,17 @@ export class DatalyrSDKExpo {
         const isOnline = state.isConnected && (state.isInternetReachable !== false);
         this.state.isOnline = isOnline;
         this.eventQueue.setOnlineStatus(isOnline);
+
+        // Track network status change (parity with the RN SDK — Expo was silently omitting it).
+        if (this.state.initialized) {
+          this.track('$network_status_change', {
+            is_online: isOnline,
+            network_type: state.type,
+            is_internet_reachable: state.isInternetReachable,
+          }).catch(() => {
+            // Ignore errors for network status events
+          });
+        }
       });
 
       debugLog(`Network monitoring initialized, online: ${this.state.isOnline}`);

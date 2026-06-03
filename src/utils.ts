@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   USER_ID: '@datalyr/user_id',
   USER_PROPERTIES: '@datalyr/user_properties',
   EVENT_QUEUE: '@datalyr/event_queue',
+  DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',  // capped store for events that exhausted retries (vs silent drop)
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
   LAST_SESSION_TIME: '@datalyr/last_session_time',
 };

@@ -66,7 +66,7 @@ export class HttpClient {
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': `@datalyr/react-native/1.5.0`,
+        'User-Agent': `@datalyr/react-native/1.7.8`,
       };
 
       // Server-side tracking uses X-API-Key header
@@ -218,8 +218,12 @@ export class HttpClient {
       },
       context: {
         library: '@datalyr/react-native',
-        version: '1.7.5',
+        version: '1.7.8',
         source: 'mobile_app',
+        // session_id MUST be in context — ingest's server-track handler reads the session
+        // id from context.session_id, NOT properties; without it ingest discards the SDK's
+        // session and synthesizes its own hour-bucketed one for every event.
+        session_id: payload.sessionId,
         userProperties: payload.userProperties,
       },
       timestamp: payload.timestamp,
