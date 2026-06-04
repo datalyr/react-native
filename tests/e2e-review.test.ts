@@ -28,8 +28,8 @@ describe('wire contract — transformForServerAPI', () => {
 
     // IOS-31 equivalent: ingest's server-track handler reads context.session_id.
     expect(wire.context.session_id).toBe('sess_xyz');
-    // stale-version fix (was '1.7.5').
-    expect(wire.context.version).toBe('1.7.8');
+    // stale-version fix (was a hardcoded stale '1.7.5'); tracks package version.
+    expect(wire.context.version).toBe('1.7.9');
     expect(wire.context.source).toBe('mobile_app');
     // properties still carry sessionId + the eventData (handleServerTrack spreads ...props).
     expect(wire.properties.sessionId).toBe('sess_xyz');

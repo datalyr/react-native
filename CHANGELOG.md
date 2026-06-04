@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Web→app email attribution now emits the canonical `$web_attribution_matched` event** (with `match_method: 'email'`) instead of the separate `$web_attribution_merged`. The email/`identify()` match path and the IP/deferred match path now fire the same event name, distinguished by `match_method` (`'email'` vs `'ip'`). This lets the server-side attribution bridges (Meta CAPI recovery, trackable-link `lyr`) recover web attribution for webhook conversions from email matches — previously only IP matches bridged, because no server reader consumed `$web_attribution_merged`. No API or integration changes required.
 
+## [1.7.9] - 2026-06-03
+
+End-to-end review pass (the first npm release to include these — the prior review fixes plus
+the SKAN rebuild; 1.7.8 on npm predates them). Also bundles the earlier HIGH/MEDIUM review
+fixes (singleton export, Play Install Referrer merge, rate-limiter sliding window, Expo
+network wiring, locale region) that were committed under 1.7.8 but never published.
+**Coordinated:** the SKAN change requires updating your SKAN dashboard schema — see
+`docs-v2/SKAN_CONVERSION_VALUE_SCHEMA_2026-06-03.md`.
+
 ### Fixed (end-to-end review, 2026-06-03 — prod-verified against real RN events)
 - **`session_id` now travels in `context`** (was in `properties`), where ingest's server-track handler reads it — otherwise ingest discarded the SDK's session and synthesized its own hour-bucketed one for every event.
 - **`alias()` now writes identity links.** It emitted event name `alias` (ingest matches only `$alias`) with key `newUserId` (ingest reads `userId`) — so alias-based merges wrote ZERO `visitor_user_links` (confirmed in prod: 0 `alias_event` rows). Now emits `$alias` + `userId`.
