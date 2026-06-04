@@ -5,6 +5,7 @@ import { HttpClient } from '../src/http-client';
 import { EventQueue } from '../src/event-queue';
 import { Storage, STORAGE_KEYS } from '../src/utils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ConversionValueEncoder, ConversionTemplates } from '../src/ConversionValueEncoder';
 import type { EventPayload } from '../src/types';
 
 const makePayload = (name: string, extra: Partial<EventPayload> = {}): EventPayload => ({
@@ -74,5 +75,48 @@ describe('event queue', () => {
       const live = await Storage.getItem<any[]>(STORAGE_KEYS.EVENT_QUEUE);
       expect((live || []).length).toBe(0);
     } finally { q.destroy(); }
+  });
+});
+
+describe('SKAN conversion-value encoder (mixed model: 0-63, upward-only safe)', () => {
+  const enc = () => new ConversionValueEncoder(ConversionTemplates.ecommerce);
+
+  test('values fit 0-63 and down-funnel events outrank up-funnel (the old bug: signup=63 > purchase)', () => {
+    const e = enc();
+    const viewItem = e.encode('view_item');
+    const signup = e.encode('signup');
+    const addToCart = e.encode('add_to_cart');
+    const checkout = e.encode('begin_checkout');
+    const purchaseLow = e.encode('purchase', { revenue: 0 });
+    const purchaseHigh = e.encode('purchase', { revenue: 1000 });
+
+    for (const v of [viewItem, signup, addToCart, checkout, purchaseLow, purchaseHigh]) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(63);
+    }
+    expect(viewItem).toBe(8);
+    expect(signup).toBe(16);     // was 63 (bit-6 overflow)
+    expect(addToCart).toBe(24);
+    expect(checkout).toBe(32);
+    expect(purchaseLow).toBe(56);
+    expect(purchaseHigh).toBe(63);
+    // The invariant the old scheme violated — purchase MUST outrank signup so a signup
+    // can't lock the value and block the purchase under SKAN's upward-only revision.
+    expect(purchaseLow).toBeGreaterThan(signup);
+    expect(viewItem).toBeLessThan(addToCart);
+    expect(addToCart).toBeLessThan(checkout);
+    expect(checkout).toBeLessThan(purchaseLow);
+  });
+
+  test('revenue tier fills the low 3 bits for monetary events', () => {
+    const e = enc();
+    expect(e.encode('purchase', { revenue: 5 })).toBe(58);    // 56 | tier 2
+    expect(e.encode('purchase', { value: 25 })).toBe(60);     // 56 | tier 4 (value alias)
+    expect(e.encode('purchase', { revenue: 300 })).toBe(63);  // 56 | tier 7
+    expect(e.encode('subscribe', { revenue: 50 })).toBe(53);  // 48 | tier 5
+  });
+
+  test('unknown event → 0', () => {
+    expect(enc().encode('not_a_real_event')).toBe(0);
   });
 });

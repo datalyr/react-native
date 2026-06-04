@@ -20,8 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`trackPurchase`/`trackSubscription` now send `value` (and `revenue`)** so a conversion rule whose `value_path` is `value` doesn't forward a $0 conversion to ad platforms.
 - **Expo parity**: the Expo SDK now fires `$att_status` (with the `initialized` guard) and `$network_status_change` — both were RN-only and silently omitted on Expo.
 
+- **SKAdNetwork conversion-value schema rebuilt (was silently dropping purchases).** `ConversionValueEncoder.ts` assigned bits 6 & 7, which overflow the 6-bit (0–63) fine value and clamp to 63 — so `signup`/`view_item` reported a *higher* value than `purchase` (max 15). Since SKAN only revises the value upward, a signup-then-purchase user locked at 63 and the purchase + revenue were never recorded. Rewritten to the mixed model `fineValue = (funnelRank << 3) | revenueTier` (down-funnel = higher), so values fit 0–63 and `purchase` always outranks `signup`. **Coordinated release:** update your SKAN dashboard schema to the new mapping — see `docs-v2/SKAN_CONVERSION_VALUE_SCHEMA_2026-06-03.md`. (Mirrors the iOS SDK.)
+
 ### Known (flagged, not changed — require decisions)
-- The SKAdNetwork conversion-value templates (`ConversionValueEncoder.ts`) assign bits 6 & 7, which overflow the 6-bit (0–63) fine value and clamp to 63 — so low-value events (`signup`/`view_item`) report a *higher* value than a `purchase`. Needs a schema redesign coordinated with the advertiser's SKAN dashboard. (Mirrors the iOS SDK.)
 - `mergeWebAttribution` is gap-fill-only despite a "web wins for first-touch" comment.
 
 ## [1.6.0] - 2026-03

@@ -1,9 +1,17 @@
 import { SKANCoarseValue, SKANConversionResult } from './native/SKAdNetworkBridge';
 
-// SKAN 4.0 compatible event mapping
+// SKAN 4.0 conversion-value mapping (mixed model).
+//
+// SKAdNetwork's fine value is a 6-bit int (0-63) that can ONLY be revised upward, so we use
+// Apple's recommended mixed model: the HIGH 3 bits hold a funnel rank (0-7, down-funnel =
+// higher) and the LOW 3 bits hold a revenue tier (0-7). Higher-value events get higher
+// values, so an early event (e.g. signup) can't lock the value and block a later, higher-
+// value event (e.g. purchase) from registering — the bug in the old independent-bit scheme,
+// where bits 6/7 also overflowed 63. The value→meaning mapping MUST match the SKAN
+// conversion-value schema configured in the ad-network dashboard.
 interface EventMapping {
-  bits: number[];
-  revenueBits?: number[];
+  rank: number;             // 0-7 funnel stage → high 3 bits
+  hasRevenue?: boolean;     // when true, revenue tier fills the low 3 bits
   priority: number;
   coarseValue?: SKANCoarseValue;  // SKAN 4.0: low, medium, high
   lockWindow?: boolean;           // SKAN 4.0: lock the conversion window after this event
@@ -30,7 +38,8 @@ export class ConversionValueEncoder {
   }
 
   /**
-   * Encode an event with full SKAN 4.0 support (fine value, coarse value, lock window)
+   * Encode an event with full SKAN 4.0 support (fine value, coarse value, lock window).
+   * fineValue = (funnelRank << 3) | revenueTier.
    */
   encodeWithSKAN4(event: string, properties?: Record<string, any>): SKANConversionResult {
     const mapping = this.template.events[event];
@@ -38,31 +47,19 @@ export class ConversionValueEncoder {
       return { fineValue: 0, coarseValue: 'low', lockWindow: false, priority: 0 };
     }
 
-    let conversionValue = 0;
+    // High 3 bits = funnel rank.
+    let conversionValue = (mapping.rank & 0x7) << 3;
 
-    // Set event bits
-    for (const bit of mapping.bits) {
-      conversionValue |= (1 << bit);
-    }
-
-    // Set revenue bits if revenue is provided
+    // Low 3 bits = revenue tier (only for monetary events).
     let coarseValue: SKANCoarseValue = mapping.coarseValue || 'medium';
-    if (mapping.revenueBits && properties) {
+    if (mapping.hasRevenue && properties) {
       const revenue = properties.revenue || properties.value || 0;
-      const revenueTier = this.getRevenueTier(revenue);
-
-      for (let i = 0; i < Math.min(mapping.revenueBits.length, 3); i++) {
-        if ((revenueTier >> i) & 1) {
-          conversionValue |= (1 << mapping.revenueBits[i]);
-        }
-      }
-
-      // Upgrade coarse value based on revenue
+      conversionValue |= this.getRevenueTier(revenue);
       coarseValue = this.getCoarseValueForRevenue(revenue);
     }
 
-    // Ensure value is within 0-63 range
-    const fineValue = Math.min(conversionValue, 63);
+    // (rank<<3)|tier is already within 0-63 for rank/tier in 0-7; clamp defensively.
+    const fineValue = Math.min(Math.max(conversionValue, 0), 63);
 
     return {
       fineValue,
@@ -96,47 +93,50 @@ export class ConversionValueEncoder {
   }
 }
 
-// Industry templates with SKAN 4.0 support
+// Industry templates (mixed model). Fine values are funnelRank<<3 | revenueTier, within
+// 0-63 and ordered so down-funnel/higher-value events get HIGHER values (SKAN revises only
+// upward). Ranks are a sensible default — tune the event→rank order to your LTV model and
+// mirror the final value→meaning mapping into your SKAN dashboard schema.
 export const ConversionTemplates = {
-  // E-commerce template - optimized for online stores
-  // SKAN 4.0: purchase locks window, high-value events get "high" coarse value
+  // E-commerce. view_item 8 · signup 16 · add_to_cart 24 · begin_checkout 32 ·
+  // subscribe 48-55 · purchase 56-63 (+ revenue tier).
   ecommerce: {
     name: 'ecommerce',
     events: {
-      purchase: { bits: [0], revenueBits: [1, 2, 3], priority: 100, coarseValue: 'high' as SKANCoarseValue, lockWindow: true },
-      add_to_cart: { bits: [4], priority: 30, coarseValue: 'low' as SKANCoarseValue },
-      begin_checkout: { bits: [5], priority: 50, coarseValue: 'medium' as SKANCoarseValue },
-      signup: { bits: [6], priority: 20, coarseValue: 'low' as SKANCoarseValue },
-      subscribe: { bits: [0, 1], revenueBits: [2, 3, 4], priority: 90, coarseValue: 'high' as SKANCoarseValue, lockWindow: true },
-      view_item: { bits: [7], priority: 10, coarseValue: 'low' as SKANCoarseValue }
+      view_item: { rank: 1, priority: 10, coarseValue: 'low' as SKANCoarseValue },
+      signup: { rank: 2, priority: 20, coarseValue: 'low' as SKANCoarseValue },
+      add_to_cart: { rank: 3, priority: 30, coarseValue: 'low' as SKANCoarseValue },
+      begin_checkout: { rank: 4, priority: 50, coarseValue: 'medium' as SKANCoarseValue },
+      subscribe: { rank: 6, hasRevenue: true, priority: 90, coarseValue: 'high' as SKANCoarseValue, lockWindow: true },
+      purchase: { rank: 7, hasRevenue: true, priority: 100, coarseValue: 'high' as SKANCoarseValue, lockWindow: true }
     }
   } as ConversionTemplate,
 
-  // Gaming template - optimized for mobile games
-  // SKAN 4.0: purchase locks window, tutorial completion is medium value
+  // Gaming. session_start 8 · ad_watched 16 · level_complete 24 · tutorial_complete 32 ·
+  // achievement_unlocked 40 · purchase 56-63 (+ revenue tier).
   gaming: {
     name: 'gaming',
     events: {
-      level_complete: { bits: [0], priority: 40, coarseValue: 'medium' as SKANCoarseValue },
-      tutorial_complete: { bits: [1], priority: 60, coarseValue: 'medium' as SKANCoarseValue },
-      purchase: { bits: [2], revenueBits: [3, 4, 5], priority: 100, coarseValue: 'high' as SKANCoarseValue, lockWindow: true },
-      achievement_unlocked: { bits: [6], priority: 30, coarseValue: 'low' as SKANCoarseValue },
-      session_start: { bits: [7], priority: 10, coarseValue: 'low' as SKANCoarseValue },
-      ad_watched: { bits: [0, 6], priority: 20, coarseValue: 'low' as SKANCoarseValue }
+      session_start: { rank: 1, priority: 10, coarseValue: 'low' as SKANCoarseValue },
+      ad_watched: { rank: 2, priority: 20, coarseValue: 'low' as SKANCoarseValue },
+      level_complete: { rank: 3, priority: 40, coarseValue: 'medium' as SKANCoarseValue },
+      tutorial_complete: { rank: 4, priority: 60, coarseValue: 'medium' as SKANCoarseValue },
+      achievement_unlocked: { rank: 5, priority: 30, coarseValue: 'low' as SKANCoarseValue },
+      purchase: { rank: 7, hasRevenue: true, priority: 100, coarseValue: 'high' as SKANCoarseValue, lockWindow: true }
     }
   } as ConversionTemplate,
 
-  // Subscription template - optimized for subscription apps
-  // SKAN 4.0: subscribe/upgrade lock window, trial is medium value
+  // Subscription. cancel 8 · signup 16 · payment_method_added 24 · trial_start 32 ·
+  // upgrade 48-55 · subscribe 56-63 (+ revenue tier).
   subscription: {
     name: 'subscription',
     events: {
-      trial_start: { bits: [0], priority: 70, coarseValue: 'medium' as SKANCoarseValue },
-      subscribe: { bits: [1], revenueBits: [2, 3, 4], priority: 100, coarseValue: 'high' as SKANCoarseValue, lockWindow: true },
-      upgrade: { bits: [1, 5], revenueBits: [2, 3, 4], priority: 90, coarseValue: 'high' as SKANCoarseValue, lockWindow: true },
-      cancel: { bits: [6], priority: 20, coarseValue: 'low' as SKANCoarseValue },
-      signup: { bits: [7], priority: 30, coarseValue: 'low' as SKANCoarseValue },
-      payment_method_added: { bits: [0, 7], priority: 50, coarseValue: 'medium' as SKANCoarseValue }
+      cancel: { rank: 1, priority: 20, coarseValue: 'low' as SKANCoarseValue },
+      signup: { rank: 2, priority: 30, coarseValue: 'low' as SKANCoarseValue },
+      payment_method_added: { rank: 3, priority: 50, coarseValue: 'medium' as SKANCoarseValue },
+      trial_start: { rank: 4, priority: 70, coarseValue: 'medium' as SKANCoarseValue },
+      upgrade: { rank: 6, hasRevenue: true, priority: 90, coarseValue: 'high' as SKANCoarseValue, lockWindow: true },
+      subscribe: { rank: 7, hasRevenue: true, priority: 100, coarseValue: 'high' as SKANCoarseValue, lockWindow: true }
     }
   } as ConversionTemplate
-}; 
+};
