@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "jest",
+    "test": "jest --forceExit",
     "lint": "eslint src --ext .ts,.tsx",
     "validate:ios": "bash scripts/validate-ios.sh",
     "prepublishOnly": "npm run build"

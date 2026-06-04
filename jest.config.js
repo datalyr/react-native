@@ -11,5 +11,11 @@ module.exports = {
     '^@react-native-async-storage/async-storage$': '<rootDir>/test-mocks/async-storage.js',
     '^react-native-device-info$': '<rootDir>/test-mocks/device-info.js',
     '^react-native-get-random-values$': '<rootDir>/test-mocks/empty.js',
+    // expo-modules-core ships untranspiled ESM; mock requireNativeModule so the SDK
+    // exercises the no-native-modules (Expo-Go-style) path. netinfo/expo-network are
+    // optional soft-requires — map to empty so resolution doesn't error.
+    '^expo-modules-core$': '<rootDir>/test-mocks/expo-modules-core.js',
+    '^@react-native-community/netinfo$': '<rootDir>/test-mocks/empty.js',
+    '^expo-network$': '<rootDir>/test-mocks/empty.js',
   },
 };
