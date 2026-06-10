@@ -16,6 +16,9 @@ interface HttpResponse {
   status: number;
   data?: any;
   error?: string;
+  // true when the send was SKIPPED because no API key is configured yet. The queue must
+  // treat this as "not ready" — keep the event, don't burn a retry, don't dead-letter.
+  authPending?: boolean;
 }
 
 export class HttpClient {
@@ -53,6 +56,15 @@ export class HttpClient {
    */
   private async sendWithRetry(payload: EventPayload, retryCount: number): Promise<HttpResponse> {
     try {
+      // Defense-in-depth: never fire a server-tracking request without an API key — it
+      // would 401 and (after retries) permanently dead-letter the event. Signal the queue
+      // to KEEP the event (no retry burned) until a key is configured. Guards the brief
+      // window before initialize() applies the key and any stray pre-init client.
+      if (this.config.useServerTracking !== false && !this.config.apiKey) {
+        debugLog(`Skipping send (no API key configured yet): ${payload.eventName}`);
+        return { success: false, status: 0, error: 'API key not set', authPending: true };
+      }
+
       // Sliding-window rate limit (max 100/min) with BACKPRESSURE, not drop. The old
       // fixed-window code threw a non-retryable error at >100/min, which made the queue
       // give up and DROP the event (silent data loss under a burst). Now we wait until

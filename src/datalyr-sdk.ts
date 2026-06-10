@@ -102,6 +102,13 @@ export class DatalyrSDK {
       // Set up configuration
       this.state.config = { ...this.state.config, ...config };
 
+      // Tear down the placeholder queue built in the constructor BEFORE installing the
+      // configured one. That placeholder has an empty apiKey, started its own 30s flush
+      // timer, and loaded the persisted queue from the SAME storage key — left alive it
+      // flushes leftover events through an empty-key client (→ 401 → dead-letter) and
+      // races the real queue on storage. destroy() stops its timer for good.
+      this.eventQueue.destroy();
+
       // Initialize HTTP client with server-side API
       this.httpClient = new HttpClient(this.state.config.endpoint || 'https://ingest.datalyr.com/track', {
         maxRetries: this.state.config.maxRetries || 3,

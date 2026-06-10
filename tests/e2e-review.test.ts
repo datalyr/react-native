@@ -78,6 +78,64 @@ describe('event queue', () => {
   });
 });
 
+describe('cold-start auth race — an empty API key must NOT 401/dead-letter events', () => {
+  const cfg = { maxQueueSize: 1000, batchSize: 10, flushInterval: 600000, maxRetryCount: 3 };
+  const keylessClient = () => new HttpClient('https://ingest.datalyr.com/track',
+    { apiKey: '', useServerTracking: true, maxRetries: 3, retryDelay: 1, timeout: 1000, debug: false } as any);
+
+  test('HttpClient with no apiKey returns authPending and never hits the network', async () => {
+    const fetchSpy = jest.fn();
+    (global as any).fetch = fetchSpy;
+    const res = await keylessClient().sendEvent(makePayload('session_start'));
+    expect(res.success).toBe(false);
+    expect((res as any).authPending).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test('queue keeps keyless events (no retry burn, no dead-letter), then delivers once the key is set', async () => {
+    const fetchSpy = jest.fn();
+    (global as any).fetch = fetchSpy;
+    const client = keylessClient();
+    const q = new EventQueue(client, cfg);
+    try {
+      q.setOnlineStatus(false);
+      await q.enqueue(makePayload('session_start'));
+      (q as any).isOnline = true;
+
+      // Repeated flushes while keyless — the exact cold-start condition. Must NOT 401/dead-letter.
+      for (let i = 0; i < 5; i++) await q.flush();
+      expect(((await Storage.getItem<any[]>(STORAGE_KEYS.DEAD_LETTER_QUEUE)) || []).length).toBe(0);
+      const live = (await Storage.getItem<any[]>(STORAGE_KEYS.EVENT_QUEUE)) || [];
+      expect(live.length).toBe(1);          // still queued...
+      expect(live[0].retryCount).toBe(0);   // ...with retries untouched
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      // Key arrives (initialize() applies it to the SAME client) → event delivers.
+      fetchSpy.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true }) });
+      client.updateConfig({ apiKey: 'dk_real' });
+      await q.flush();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(((await Storage.getItem<any[]>(STORAGE_KEYS.EVENT_QUEUE)) || []).length).toBe(0);
+    } finally { q.destroy(); }
+  });
+
+  test('destroy() is final — a late initializeQueue() cannot revive the orphan timer/queue', async () => {
+    const sendEvent = jest.fn(async () => ({ success: true }));
+    // A previous session left events behind — what the orphan used to flush with an empty key.
+    await Storage.setItem(STORAGE_KEYS.EVENT_QUEUE, [
+      { payload: makePayload('session_start'), timestamp: 1, retryCount: 0 },
+    ]);
+    const q = new EventQueue({ sendEvent } as any, cfg);
+    q.destroy();                          // SDK initialize() tears the orphan down...
+    await (q as any).initializeQueue();   // ...but its async storage-load resolves afterwards (the race)
+    (q as any).isOnline = true;
+    await q.flush();
+    expect((q as any).queue.length).toBe(0);   // load was rejected
+    expect((q as any).flushTimer).toBeNull();  // timer not revived
+    expect(sendEvent).not.toHaveBeenCalled();  // leftover never sent
+  });
+});
+
 describe('SKAN conversion-value encoder (mixed model: 0-63, upward-only safe)', () => {
   const enc = () => new ConversionValueEncoder(ConversionTemplates.ecommerce);
 

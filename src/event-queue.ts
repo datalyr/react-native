@@ -16,6 +16,10 @@ export class EventQueue {
   private flushTimer: NodeJS.Timeout | null = null;
   private isProcessing: boolean = false;
   private isOnline: boolean = true;
+  // Set by destroy(). A pre-init/orphan queue (built with an empty key in the SDK
+  // constructor) is destroy()'d once initialize() installs the configured queue; this
+  // flag stops its async storage-load and timer from resurrecting it afterwards.
+  private destroyed: boolean = false;
 
   constructor(httpClient: HttpClient, config: QueueConfig) {
     this.httpClient = httpClient;
@@ -29,11 +33,15 @@ export class EventQueue {
   private async initializeQueue(): Promise<void> {
     try {
       const persistedQueue = await Storage.getItem<QueuedEvent[]>(STORAGE_KEYS.EVENT_QUEUE);
+      // destroy() may have run while this async load was in flight (the orphan-queue
+      // teardown race). Bail so it can't repopulate the queue or restart the flush timer
+      // and resurrect leftover events through an empty-key client.
+      if (this.destroyed) return;
       if (persistedQueue && Array.isArray(persistedQueue)) {
         this.queue = persistedQueue;
         debugLog(`Loaded ${this.queue.length} events from storage`);
       }
-      
+
       // Start the flush timer
       this.startFlushTimer();
     } catch (error) {
@@ -73,7 +81,7 @@ export class EventQueue {
    * Process the queue and send events
    */
   private async processQueue(): Promise<void> {
-    if (this.isProcessing || this.queue.length === 0) {
+    if (this.destroyed || this.isProcessing || this.queue.length === 0) {
       return;
     }
 
@@ -97,6 +105,14 @@ export class EventQueue {
             if (response.success) {
               debugLog(`Event sent successfully: ${queuedEvent.payload.eventName}`);
               this.removeFromQueue(queuedEvent);
+            } else if (response.authPending) {
+              // No API key configured yet (a flush fired before initialize() applied the
+              // key, or a stray pre-init client). Leave the event queued WITHOUT burning a
+              // retry, and stop this drain — otherwise valid cold-start events (session_start,
+              // $identify, $att_status, the first pageviews) would 401 and dead-letter for a
+              // transient missing key. The flush timer retries once the key is set.
+              debugLog(`Auth not ready; keeping event queued: ${queuedEvent.payload.eventName}`);
+              return;
             } else {
               queuedEvent.retryCount++;
               if (queuedEvent.retryCount >= this.config.maxRetryCount) {
@@ -175,6 +191,7 @@ export class EventQueue {
    * Start the periodic flush timer
    */
   private startFlushTimer(): void {
+    if (this.destroyed) return;
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
     }
@@ -268,6 +285,7 @@ export class EventQueue {
    * Destroy the queue and cleanup
    */
   destroy(): void {
+    this.destroyed = true;
     this.stopFlushTimer();
     this.queue = [];
     debugLog('Event queue destroyed');
