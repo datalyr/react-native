@@ -48,6 +48,7 @@ export class DatalyrSDKExpo {
   private appStateSubscription: any = null;
   private networkStatusUnsubscribe: (() => void) | null = null;
   private cachedAdvertiserInfo: any = null;
+  private initializing: boolean = false;
   private static conversionEncoder?: ConversionValueEncoder;
   private static debugEnabled = false;
   /** Events that arrived before initialize() completed. Flushed once init finishes. */
@@ -87,6 +88,16 @@ export class DatalyrSDKExpo {
   async initialize(config: DatalyrConfig): Promise<void> {
     try {
       debugLog('Initializing Datalyr SDK (Expo)...', { workspaceId: config.workspaceId });
+
+      // Idempotent init: a repeat initialize() (hot-reload, re-login, double-call) must not
+      // re-run — it would orphan the prior AppState + network subscriptions (the first
+      // becomes unremovable), double-fire flush/$network_status_change, and emit a duplicate
+      // session_start. Mirrors the iOS SDK's `guard !initialized`.
+      if (this.state.initialized || this.initializing) {
+        debugLog('SDK already initialized; ignoring repeat initialize()');
+        return;
+      }
+      this.initializing = true;
 
       if (!config.apiKey) {
         throw new Error('apiKey is required for Datalyr SDK');
@@ -229,7 +240,7 @@ export class DatalyrSDKExpo {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS,
-          sdk_version: '1.7.10',
+          sdk_version: '1.7.11',
           sdk_variant: 'expo',
           ...installData,
         });
@@ -243,6 +254,7 @@ export class DatalyrSDKExpo {
       });
 
     } catch (error) {
+      this.initializing = false; // allow a retry after a failed init
       errorLog('Failed to initialize Datalyr SDK:', error as Error);
       throw error;
     }
@@ -976,7 +988,7 @@ export class DatalyrSDKExpo {
         carrier: deviceInfo.carrier,
         network_type: networkType,
         timestamp: Date.now(),
-        sdk_version: '1.7.10',
+        sdk_version: '1.7.11',
         sdk_variant: 'expo',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {

@@ -61,8 +61,15 @@ export class EventQueue {
 
     // Check queue size limit
     if (this.queue.length >= this.config.maxQueueSize) {
-      debugLog('Queue is full, removing oldest event');
-      this.queue.shift(); // Remove oldest event
+      // Queue full — the OLDEST event is evicted. Don't drop it silently: it's often the
+      // earliest, highest-value event (session_start / app_install / a purchase queued
+      // while offline). Surface it and park it in the capped dead-letter store so it's
+      // recoverable, mirroring the max-retry path.
+      const evicted = this.queue.shift();
+      if (evicted) {
+        errorLog(`Queue full (max ${this.config.maxQueueSize}); oldest event moved to dead-letter: ${evicted.payload.eventName}`);
+        await this.deadLetter(evicted);
+      }
     }
 
     this.queue.push(queuedEvent);

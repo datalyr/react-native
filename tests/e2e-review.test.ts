@@ -29,7 +29,7 @@ describe('wire contract — transformForServerAPI', () => {
     // IOS-31 equivalent: ingest's server-track handler reads context.session_id.
     expect(wire.context.session_id).toBe('sess_xyz');
     // stale-version fix (was a hardcoded stale '1.7.5'); tracks package version.
-    expect(wire.context.version).toBe('1.7.10');
+    expect(wire.context.version).toBe('1.7.11');
     expect(wire.context.source).toBe('mobile_app');
     // properties still carry sessionId + the eventData (handleServerTrack spreads ...props).
     expect(wire.properties.sessionId).toBe('sess_xyz');
@@ -74,6 +74,20 @@ describe('event queue', () => {
       // and it's no longer in the live queue
       const live = await Storage.getItem<any[]>(STORAGE_KEYS.EVENT_QUEUE);
       expect((live || []).length).toBe(0);
+    } finally { q.destroy(); }
+  });
+
+  test('queue overflow evicts the OLDEST event to dead-letter, not a silent drop', async () => {
+    const client = { sendEvent: async () => ({ success: false, error: 'offline' }) } as any;
+    const q = new EventQueue(client, { ...cfg, maxQueueSize: 3 });
+    try {
+      q.setOnlineStatus(false); // stay offline so nothing drains — force pure overflow
+      for (let i = 0; i < 5; i++) await q.enqueue(makePayload('evt' + i)); // evt0..evt4
+      // Oldest two evicted (queue cap 3) — surfaced + recoverable, NOT silently shifted away.
+      const dl = (await Storage.getItem<any[]>(STORAGE_KEYS.DEAD_LETTER_QUEUE)) || [];
+      expect(dl.map((e: any) => e.payload.eventName)).toEqual(['evt0', 'evt1']);
+      const live = (await Storage.getItem<any[]>(STORAGE_KEYS.EVENT_QUEUE)) || [];
+      expect(live.map((e: any) => e.payload.eventName)).toEqual(['evt2', 'evt3', 'evt4']);
     } finally { q.destroy(); }
   });
 });

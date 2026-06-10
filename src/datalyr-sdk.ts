@@ -44,6 +44,7 @@ export class DatalyrSDK {
   private appStateSubscription: any = null;
   private networkStatusUnsubscribe: (() => void) | null = null;
   private cachedAdvertiserInfo: any = null;
+  private initializing: boolean = false;
   private static conversionEncoder?: ConversionValueEncoder;
   private static debugEnabled = false;
   /** Events that arrived before initialize() completed. Flushed once init finishes. */
@@ -88,6 +89,16 @@ export class DatalyrSDK {
   async initialize(config: DatalyrConfig): Promise<void> {
     try {
       debugLog('Initializing Datalyr SDK...', { workspaceId: config.workspaceId });
+
+      // Idempotent init: a repeat initialize() (hot-reload, re-login, double-call) must not
+      // re-run — it would orphan the prior AppState + network subscriptions (the first
+      // becomes unremovable), double-fire flush/$network_status_change, and emit a duplicate
+      // session_start. Mirrors the iOS SDK's `guard !initialized`.
+      if (this.state.initialized || this.initializing) {
+        debugLog('SDK already initialized; ignoring repeat initialize()');
+        return;
+      }
+      this.initializing = true;
 
       // Validate configuration
       if (!config.apiKey) {
@@ -249,7 +260,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.7.10',
+          sdk_version: '1.7.11',
           ...installData,
         });
       }
@@ -262,6 +273,7 @@ export class DatalyrSDK {
       });
 
     } catch (error) {
+      this.initializing = false; // allow a retry after a failed init
       errorLog('Failed to initialize Datalyr SDK:', error as Error);
       throw error;
     }
@@ -1160,7 +1172,7 @@ export class DatalyrSDK {
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
         timestamp: Date.now(),
-        sdk_version: '1.7.10',
+        sdk_version: '1.7.11',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
           idfa: advertiserInfo.idfa,

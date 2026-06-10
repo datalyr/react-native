@@ -101,11 +101,21 @@ export interface AttributionData {
 export class AttributionManager {
   private attributionData: AttributionData = {};
   private isFirstLaunch: boolean = false;
+  private initialized: boolean = false;
+  private deepLinkSubscription: { remove: () => void } | null = null;
 
   /**
    * Initialize attribution tracking
    */
   async initialize(): Promise<void> {
+    // Idempotent: a repeat initialize() (SDK re-init / hot-reload) must not add a second
+    // 'url' listener — addEventListener with a freshly-bound handler is unremovable, so a
+    // single deep link would be processed N times (inflating attribution/touchpoints).
+    if (this.initialized) {
+      debugLog('Attribution manager already initialized');
+      return;
+    }
+    this.initialized = true;
     try {
       debugLog('Initializing attribution manager...');
       
@@ -187,10 +197,29 @@ export class AttributionManager {
    */
   private setupDeepLinkListener(): void {
     try {
-      Linking.addEventListener('url', this.handleDeepLink.bind(this));
+      // Keep the subscription so destroy() can remove it (modern RN's addEventListener
+      // returns an EmitterSubscription with .remove()).
+      this.deepLinkSubscription = Linking.addEventListener(
+        'url',
+        this.handleDeepLink.bind(this)
+      ) as unknown as { remove: () => void };
       debugLog('Deep link listener set up');
     } catch (error) {
       errorLog('Error setting up deep link listener:', error as Error);
+    }
+  }
+
+  /**
+   * Remove the deep-link listener and allow a fresh initialize() (SDK teardown).
+   */
+  destroy(): void {
+    try {
+      this.deepLinkSubscription?.remove?.();
+      this.deepLinkSubscription = null;
+      this.initialized = false;
+      debugLog('Attribution manager destroyed');
+    } catch (error) {
+      errorLog('Error destroying attribution manager:', error as Error);
     }
   }
 
