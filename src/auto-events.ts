@@ -22,12 +22,18 @@ export class AutoEventsManager {
   private lastScreenName: string | null = null;
   // Event tracking callback
   private trackEvent: (eventName: string, properties: Record<string, any>) => Promise<void>;
+  // Returns the canonical wire session id (state.sessionId from getOrCreateSessionId), so
+  // session_start/session_end's session_id MATCHES every event's context.session_id and the
+  // two are joinable. Without it, auto-events emitted a separate `sess_...` id no event carried.
+  private getSessionId?: () => string;
 
   constructor(
     trackEvent: (eventName: string, properties: Record<string, any>) => Promise<void>,
-    config: Partial<AutoEventConfig> = {}
+    config: Partial<AutoEventConfig> = {},
+    getSessionId?: () => string
   ) {
     this.trackEvent = trackEvent;
+    this.getSessionId = getSessionId;
     this.config = {
       trackSessions: true,
       trackScreenViews: true,
@@ -36,6 +42,14 @@ export class AutoEventsManager {
       sessionTimeoutMs: 30 * 60 * 1000, // 30 minutes
       ...config,
     };
+  }
+
+  /** Canonical session id — the wire context.session_id when a getter is wired. */
+  private resolveSessionId(): string {
+    const fromSdk = this.getSessionId?.();
+    if (fromSdk) return fromSdk;
+    // Fallback (no getter wired): keep the legacy self-generated id so nothing crashes.
+    return `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   /**
@@ -47,7 +61,20 @@ export class AutoEventsManager {
 
       // Start session tracking
       if (this.config.trackSessions) {
-        await this.startSession();
+        // Fire session_start ONLY when the canonical session id is genuinely NEW. On a cold
+        // start within 30 min of the last launch, getOrCreateSessionId() RESUMES the prior
+        // context session — emitting session_start there inflated session counts and fired
+        // multiple session_starts inside one context session.
+        const canonicalId = this.resolveSessionId();
+        const stored = await Storage.getItem<SessionData>('@datalyr/current_session');
+        if (stored && stored.sessionId === canonicalId) {
+          // Resume the existing session (no session_start event).
+          this.currentSession = { ...stored, lastActivity: Date.now() };
+          await Storage.setItem('@datalyr/current_session', this.currentSession);
+          debugLog('Session resumed (context session unchanged):', canonicalId);
+        } else {
+          await this.startSession();
+        }
         this.setupSessionMonitoring();
       }
 
@@ -55,7 +82,7 @@ export class AutoEventsManager {
       // app_install is tracked by the SDK directly, not via AutoEventsManager
 
       debugLog('Automatic events manager initialized');
-      
+
     } catch (error) {
       errorLog('Failed to initialize automatic events manager:', error as Error);
     }
@@ -66,7 +93,8 @@ export class AutoEventsManager {
    */
   private async startSession(): Promise<void> {
     try {
-      const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Use the canonical wire session id so session_start/end join to the session's events.
+      const sessionId = this.resolveSessionId();
       const now = Date.now();
 
       this.currentSession = {
@@ -100,8 +128,12 @@ export class AutoEventsManager {
     try {
       if (!this.currentSession) return;
 
-      const now = Date.now();
-      const duration = now - this.currentSession.startTime;
+      // Duration is measured to LAST ACTIVITY, not "now" (the foreground-return moment) —
+      // endSession() is reached after the 30-min timeout when the user comes back, so
+      // `now` would include the entire background gap (e.g. a 2-min session that resumes
+      // the next day reported ~24h). Stamp the session_end timestamp from lastActivity too.
+      const endTime = this.currentSession.lastActivity;
+      const duration = Math.max(0, endTime - this.currentSession.startTime);
 
       // Track session end event
       await this.trackEvent('session_end', {
@@ -110,7 +142,7 @@ export class AutoEventsManager {
         duration_seconds: Math.round(duration / 1000),
         pageviews: this.currentSession.screenViews,
         events: this.currentSession.events,
-        timestamp: now,
+        timestamp: endTime,
       });
 
       debugLog('Session ended:', {
@@ -293,8 +325,9 @@ export let autoEventsManager: AutoEventsManager | null = null;
 
 export const createAutoEventsManager = (
   trackEvent: (eventName: string, properties: Record<string, any>) => Promise<void>,
-  config?: Partial<AutoEventConfig>
+  config?: Partial<AutoEventConfig>,
+  getSessionId?: () => string
 ): AutoEventsManager => {
-  autoEventsManager = new AutoEventsManager(trackEvent, config);
+  autoEventsManager = new AutoEventsManager(trackEvent, config, getSessionId);
   return autoEventsManager;
 }; 

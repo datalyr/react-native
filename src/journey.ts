@@ -232,8 +232,20 @@ export class JourneyManager {
    * Updates first-touch (if not set), last-touch, and adds touchpoint
    */
   async recordAttribution(sessionId: string, attribution: Partial<TouchAttribution>): Promise<void> {
-    // Only process if we have meaningful attribution data
-    const hasAttribution = attribution.source || attribution.clickId || attribution.campaign || attribution.lyr;
+    // Only process if we have meaningful attribution data. Click-id-only deep links (the
+    // DEFAULT Meta-ad shape: `?fbclid=...` with no UTMs) pass fbclid/gclid/ttclid/gbraid/
+    // wbraid but never `clickId` (no caller sets it), so the old gate silently skipped
+    // first/last-touch for the most common paid-click path. Include the specific click IDs.
+    const hasAttribution =
+      attribution.source ||
+      attribution.clickId ||
+      attribution.campaign ||
+      attribution.lyr ||
+      attribution.fbclid ||
+      attribution.gclid ||
+      attribution.ttclid ||
+      attribution.gbraid ||
+      attribution.wbraid;
 
     if (!hasAttribution) {
       debugLog('No attribution data to record');
