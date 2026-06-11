@@ -26,7 +26,7 @@
  */
 
 import { Platform, NativeModules } from 'react-native';
-import { debugLog, errorLog } from '../utils';
+import { debugLog, errorLog, parseQueryString } from '../utils';
 
 export interface PlayInstallReferrer {
   // Raw referrer URL from Play Store
@@ -146,29 +146,47 @@ class PlayInstallReferrerIntegration {
     if (!referrerUrl) return params;
 
     try {
-      // Referrer URL is URL-encoded, decode it first
-      const decoded = decodeURIComponent(referrerUrl);
-      const searchParams = new URLSearchParams(decoded);
+      // Parse the RAW referrer directly. Play Install Referrer already returns a query
+      // string whose VALUES are percent-encoded (e.g. `utm_campaign=Summer%26Sale`), and
+      // the shared parser decodeURIComponent's per component — so encoded '&'/'=' survive
+      // and a stray '%' only loses that one value. The old code decodeURIComponent'd the
+      // WHOLE string first, which corrupted such values and threw URIError (losing ALL
+      // params) on a malformed '%'. It also avoids RN's throwing URLSearchParams stub.
+      let parsed = parseQueryString(referrerUrl);
 
-      // Extract UTM parameters
-      params.utmSource = searchParams.get('utm_source') || undefined;
-      params.utmMedium = searchParams.get('utm_medium') || undefined;
-      params.utmCampaign = searchParams.get('utm_campaign') || undefined;
-      params.utmTerm = searchParams.get('utm_term') || undefined;
-      params.utmContent = searchParams.get('utm_content') || undefined;
+      // Genuinely double-encoded single-key case some stores produce: the parser yields
+      // one key whose value is itself a query string. Decode once more and re-parse.
+      const keys = Object.keys(parsed);
+      if (keys.length === 1 && /[=&]/.test(parsed[keys[0]] || '')) {
+        try {
+          const reparsed = parseQueryString(decodeURIComponent(referrerUrl));
+          if (Object.keys(reparsed).length > 1) {
+            parsed = reparsed;
+          }
+        } catch {
+          // Keep the first parse if the whole-string decode throws.
+        }
+      }
+
+      // Extract UTM parameters (parser lower-cases keys)
+      params.utmSource = parsed['utm_source'] || undefined;
+      params.utmMedium = parsed['utm_medium'] || undefined;
+      params.utmCampaign = parsed['utm_campaign'] || undefined;
+      params.utmTerm = parsed['utm_term'] || undefined;
+      params.utmContent = parsed['utm_content'] || undefined;
 
       // Extract click IDs (gclid, gbraid, wbraid)
-      params.gclid = searchParams.get('gclid') || undefined;
-      params.gbraid = searchParams.get('gbraid') || undefined;
-      params.wbraid = searchParams.get('wbraid') || undefined;
+      params.gclid = parsed['gclid'] || undefined;
+      params.gbraid = parsed['gbraid'] || undefined;
+      params.wbraid = parsed['wbraid'] || undefined;
 
       // Store any additional parameters
       const knownParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'gbraid', 'wbraid'];
-      searchParams.forEach((value, key) => {
+      for (const [key, value] of Object.entries(parsed)) {
         if (!knownParams.includes(key) && !key.startsWith('utm_')) {
           params[key] = value;
         }
-      });
+      }
 
       debugLog('[PlayInstallReferrer] Parsed referrer URL:', params);
     } catch (error) {

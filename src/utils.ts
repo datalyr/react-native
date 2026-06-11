@@ -64,6 +64,73 @@ export const deriveCountryFromLocale = (locale: string | undefined | null): stri
 };
 
 /**
+ * Dependency-free query-string parser.
+ *
+ * React Native core (Hermes) ships THROWING stubs for `URL.searchParams` /
+ * `URLSearchParams.get/forEach` on bare RN (>=0.72), and its URLSearchParams
+ * constructor ignores string input — so `new URL(url).searchParams` and
+ * `new URLSearchParams(str)` silently drop EVERY deep-link / Play-referrer
+ * attribution parameter (lyr, fbclid, gclid, ttclid, utm_*, gbraid, wbraid).
+ * This parser avoids WHATWG URL entirely: it splits on '?'/'#', then '&'/'=',
+ * and decodeURIComponent's each component individually (so encoded '&'/'=' in a
+ * value survive, and one malformed '%' only loses that single value, not all).
+ *
+ * Pass a full URL (everything before the first '?'/'#' is ignored) or a bare
+ * query string ("a=1&b=2"). Keys are lower-cased; later duplicates win.
+ */
+export const parseQueryString = (input: string | undefined | null): Record<string, string> => {
+  const params: Record<string, string> = {};
+  if (!input) return params;
+
+  // Collect the query (after '?') and the fragment (after '#') — some platforms
+  // pass attribution params in the hash. A bare "a=1&b=2" has neither delimiter,
+  // so fall back to treating the whole string as the query.
+  const segments: string[] = [];
+  const qIndex = input.indexOf('?');
+  const hIndex = input.indexOf('#');
+  if (qIndex === -1 && hIndex === -1) {
+    segments.push(input);
+  } else {
+    if (qIndex !== -1) {
+      const end = hIndex !== -1 && hIndex > qIndex ? hIndex : input.length;
+      segments.push(input.substring(qIndex + 1, end));
+    }
+    if (hIndex !== -1) {
+      segments.push(input.substring(hIndex + 1));
+    }
+  }
+
+  for (const segment of segments) {
+    if (!segment) continue;
+    for (const pair of segment.split('&')) {
+      if (!pair) continue;
+      const eq = pair.indexOf('=');
+      const rawKey = eq === -1 ? pair : pair.substring(0, eq);
+      const rawValue = eq === -1 ? '' : pair.substring(eq + 1);
+      if (!rawKey) continue;
+      let key: string;
+      let value: string;
+      try {
+        // '+' is a legacy space encoding in query strings.
+        key = decodeURIComponent(rawKey.replace(/\+/g, ' '));
+      } catch {
+        key = rawKey;
+      }
+      try {
+        value = decodeURIComponent(rawValue.replace(/\+/g, ' '));
+      } catch {
+        // A stray '%' only corrupts THIS value; keep the raw form rather than
+        // dropping the whole parse.
+        value = rawValue;
+      }
+      params[key.toLowerCase()] = value;
+    }
+  }
+
+  return params;
+};
+
+/**
  * Generate a session ID with timestamp
  */
 export const generateSessionId = (): string => {
@@ -120,6 +187,42 @@ export const getOrCreateAnonymousId = async (): Promise<string> => {
 };
 
 /**
+ * Rotate the persistent anonymous ID — generate a fresh `anon_...` and persist it.
+ *
+ * Used by reset() (logout) so the next user does NOT share the previous user's
+ * anonymousId. Without rotation, reset()+identify(userB) links the SAME anon_xxx to
+ * BOTH users in visitor_user_links, and the Meta CAPI identity bridge then resolves
+ * across both — leaking click-ids/PII between users. (RN analog of the web SDK's
+ * privacy rotation and Node's NODE-6 fix.) Returns the new id (memory-only on failure).
+ */
+export const rotateAnonymousId = async (): Promise<string> => {
+  const anonymousId = `anon_${generateUUID()}`;
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.ANONYMOUS_ID, anonymousId);
+  } catch (error) {
+    console.warn('Failed to rotate anonymous ID:', error);
+  }
+  return anonymousId;
+};
+
+/**
+ * Force a brand-new session — clear the stored session id + last-activity time so the
+ * next getOrCreateSessionId() creates (not resumes) one. reset() needs this because the
+ * plain getOrCreateSessionId() resumes any session <30min old (always true at logout),
+ * so post-logout events would otherwise share the previous user's session id.
+ */
+export const clearSession = async (): Promise<void> => {
+  try {
+    await Promise.all([
+      AsyncStorage.removeItem(STORAGE_KEYS.SESSION_ID),
+      AsyncStorage.removeItem(STORAGE_KEYS.LAST_SESSION_TIME),
+    ]);
+  } catch (error) {
+    console.warn('Failed to clear session:', error);
+  }
+};
+
+/**
  * Get or create a session ID (with session timeout logic)
  */
 export const getOrCreateSessionId = async (): Promise<string> => {
@@ -155,6 +258,40 @@ export const getOrCreateSessionId = async (): Promise<string> => {
 // Cached device info to avoid repeated async calls
 let cachedDeviceInfo: DeviceInfoType | null = null;
 let deviceInfoPromise: Promise<DeviceInfoType> | null = null;
+
+/**
+ * Best-effort real runtime locale. Used by the device-info fallbacks instead of a
+ * hardcoded 'en-US' — that fabricated country='US' on EVERY event for degraded installs
+ * (Expo Go via the plain-RN entry, missing peer dep, or any DeviceInfo getter throw),
+ * overriding accurate Cloudflare geo for Meta CAPI matching. Returns undefined if the
+ * runtime can't resolve one (so country is omitted, not fabricated).
+ */
+const getRuntimeLocale = (): string | undefined => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * A STABLE fallback device id, persisted in AsyncStorage so fingerprint_hash doesn't churn
+ * on every launch when react-native-device-info is unavailable / throws. Reuses the
+ * VISITOR_ID storage namespace via a dedicated key.
+ */
+const FALLBACK_DEVICE_ID_KEY = '@datalyr/fallback_device_id';
+const getOrCreateFallbackDeviceId = async (): Promise<string> => {
+  try {
+    let id = await AsyncStorage.getItem(FALLBACK_DEVICE_ID_KEY);
+    if (!id) {
+      id = generateUUID();
+      await AsyncStorage.setItem(FALLBACK_DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return generateUUID();
+  }
+};
 
 /**
  * Collect comprehensive device information (cached after first call)
@@ -199,7 +336,8 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
   // If DeviceInfo is not available (like in Expo Go), use fallback
   if (!DeviceInfo) {
     return {
-      deviceId: generateUUID(),
+      // Persisted so fingerprint_hash is stable across launches (was a fresh UUID each run).
+      deviceId: await getOrCreateFallbackDeviceId(),
       model: Platform.OS === 'ios' ? 'iPhone' : 'Android',
       manufacturer: Platform.OS === 'ios' ? 'Apple' : 'Google',
       osVersion: Platform.Version.toString(),
@@ -209,7 +347,8 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
       screenWidth: width,
       screenHeight: height,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-      locale: 'en-US',
+      // Real runtime locale (was hardcoded 'en-US', fabricating country='US' for everyone).
+      locale: getRuntimeLocale(),
       isEmulator: false,
     };
   }
@@ -261,7 +400,8 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
 
     // Fallback device info
     return {
-      deviceId: generateUUID(),
+      // Persisted so fingerprint_hash is stable across launches (was a fresh UUID each run).
+      deviceId: await getOrCreateFallbackDeviceId(),
       model: 'Unknown',
       manufacturer: Platform.OS === 'ios' ? 'Apple' : 'Android',
       osVersion: Platform.Version.toString(),
@@ -271,7 +411,8 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
       screenWidth: width,
       screenHeight: height,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-      locale: 'en-US',
+      // Real runtime locale (was hardcoded 'en-US', fabricating country='US' for everyone).
+      locale: getRuntimeLocale(),
       isEmulator: false,
     };
   }

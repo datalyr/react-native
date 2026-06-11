@@ -189,6 +189,9 @@ export interface QueuedEvent {
   payload: EventPayload;
   timestamp: number;
   retryCount: number;
+  // How many times this event has been pulled back out of the dead-letter store and
+  // replayed. Bounds replay so a permanently-bad event can't loop forever.
+  replayCount?: number;
 }
 
 // App State - Updated for React Native 0.80
@@ -213,7 +216,9 @@ export interface DeviceInfo {
   screenWidth: number;
   screenHeight: number;
   timezone: string;
-  locale: string;
+  // Optional: the no-native-modules / DeviceInfo-throw fallbacks omit it rather than
+  // hardcoding 'en-US' (which fabricated country='US' for every degraded install).
+  locale?: string;
   carrier?: string;
   isEmulator: boolean;
 }
