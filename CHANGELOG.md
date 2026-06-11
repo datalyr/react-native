@@ -5,6 +5,55 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.12] - 2026-06-10
+
+Full-stack review (FULL_STACK_REVIEW_2026-06-10) fixes. JS-only, applied to BOTH the
+React Native and Expo entry points. No native changes.
+
+### Fixed
+- **Deep-link & Play Install Referrer parsing on bare React Native (FSR-8, FSR-43).** Hermes
+  ships throwing stubs for `URL.searchParams` / `URLSearchParams`, so deep-link and
+  Play-referrer attribution params (lyr, fbclid, gclid, ttclid, utm_*, gbraid, wbraid) were
+  silently dropped on bare RN. Replaced with a dependency-free query-string parser
+  (`parseQueryString`) that decodes per component; the Play referrer is now parsed raw
+  (no whole-string pre-decode that corrupted encoded `&`/`=` and threw on a stray `%`).
+- **`destroy()` no longer permanently bricks the SDK (FSR-9).** `initializing` is now cleared
+  in a `finally` and reset in `destroy()`, which also tears down the attribution + auto-events
+  managers. A `destroy()` → `initialize()` cycle re-initializes and delivers events again.
+- **`$alias` writes the correct identity link (FSR-10, FSR-40).** `createEventPayload` no
+  longer clobbers the `$alias` event's `userId` with a stale identified user, and a pre-init
+  `alias()` now backfills a truthy `previousId` at payload time — so `visitor_user_links` is
+  written for the intended user (ingest reads camelCase `ed.userId`/`ed.previousId`).
+- **Dead-letter replay (FSR-11, FSR-42).** Events that exhaust retries or evict on overflow
+  are now replayed on init and on offline→online reconnect (bounded by a replay counter +
+  age cap), instead of being write-only-lost. Connectivity-class failures no longer burn the
+  retry budget. HTTP 429/408 are treated as retryable backpressure and honor `Retry-After`.
+- **Network online-ness change detection (FSR-12).** The network manager now notifies on a
+  change in the *derived* online value (`isConnected && isInternetReachable !== false`), so
+  reachability-only transitions (captive portals, WiFi-without-internet) no longer leave the
+  queue stuck offline or stuck online.
+- **Web attribution merge completeness (FSR-37).** `mergeWebAttribution` now gap-fills
+  gbraid/wbraid/fbp/_fbp/fbc/_fbc/lyr (previously dropped) and awaits the save.
+- **Session correctness (FSR-38, FSR-39, FSR-98).** `session_start`/`session_end` now use the
+  canonical wire `session_id`; `session_start` fires only on a genuinely new session;
+  `session_end` duration is measured to last activity (excludes the background gap) and the
+  `events` count is wired. Expo session timeout is now an idle/sliding window like RN.
+- **`reset()` rotates the anonymous id and forces a new session (FSR-41).** Prevents logout→
+  login on one device merging two users in the identity graph.
+- **Journey records click-id-only deep links (FSR-44).** First/last-touch now record for the
+  default Meta-ad shape (`?fbclid=...` with no UTMs).
+- **Degraded device-info fallback (FSR-45).** Uses the real runtime locale instead of a
+  hardcoded `en-US` (which fabricated `country=US` for every event), and persists a stable
+  fallback device id.
+- **Caller event fields win over persisted attribution (FSR-85).** `createEventPayload` spreads
+  attribution first and caller `eventData` last; the email web-attribution path now merges
+  before tracking (matching the IP path).
+- **Identity / lookup robustness (FSR-94, FSR-95, FSR-96, FSR-97).** A mid-init `identify()` is
+  no longer overwritten by the persisted user; the web-attribution lookup is marked checked
+  only after the body parses; the queue drain measures progress by removals (so a concurrent
+  enqueue can't strand a just-queued terminal event); and corrupted persisted queue entries
+  are filtered on load instead of jamming the queue head.
+
 ## [1.7.8] - 2026-05-31
 
 ### Changed
