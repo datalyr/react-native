@@ -13,6 +13,8 @@ import {
   getOrCreateVisitorId,
   getOrCreateAnonymousId,
   getOrCreateSessionId,
+  rotateAnonymousId,
+  clearSession,
   createDeviceContext,
   generateUUID,
   getDeviceInfo,
@@ -174,9 +176,12 @@ export class DatalyrSDK {
       if (this.state.config.enableAutoEvents) {
         this.autoEventsManager = new AutoEventsManager(
           this.track.bind(this),
-          this.state.config.autoEventConfig
+          this.state.config.autoEventConfig,
+          // Canonical session id getter — unifies session_start/end's session_id with the
+          // wire context.session_id (state.sessionId).
+          () => this.state.sessionId
         );
-        
+
         // Initialize auto-events asynchronously to prevent blocking
         setTimeout(async () => {
           try {
@@ -260,7 +265,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.7.11',
+          sdk_version: '1.7.12',
           ...installData,
         });
       }
@@ -273,9 +278,13 @@ export class DatalyrSDK {
       });
 
     } catch (error) {
-      this.initializing = false; // allow a retry after a failed init
       errorLog('Failed to initialize Datalyr SDK:', error as Error);
       throw error;
+    } finally {
+      // Always clear the in-flight flag. `state.initialized` alone gates repeats; leaving
+      // `initializing` true on the SUCCESS path (the old bug) permanently bricked the SDK
+      // after a destroy()→initialize() cycle. On failure this also re-allows a retry.
+      this.initializing = false;
     }
   }
 
@@ -309,6 +318,13 @@ export class DatalyrSDK {
 
       const payload = await this.createEventPayload(eventName, eventData);
       await this.eventQueue.enqueue(payload);
+
+      // Update session activity counters (refreshes lastActivity so session_end duration
+      // and the idle-window timeout track real usage). Skip the SDK's own session lifecycle
+      // events so `events` counts real activity, not the session_start/end bookkeeping.
+      if (this.autoEventsManager && eventName !== 'session_start' && eventName !== 'session_end') {
+        await this.autoEventsManager.onEvent(eventName);
+      }
 
     } catch (error) {
       errorLog(`Error tracking event ${eventName}:`, error as Error);
@@ -429,12 +445,16 @@ export class DatalyrSDK {
         return; // transient/non-200 — don't mark checked, retry on next identify
       }
 
+      // Parse the body BEFORE marking checked — a body read/parse failure (dropped
+      // connection mid-body, truncated/HTML 200) would otherwise permanently suppress this
+      // once-per-install lookup. On parse failure the catch logs and leaves checked unset,
+      // so the next identify(email) retries.
+      const result = await response.json() as { found: boolean; attribution?: any };
+
       // Definitive 200 answer (found or not) — record it so repeated identify(email)
       // calls don't re-run this immutable, install-time lookup. (Capped to bound
       // growth from rare account switches.)
       await Storage.setItem(checkedKey, [...checked, emailHash].slice(-20));
-
-      const result = await response.json() as { found: boolean; attribution?: any };
 
       if (!result.found || !result.attribution) {
         debugLog('No web attribution found for user');
@@ -448,6 +468,13 @@ export class DatalyrSDK {
         has_gclid: !!webAttribution.gclid,
         utm_source: webAttribution.utm_source,
       });
+
+      // Merge BEFORE tracking (matches the IP/deferred path). This makes
+      // $web_attribution_matched self-consistent — see createEventPayload, which spreads
+      // attributionData FIRST so the explicit web-recovered fields below win over any
+      // pre-existing device attribution. (Old order tracked before merging, so a device
+      // with its own deep-link attribution corrupted the match event.)
+      await attributionManager.mergeWebAttribution(webAttribution);
 
       // Emit the canonical web→app bridge event. The email/identify path and the
       // IP/deferred path BOTH fire `$web_attribution_matched`, distinguished only
@@ -478,9 +505,6 @@ export class DatalyrSDK {
         web_timestamp: webAttribution.timestamp,
         match_method: 'email',
       });
-
-      // Update attribution manager with web data
-      attributionManager.mergeWebAttribution(webAttribution);
 
       debugLog('Successfully merged web attribution into mobile session');
 
@@ -541,7 +565,7 @@ export class DatalyrSDK {
       });
 
       // Merge web attribution into current session
-      attributionManager.mergeWebAttribution(webAttribution);
+      await attributionManager.mergeWebAttribution(webAttribution);
 
       // Track match event for analytics
       await this.track('$web_attribution_matched', {
@@ -625,7 +649,15 @@ export class DatalyrSDK {
       await Storage.removeItem(STORAGE_KEYS.USER_ID);
       await Storage.removeItem(STORAGE_KEYS.USER_PROPERTIES);
 
-      // Generate new session
+      // Rotate the anonymous ID so the next user is NOT linked to this user's anon id
+      // (otherwise logout→login on one device merges both users in the identity graph and
+      // the Meta CAPI bridge leaks click-ids/PII between them).
+      this.state.anonymousId = await rotateAnonymousId();
+
+      // Force a genuinely new session. getOrCreateSessionId() resumes any session <30min
+      // old (always true at logout), so clear the stored session first — otherwise the
+      // next user's events would share the previous user's session id.
+      await clearSession();
       this.state.sessionId = await getOrCreateSessionId();
 
       debugLog('User data reset completed');
@@ -1087,7 +1119,7 @@ export class DatalyrSDK {
       });
 
       // Merge into attribution manager
-      attributionManager.mergeWebAttribution({
+      await attributionManager.mergeWebAttribution({
         fbclid: data.fbclid,
         ttclid: data.ttclid,
         utm_source: data.utmSource,
@@ -1147,7 +1179,10 @@ export class DatalyrSDK {
       eventId: generateUUID(),
       eventName,
       eventData: {
-        ...eventData,
+        // Auto-captured mobile data + persisted attribution are spread FIRST so the
+        // caller's explicit event properties (`...eventData`, spread LAST) WIN. Previously
+        // attribution was spread after eventData, silently clobbering caller-passed fields
+        // like track('purchase', { utm_source: 'push' }).
         // Include anonymous_id in event data for attribution
         anonymous_id: this.state.anonymousId,
         // Auto-captured mobile data
@@ -1171,8 +1206,7 @@ export class DatalyrSDK {
         country: deriveCountryFromLocale(deviceInfo.locale) || undefined,
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
-        timestamp: Date.now(),
-        sdk_version: '1.7.11',
+        sdk_version: '1.7.12',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
           idfa: advertiserInfo.idfa,
@@ -1192,16 +1226,34 @@ export class DatalyrSDK {
         ...((attributionData.gclid || attributionData.utm_source)
           ? {}
           : playInstallReferrerIntegration.getAttributionData()),
+        // Caller-supplied event properties WIN over all auto/attribution fields above.
+        ...eventData,
+        // Always SDK-stamped (not caller-overridable).
+        timestamp: Date.now(),
       },
       deviceContext,
       source: 'mobile_app',
       timestamp: new Date().toISOString(),
     };
 
-    // Add user data if available
+    // $alias/$identify carry their OWN userId in eventData (the NEW id). alias() fires
+    // $alias BEFORE its internal identify(), so state.currentUserId is still the OLD/
+    // persisted id here — overwriting eventData.userId with it would write the
+    // visitor_user_links row to the WRONG user (ingest reads ed.userId, camelCase). Only
+    // fill userId from currentUserId when the event didn't already provide one.
     if (this.state.currentUserId) {
       payload.userId = this.state.currentUserId;
-      payload.eventData!.userId = this.state.currentUserId;
+      if (payload.eventData && !('userId' in payload.eventData)) {
+        payload.eventData.userId = this.state.currentUserId;
+      }
+    }
+
+    // Pre-init alias() snapshots previousId from state.visitorId while it's still '' (the
+    // constructor default); the replayed $alias would ship empty previousId and the server
+    // link builder requires it truthy (`if (previousId && userId ...)`). Resolve it at
+    // payload-creation time (post-init, so visitorId is populated).
+    if (eventName === '$alias' && payload.eventData && !payload.eventData.previousId && this.state.visitorId) {
+      payload.eventData.previousId = this.state.visitorId;
     }
 
     if (Object.keys(this.state.userProperties).length > 0) {
@@ -1221,11 +1273,16 @@ export class DatalyrSDK {
         Storage.getItem<UserProperties>(STORAGE_KEYS.USER_PROPERTIES),
       ]);
 
-      if (userId) {
+      // Only restore the persisted user when an identify() hasn't ALREADY set one. This
+      // load runs concurrently in initialize()'s Promise.all; an app that calls
+      // initialize() without awaiting and then identify(B) mid-init would otherwise have
+      // the previous launch's persisted user A clobber B (and the replayed $identify(B)
+      // would silently become A). Don't overwrite a live identity.
+      if (userId && this.state.currentUserId === undefined) {
         this.state.currentUserId = userId;
       }
 
-      if (userProperties) {
+      if (userProperties && Object.keys(this.state.userProperties).length === 0) {
         this.state.userProperties = userProperties;
       }
 
@@ -1365,11 +1422,21 @@ export class DatalyrSDK {
       // Destroy network status manager
       networkStatusManager.destroy();
 
+      // Tear down attribution + auto-events so destroy()→initialize() doesn't leak the old
+      // Linking 'url' subscription / session timers and a fresh init can re-listen.
+      attributionManager.destroy();
+      if (this.autoEventsManager) {
+        this.autoEventsManager.destroy();
+        this.autoEventsManager = null;
+      }
+
       // Destroy event queue
       this.eventQueue.destroy();
 
-      // Reset state
+      // Reset state. `initializing` MUST be cleared too, or a subsequent initialize()
+      // hits the idempotent guard and the SDK never re-initializes (silent total loss).
       this.state.initialized = false;
+      this.initializing = false;
 
       debugLog('Datalyr SDK destroyed');
 
