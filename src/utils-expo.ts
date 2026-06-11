@@ -100,7 +100,8 @@ export interface DeviceInfo {
   screenWidth: number;
   screenHeight: number;
   timezone: string;
-  locale: string;
+  // Optional: the error fallback omits it rather than hardcoding 'en-US'.
+  locale?: string;
   carrier?: string;
   isEmulator: boolean;
 }
@@ -130,6 +131,17 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfo> => {
     };
   } catch (error) {
     errorLog('Error getting device info:', error as Error);
+    let fallbackLocale: string | undefined;
+    let fallbackTimezone = 'UTC';
+    try {
+      const opts = Intl.DateTimeFormat().resolvedOptions();
+      // Real runtime locale (was hardcoded 'en-US', which fabricated country='US' on
+      // every event and overrode accurate Cloudflare geo for Meta CAPI matching).
+      fallbackLocale = opts.locale || undefined;
+      fallbackTimezone = opts.timeZone || 'UTC';
+    } catch {
+      // Leave locale undefined → country omitted, not fabricated.
+    }
     return {
       deviceId: await getOrCreateDeviceId(),
       model: 'Unknown',
@@ -140,8 +152,8 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfo> => {
       bundleId: 'unknown.bundle.id',
       screenWidth: Dimensions.get('window').width,
       screenHeight: Dimensions.get('window').height,
-      timezone: 'UTC',
-      locale: 'en-US',
+      timezone: fallbackTimezone,
+      locale: fallbackLocale,
       isEmulator: true,
     };
   }
@@ -219,29 +231,67 @@ export const getOrCreateSessionId = async (): Promise<string> => {
   try {
     const sessionTimeout = 30 * 60 * 1000; // 30 minutes
     const now = Date.now();
-    
-    const [sessionId, sessionStart] = await Promise.all([
+
+    // LAST_SESSION_TIME tracks the last ACTIVITY (refreshed on every reuse below), so the
+    // 30-min window is an idle/sliding window — matching the RN build (utils.ts). The old
+    // code compared against SESSION_START only, hard-expiring a session 30min after it
+    // STARTED regardless of continuous use (and diverging from RN). SESSION_START is still
+    // written for back-compat, but the timeout is anchored to last activity.
+    const [sessionId, lastActivity] = await Promise.all([
       Storage.getItem<string>(STORAGE_KEYS.SESSION_ID),
-      Storage.getItem<number>(STORAGE_KEYS.SESSION_START),
+      Storage.getItem<number>(STORAGE_KEYS.LAST_SESSION_TIME),
     ]);
-    
-    // Check if session is still valid
-    if (sessionId && sessionStart && (now - sessionStart) < sessionTimeout) {
+
+    // Check if session is still valid (idle window from last activity)
+    if (sessionId && lastActivity && (now - lastActivity) < sessionTimeout) {
+      // Slide the window: refresh last-activity time on reuse.
+      await Storage.setItem(STORAGE_KEYS.LAST_SESSION_TIME, now);
       return sessionId;
     }
-    
+
     // Create new session
     const newSessionId = generateUUID();
     await Promise.all([
       Storage.setItem(STORAGE_KEYS.SESSION_ID, newSessionId),
       Storage.setItem(STORAGE_KEYS.SESSION_START, now),
+      Storage.setItem(STORAGE_KEYS.LAST_SESSION_TIME, now),
     ]);
-    
+
     debugLog('Created new session:', newSessionId);
     return newSessionId;
   } catch (error) {
     errorLog('Error managing session ID:', error as Error);
     return generateUUID();
+  }
+};
+
+/**
+ * Rotate the persistent anonymous ID (logout). See utils.ts for the full rationale —
+ * prevents two users sharing one anon id in the identity graph.
+ */
+export const rotateAnonymousId = async (): Promise<string> => {
+  const anonymousId = `anon_${generateUUID()}`;
+  try {
+    await Storage.setItem(STORAGE_KEYS.ANONYMOUS_ID, anonymousId);
+  } catch (error) {
+    errorLog('Error rotating anonymous ID:', error as Error);
+  }
+  return anonymousId;
+};
+
+/**
+ * Force a brand-new session — clear stored session id + timestamps so the next
+ * getOrCreateSessionId() creates (not resumes) one. Used by reset().
+ */
+export const clearSession = async (): Promise<void> => {
+  try {
+    await Promise.all([
+      Storage.removeItem(STORAGE_KEYS.SESSION_ID),
+      Storage.removeItem(STORAGE_KEYS.SESSION_START),
+      Storage.removeItem(STORAGE_KEYS.LAST_SESSION_TIME),
+    ]);
+  } catch (error) {
+    errorLog('Error clearing session:', error as Error);
   }
 };
 
