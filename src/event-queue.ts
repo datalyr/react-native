@@ -38,15 +38,90 @@ export class EventQueue {
       // and resurrect leftover events through an empty-key client.
       if (this.destroyed) return;
       if (persistedQueue && Array.isArray(persistedQueue)) {
-        this.queue = persistedQueue;
+        // Filter out corrupted entries (null / missing payload / no eventName) — a partial
+        // write or cross-version schema drift would otherwise throw inside processQueue's
+        // catch handler and jam the queue head every cycle (head-of-line blockage).
+        this.queue = persistedQueue.filter(
+          (e) => e && e.payload && typeof e.payload.eventName === 'string'
+        );
+        if (this.queue.length !== persistedQueue.length) {
+          errorLog(`Dropped ${persistedQueue.length - this.queue.length} corrupted queue entr(ies) on load`);
+        }
         debugLog(`Loaded ${this.queue.length} events from storage`);
       }
 
+      // Re-enqueue any dead-lettered events (exhausted retries / overflow) so a transient
+      // outage doesn't permanently strand them. Bounded by replayCount + age (see replayDeadLetter).
+      await this.replayDeadLetter();
+
       // Start the flush timer
       this.startFlushTimer();
+
+      // Drain immediately if we loaded/replayed anything and we're online — don't wait a
+      // full flush interval to deliver persisted/replayed events.
+      if (this.isOnline && this.queue.length > 0) {
+        void this.processQueue();
+      }
     } catch (error) {
       errorLog('Failed to initialize event queue:', error as Error);
     }
+  }
+
+  /**
+   * Re-enqueue dead-lettered events for another delivery attempt. Called on init and on
+   * offline→online reconnect. Each replay resets retryCount and increments replayCount;
+   * events that exhaust MAX_REPLAYS or exceed MAX_DEAD_LETTER_AGE_MS are dropped for good
+   * (genuinely undeliverable), so this can't loop a permanently-bad event forever.
+   */
+  private async replayDeadLetter(): Promise<void> {
+    if (this.destroyed) return;
+    const MAX_REPLAYS = 3;
+    const MAX_DEAD_LETTER_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+    try {
+      const stored = (await Storage.getItem<QueuedEvent[]>(STORAGE_KEYS.DEAD_LETTER_QUEUE)) || [];
+      if (!Array.isArray(stored) || stored.length === 0) return;
+
+      const now = Date.now();
+      let replayed = 0;
+      for (const event of stored) {
+        if (!event || !event.payload || typeof event.payload.eventName !== 'string') continue;
+        const replayCount = event.replayCount || 0;
+        const age = now - (event.timestamp || now);
+        if (replayCount >= MAX_REPLAYS || age > MAX_DEAD_LETTER_AGE_MS) continue;
+        // Reset retryCount for a fresh delivery window; bump replayCount to bound retries.
+        this.queue.push({ ...event, retryCount: 0, replayCount: replayCount + 1 });
+        replayed++;
+      }
+
+      // Clear the dead-letter store — anything not replayed was too old / too-often-retried
+      // and is intentionally dropped (it would never deliver).
+      await Storage.removeItem(STORAGE_KEYS.DEAD_LETTER_QUEUE);
+      if (replayed > 0) {
+        debugLog(`Replayed ${replayed} dead-letter event(s) back into the queue`);
+        await this.persistQueue();
+      }
+    } catch (error) {
+      errorLog('Failed to replay dead-letter queue:', error as Error);
+    }
+  }
+
+  /**
+   * Connectivity-class failures (aborted/timed-out/offline) are NOT the event's fault — a
+   * sustained outage shouldn't burn the retry budget and dead-letter a perfectly-good
+   * event. Only definitive server rejections consume retryCount.
+   */
+  private isConnectivityError(error: unknown): boolean {
+    const msg = (error as Error)?.message || '';
+    const name = (error as Error)?.name || '';
+    return (
+      name === 'AbortError' ||
+      name === 'TimeoutError' ||
+      msg.includes('AbortError') ||
+      msg.includes('TimeoutError') ||
+      msg.includes('NetworkError') ||
+      msg.includes('Network request failed') ||
+      msg.includes('fetch is not defined')
+    );
   }
 
   /**
@@ -102,7 +177,11 @@ export class EventQueue {
       // and on app-background the terminal session_end could sit behind older events and
       // never send. The progress check prevents a busy-loop during a transient outage.
       while (this.isOnline && this.queue.length > 0) {
-        const before = this.queue.length;
+        // Count forward progress as REMOVALS made by THIS batch (delivered or dead-lettered),
+        // not total queue length before/after — concurrent enqueues (e.g. session_end queued
+        // mid-flush on app-background) must not be counted against progress and strand the
+        // just-queued event for the unreliable background timer.
+        let removedThisBatch = 0;
         const eventsToProcess = this.queue.slice(0, this.config.batchSize);
 
         for (const queuedEvent of eventsToProcess) {
@@ -112,6 +191,7 @@ export class EventQueue {
             if (response.success) {
               debugLog(`Event sent successfully: ${queuedEvent.payload.eventName}`);
               this.removeFromQueue(queuedEvent);
+              removedThisBatch++;
             } else if (response.authPending) {
               // No API key configured yet (a flush fired before initialize() applied the
               // key, or a stray pre-init client). Leave the event queued WITHOUT burning a
@@ -121,22 +201,38 @@ export class EventQueue {
               debugLog(`Auth not ready; keeping event queued: ${queuedEvent.payload.eventName}`);
               return;
             } else {
-              queuedEvent.retryCount++;
-              if (queuedEvent.retryCount >= this.config.maxRetryCount) {
-                // Don't silently drop revenue/conversion events — park in a capped
-                // dead-letter store (errorLog + recoverable) then remove from the queue.
-                await this.deadLetter(queuedEvent);
-                this.removeFromQueue(queuedEvent);
+              // Connectivity-class failures (httpClient surfaces them as success:false with
+              // an error message after its internal retries) are NOT the event's fault —
+              // keep it queued WITHOUT burning a retry; the timer / reconnect re-tries.
+              if (this.isConnectivityError({ message: response.error } as Error)) {
+                debugLog(`Connectivity failure; keeping event queued without burning retry: ${queuedEvent.payload?.eventName}`);
               } else {
-                debugLog(`Event failed, will retry: ${queuedEvent.payload.eventName} (attempt ${queuedEvent.retryCount})`);
+                queuedEvent.retryCount++;
+                if (queuedEvent.retryCount >= this.config.maxRetryCount) {
+                  // Don't silently drop revenue/conversion events — park in a capped
+                  // dead-letter store (errorLog + recoverable) then remove from the queue.
+                  await this.deadLetter(queuedEvent);
+                  this.removeFromQueue(queuedEvent);
+                  removedThisBatch++;
+                } else {
+                  debugLog(`Event failed, will retry: ${queuedEvent.payload?.eventName} (attempt ${queuedEvent.retryCount})`);
+                }
               }
             }
           } catch (error) {
-            errorLog(`Error processing event: ${queuedEvent.payload.eventName}`, error as Error);
-            queuedEvent.retryCount++;
-            if (queuedEvent.retryCount >= this.config.maxRetryCount) {
-              await this.deadLetter(queuedEvent);
-              this.removeFromQueue(queuedEvent);
+            // Optional-chain the eventName — a corrupted entry must NOT throw from the
+            // catch handler (that would abort the whole drain and jam the queue head).
+            errorLog(`Error processing event: ${queuedEvent?.payload?.eventName}`, error as Error);
+            // Don't burn the retry budget on a connectivity-class throw.
+            if (this.isConnectivityError(error)) {
+              debugLog(`Connectivity throw; keeping event queued without burning retry: ${queuedEvent?.payload?.eventName}`);
+            } else {
+              queuedEvent.retryCount = (queuedEvent.retryCount || 0) + 1;
+              if (queuedEvent.retryCount >= this.config.maxRetryCount) {
+                await this.deadLetter(queuedEvent);
+                this.removeFromQueue(queuedEvent);
+                removedThisBatch++;
+              }
             }
           }
         }
@@ -144,9 +240,10 @@ export class EventQueue {
         // Persist after each batch so a mid-drain kill doesn't resurrect delivered events.
         await this.persistQueue();
 
-        // No net progress (every event in this batch failed-and-requeued, not yet at max
+        // No forward progress this batch (every event failed-and-requeued, not yet at max
         // retries) → stop and let the timer / next reconnect retry. Avoids a tight loop.
-        if (this.queue.length >= before) break;
+        // Counting removals (not total length) ignores concurrent mid-batch enqueues.
+        if (removedThisBatch === 0) break;
       }
     } catch (error) {
       errorLog('Error processing event queue:', error as Error);
@@ -237,12 +334,17 @@ export class EventQueue {
   setOnlineStatus(isOnline: boolean): void {
     const wasOnline = this.isOnline;
     this.isOnline = isOnline;
-    
+
     debugLog(`Network status changed: ${isOnline ? 'online' : 'offline'}`);
-    
-    // If we just came online, try to process the queue
-    if (isOnline && !wasOnline && this.queue.length > 0) {
-      this.processQueue();
+
+    // If we just came online, replay any dead-lettered events (likely stranded BY the
+    // outage we just recovered from) and then drain the queue.
+    if (isOnline && !wasOnline) {
+      void this.replayDeadLetter().then(() => {
+        if (this.isOnline && this.queue.length > 0) {
+          this.processQueue();
+        }
+      });
     }
   }
 

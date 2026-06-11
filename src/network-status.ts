@@ -90,7 +90,11 @@ class NetworkStatusManager {
    * Update state from NetInfo response
    */
   private updateStateFromNetInfo(netState: any): void {
-    const previouslyConnected = this.state.isConnected;
+    // Compare the DERIVED online-ness (isConnected AND reachability), not raw isConnected.
+    // The queue consumer derives online from both fields, so a reachability-only flip
+    // (captive portal, WiFi-without-internet) must notify too — otherwise the queue gets
+    // stuck offline (events evict to dead-letter) or stuck online (events burn to dead-letter).
+    const wasOnline = this.deriveOnline(this.state);
 
     this.state = {
       isConnected: netState.isConnected ?? true,
@@ -98,11 +102,18 @@ class NetworkStatusManager {
       type: this.mapNetInfoType(netState.type),
     };
 
-    // Notify listeners if connection status changed
-    if (previouslyConnected !== this.state.isConnected) {
-      debugLog(`Network status changed: ${this.state.isConnected ? 'online' : 'offline'} (${this.state.type})`);
+    if (wasOnline !== this.deriveOnline(this.state)) {
+      debugLog(`Network status changed: ${this.isOnline() ? 'online' : 'offline'} (${this.state.type})`);
       this.notifyListeners();
     }
+  }
+
+  /**
+   * Derived online-ness: connected AND internet not known-unreachable. Single source of
+   * truth shared by isOnline() and the change-notification gating.
+   */
+  private deriveOnline(state: NetworkState): boolean {
+    return state.isConnected && (state.isInternetReachable !== false);
   }
 
   /**
@@ -150,7 +161,8 @@ class NetworkStatusManager {
    * Update state from expo-network response
    */
   private updateStateFromExpoNetwork(networkState: any): void {
-    const previouslyConnected = this.state.isConnected;
+    // Notify on DERIVED online-ness change (see updateStateFromNetInfo).
+    const wasOnline = this.deriveOnline(this.state);
 
     this.state = {
       isConnected: networkState.isConnected ?? true,
@@ -158,8 +170,8 @@ class NetworkStatusManager {
       type: this.mapExpoNetworkType(networkState.type),
     };
 
-    if (previouslyConnected !== this.state.isConnected) {
-      debugLog(`Network status changed: ${this.state.isConnected ? 'online' : 'offline'} (${this.state.type})`);
+    if (wasOnline !== this.deriveOnline(this.state)) {
+      debugLog(`Network status changed: ${this.isOnline() ? 'online' : 'offline'} (${this.state.type})`);
       this.notifyListeners();
     }
   }
@@ -233,8 +245,8 @@ class NetworkStatusManager {
    * Check if device is currently online
    */
   isOnline(): boolean {
-    // Consider online if connected OR if we're not sure about internet reachability
-    return this.state.isConnected && (this.state.isInternetReachable !== false);
+    // Consider online if connected and internet not known-unreachable.
+    return this.deriveOnline(this.state);
   }
 
   /**

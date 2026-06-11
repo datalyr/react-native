@@ -78,7 +78,7 @@ export class HttpClient {
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': `@datalyr/react-native/1.7.11`,
+        'User-Agent': `@datalyr/react-native/1.7.12`,
       };
 
       // Server-side tracking uses X-API-Key header
@@ -112,6 +112,12 @@ export class HttpClient {
         if (response.status === 401) {
           throw new Error(`HTTP 401: Authentication failed. Check your API key and workspace ID.`);
         }
+        if (response.status === 429 || response.status === 408) {
+          // Honor Retry-After (seconds or HTTP-date). Encode it in the message so the
+          // backoff can read it; shouldRetry() treats 429/408 as retryable backpressure.
+          const retryAfterMs = this.parseRetryAfter(response.headers?.get?.('Retry-After'));
+          throw new Error(`HTTP ${response.status}: ${response.statusText || 'rate limited'}${retryAfterMs != null ? ` retry-after=${retryAfterMs}` : ''}`);
+        }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
@@ -129,7 +135,7 @@ export class HttpClient {
 
       // Check if we should retry
       if (retryCount < this.config.maxRetries && this.shouldRetry(error as Error)) {
-        const delay = this.calculateRetryDelay(retryCount);
+        const delay = this.calculateRetryDelay(retryCount, error as Error);
         debugLog(`Retrying in ${delay}ms...`);
         
         await this.delay(delay);
@@ -181,7 +187,16 @@ export class HttpClient {
       'fetch is not defined', // Fallback for environments without fetch
     ];
 
-    // Don't retry authentication errors (401) or client errors (4xx)
+    // 429 (rate-limited) and 408 (request timeout) are RETRYABLE backpressure — the ingest
+    // /track endpoint enforces a per-API-key limit shared across a customer's whole install
+    // base and answers 429 with Retry-After. Must be checked BEFORE the blanket 'HTTP 4'
+    // non-retryable rule below, or sustained throttle fast-tracks events to the dead-letter
+    // store (silent loss, including purchases).
+    if (error.message.includes('HTTP 429') || error.message.includes('HTTP 408')) {
+      return true;
+    }
+
+    // Don't retry authentication errors (401) or other client errors (4xx)
     if (error.message.includes('HTTP 401') || error.message.includes('HTTP 4')) {
       return false;
     }
@@ -197,13 +212,40 @@ export class HttpClient {
   }
 
   /**
-   * Calculate exponential backoff delay
+   * Calculate exponential backoff delay. Honors a server Retry-After (encoded by
+   * sendWithRetry into the 429/408 error message) when present.
    */
-  private calculateRetryDelay(retryCount: number): number {
+  private calculateRetryDelay(retryCount: number, error?: Error): number {
+    // Server-directed backoff (429/408 Retry-After) takes precedence over the local curve.
+    if (error?.message) {
+      const m = error.message.match(/retry-after=(\d+)/);
+      if (m) {
+        const serverMs = parseInt(m[1], 10);
+        if (Number.isFinite(serverMs) && serverMs >= 0) {
+          return Math.min(serverMs + Math.random() * 250, 30000);
+        }
+      }
+    }
     const baseDelay = this.config.retryDelay;
     const exponentialDelay = Math.pow(2, retryCount) * baseDelay;
     const jitter = Math.random() * 1000; // Add some jitter to prevent thundering herd
     return Math.min(exponentialDelay + jitter, 30000); // Cap at 30 seconds
+  }
+
+  /**
+   * Parse an HTTP Retry-After header value (delta-seconds or an HTTP-date) to ms.
+   */
+  private parseRetryAfter(value: string | null | undefined): number | null {
+    if (!value) return null;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds)) {
+      return Math.max(0, seconds * 1000);
+    }
+    const dateMs = Date.parse(value);
+    if (!Number.isNaN(dateMs)) {
+      return Math.max(0, dateMs - Date.now());
+    }
+    return null;
   }
 
   /**
@@ -230,7 +272,7 @@ export class HttpClient {
       },
       context: {
         library: '@datalyr/react-native',
-        version: '1.7.11',
+        version: '1.7.12',
         source: 'mobile_app',
         // session_id MUST be in context — ingest's server-track handler reads the session
         // id from context.session_id, NOT properties; without it ingest discards the SDK's
