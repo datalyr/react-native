@@ -1,5 +1,5 @@
 import { Linking } from 'react-native';
-import { Storage, STORAGE_KEYS, debugLog, errorLog, generateUUID } from './utils';
+import { Storage, STORAGE_KEYS, debugLog, errorLog, generateUUID, parseQueryString } from './utils';
 
 // Attribution parameter mapping
 const ATTRIBUTION_PARAMS = [
@@ -267,27 +267,14 @@ export class AttributionManager {
    * Extract parameters from URL
    */
   private extractUrlParameters(url: string): Record<string, string> {
-    const params: Record<string, string> = {};
-    
     try {
-      const urlObj = new URL(url);
-      
-      // Extract query parameters
-      urlObj.searchParams.forEach((value, key) => {
-        params[key.toLowerCase()] = value;
-      });
-      
-      // Also check fragment for parameters (some platforms use #)
-      if (urlObj.hash) {
-        const hashParams = new URLSearchParams(urlObj.hash.substring(1));
-        hashParams.forEach((value, key) => {
-          params[key.toLowerCase()] = value;
-        });
-      }
-      
+      // Dependency-free parse — must NOT use `new URL().searchParams` /
+      // `new URLSearchParams(str)`: RN core (Hermes) ships throwing stubs for those,
+      // which silently dropped EVERY deep-link attribution param on bare RN. The
+      // shared parser handles both the query (?) and the fragment (#).
+      const params = parseQueryString(url);
       debugLog('Extracted URL parameters:', params);
       return params;
-      
     } catch (error) {
       errorLog('Error extracting URL parameters:', error as Error);
       return {};
@@ -481,46 +468,53 @@ export class AttributionManager {
    * Merge web attribution data into mobile session
    * Called when web-to-app attribution is resolved via email
    */
-  mergeWebAttribution(webAttribution: any): void {
+  async mergeWebAttribution(webAttribution: any): Promise<void> {
     debugLog('Merging web attribution data:', webAttribution);
 
-    // Only merge if we don't already have attribution data
-    // Web attribution takes precedence for first-touch
-    if (!this.attributionData.fbclid && webAttribution.fbclid) {
-      this.attributionData.fbclid = webAttribution.fbclid;
-    }
-    if (!this.attributionData.gclid && webAttribution.gclid) {
-      this.attributionData.gclid = webAttribution.gclid;
-    }
-    if (!this.attributionData.ttclid && webAttribution.ttclid) {
-      this.attributionData.ttclid = webAttribution.ttclid;
-    }
-    if (!this.attributionData.oppref && webAttribution.oppref) {
-      this.attributionData.oppref = webAttribution.oppref;
-    }
+    // Gap-fill only (don't overwrite existing device attribution) — web attribution
+    // takes precedence for first-touch ONLY where we have nothing locally.
+    const gapFill = (key: string, value: any) => {
+      if (value != null && value !== '' && !this.attributionData[key]) {
+        this.attributionData[key] = value;
+      }
+    };
 
-    // Merge UTM parameters
-    if (!this.attributionData.utm_source && webAttribution.utm_source) {
-      this.attributionData.utm_source = webAttribution.utm_source;
-    }
-    if (!this.attributionData.utm_medium && webAttribution.utm_medium) {
-      this.attributionData.utm_medium = webAttribution.utm_medium;
-    }
-    if (!this.attributionData.utm_campaign && webAttribution.utm_campaign) {
-      this.attributionData.utm_campaign = webAttribution.utm_campaign;
-    }
-    if (!this.attributionData.utm_content && webAttribution.utm_content) {
-      this.attributionData.utm_content = webAttribution.utm_content;
-    }
-    if (!this.attributionData.utm_term && webAttribution.utm_term) {
-      this.attributionData.utm_term = webAttribution.utm_term;
-    }
+    gapFill('fbclid', webAttribution.fbclid);
+    gapFill('gclid', webAttribution.gclid);
+    gapFill('ttclid', webAttribution.ttclid);
+    gapFill('oppref', webAttribution.oppref);
+
+    // Google privacy-safe click IDs (iOS App / Web-to-App campaigns) — these are exactly
+    // the IDs the web→app recovery exists for, but were previously DROPPED, so they never
+    // reached subsequent events / getRevenueCatAttributes / survived an app restart.
+    gapFill('gbraid', webAttribution.gbraid);
+    gapFill('wbraid', webAttribution.wbraid);
+
+    // Meta cookies — emit BOTH the bare and underscore-prefixed keys (the attribution MV +
+    // postback extract `_fbp`/`_fbc`; the bare keys have no server reader on their own).
+    gapFill('fbp', webAttribution.fbp);
+    gapFill('fbc', webAttribution.fbc);
+    gapFill('_fbp', webAttribution.fbp);
+    gapFill('_fbc', webAttribution.fbc);
+
+    // Datalyr LYR tag (campaign attribution) if the lookup carries it.
+    gapFill('lyr', webAttribution.lyr);
+
+    // UTM parameters
+    gapFill('utm_source', webAttribution.utm_source);
+    gapFill('utm_medium', webAttribution.utm_medium);
+    gapFill('utm_campaign', webAttribution.utm_campaign);
+    gapFill('utm_content', webAttribution.utm_content);
+    gapFill('utm_term', webAttribution.utm_term);
 
     // Store web visitor ID for cross-device tracking
-    this.attributionData.web_visitor_id = webAttribution.visitor_id;
+    if (webAttribution.visitor_id) {
+      this.attributionData.web_visitor_id = webAttribution.visitor_id;
+    }
 
-    // Save merged attribution data
-    this.saveAttributionData();
+    // Persist merged data. AWAIT it — the one-shot web match may fire right before the app
+    // is killed, and a fire-and-forget save could lose the recovered IDs entirely.
+    await this.saveAttributionData();
 
     debugLog('Web attribution merged successfully');
   }
