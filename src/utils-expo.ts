@@ -280,6 +280,21 @@ export const rotateAnonymousId = async (): Promise<string> => {
 };
 
 /**
+ * Rotate the persistent visitor ID (logout) — see utils.ts for the full rationale (9.C.1:
+ * visitorId rides every event, so keeping it stitches the next user to the previous
+ * user's history). JSON-encoded via Storage to match THIS file's getOrCreateVisitorId.
+ */
+export const rotateVisitorId = async (): Promise<string> => {
+  const visitorId = generateUUID();
+  try {
+    await Storage.setItem(STORAGE_KEYS.VISITOR_ID, visitorId);
+  } catch (error) {
+    errorLog('Error rotating visitor ID:', error as Error);
+  }
+  return visitorId;
+};
+
+/**
  * Force a brand-new session — clear stored session id + timestamps so the next
  * getOrCreateSessionId() creates (not resumes) one. Used by reset().
  */

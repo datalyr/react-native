@@ -539,6 +539,26 @@ export class AttributionManager {
   }
 
   /**
+   * Clear attribution for a user reset (logout→login on a shared device) — 9.C.1.
+   *
+   * Unlike clearAttributionData(), this PRESERVES the first-launch marker: wiping it
+   * would make the next launch look like a fresh install, re-running install tracking
+   * AND the deferred IP web-attribution lookup — which would re-import the previous
+   * user's web click-ids into the new user, exactly the cross-user bleed reset() exists
+   * to prevent. install_time is kept in memory too (it's device-install metadata, not
+   * user-scoped), so subsequent events still carry it.
+   */
+  async clearAttributionForReset(): Promise<void> {
+    const installTime = this.attributionData.install_time;
+    this.attributionData = {};
+    if (installTime) {
+      this.attributionData.install_time = installTime;
+    }
+    await Storage.removeItem(STORAGE_KEYS.ATTRIBUTION_DATA);
+    debugLog('Attribution data cleared for reset (install marker preserved)');
+  }
+
+  /**
    * Get attribution summary for debugging
    */
   getAttributionSummary(): {

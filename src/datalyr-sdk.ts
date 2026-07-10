@@ -14,6 +14,7 @@ import {
   getOrCreateAnonymousId,
   getOrCreateSessionId,
   rotateAnonymousId,
+  rotateVisitorId,
   clearSession,
   createDeviceContext,
   generateUUID,
@@ -37,6 +38,10 @@ import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 import { appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
 import { AppleSearchAdsAttribution, AdvertiserInfoBridge } from './native/DatalyrNativeBridge';
 import { networkStatusManager } from './network-status';
+
+// Once-per-install dedupe marker for the identify(email) web-attribution lookup. Module
+// const (not a local in fetchAndMergeWebAttribution) so reset() can drop it — 9.C.1.
+const WEB_ATTRIBUTION_CHECKED_KEY = 'datalyr_web_attribution_checked';
 
 export class DatalyrSDK {
   private state: SDKState;
@@ -421,8 +426,7 @@ export class DatalyrSDK {
       // this, each one re-fires /attribution/lookup (~100k/day from a single app,
       // 99.7% misses). Skip if we've already definitively resolved/checked this email.
       const emailHash = this.stableEmailHash(email);
-      const checkedKey = 'datalyr_web_attribution_checked';
-      const checked = (await Storage.getItem<string[]>(checkedKey)) || [];
+      const checked = (await Storage.getItem<string[]>(WEB_ATTRIBUTION_CHECKED_KEY)) || [];
       if (checked.includes(emailHash)) {
         debugLog('Web attribution already checked this install for this email; skipping lookup');
         return;
@@ -454,7 +458,7 @@ export class DatalyrSDK {
       // Definitive 200 answer (found or not) — record it so repeated identify(email)
       // calls don't re-run this immutable, install-time lookup. (Capped to bound
       // growth from rare account switches.)
-      await Storage.setItem(checkedKey, [...checked, emailHash].slice(-20));
+      await Storage.setItem(WEB_ATTRIBUTION_CHECKED_KEY, [...checked, emailHash].slice(-20));
 
       if (!result.found || !result.attribution) {
         debugLog('No web attribution found for user');
@@ -654,11 +658,35 @@ export class DatalyrSDK {
       // the Meta CAPI bridge leaks click-ids/PII between them).
       this.state.anonymousId = await rotateAnonymousId();
 
+      // 9.C.1: rotate the visitor ID too — it rides every event payload and is what the
+      // attribution read-path resolves through, so keeping it stitches the next user's
+      // events to this user's device history. (iOS reset() regenerates visitorId
+      // alongside anonymousId.)
+      this.state.visitorId = await rotateVisitorId();
+
       // Force a genuinely new session. getOrCreateSessionId() resumes any session <30min
       // old (always true at logout), so clear the stored session first — otherwise the
       // next user's events would share the previous user's session id.
       await clearSession();
       this.state.sessionId = await getOrCreateSessionId();
+
+      // 9.C.1: wipe the previous user's persisted attribution — fbclid/gclid/fbc/utm/lyr
+      // are spread into EVERY event via createEventPayload and feed Meta CAPI, so leaving
+      // them spreads user A's click-ids onto user B's events. Preserves the install
+      // marker (wiping it would re-run install tracking + the deferred IP lookup next
+      // launch and re-import A's web attribution).
+      await attributionManager.clearAttributionForReset();
+
+      // 9.C.1: drop the once-per-install web-attribution-checked marker. It dedupes the
+      // identify(email) lookup against attribution we just wiped; leaving it would
+      // permanently block re-recovery when a user re-identifies on this install
+      // (logout/login, QA flows). (Mirrors iOS FSR-93.)
+      await Storage.removeItem(WEB_ATTRIBUTION_CHECKED_KEY);
+
+      // 9.C.2: a new user identity starts a fresh SKAN conversion-value window — clear
+      // the persisted high-water/window-lock so the previous user's higher value doesn't
+      // suppress all of the next user's conversion updates.
+      await SKAdNetworkBridge.resetConversionState();
 
       debugLog('User data reset completed');
 

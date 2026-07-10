@@ -206,6 +206,26 @@ export const rotateAnonymousId = async (): Promise<string> => {
 };
 
 /**
+ * Rotate the persistent visitor ID — generate a fresh UUID and persist it (9.C.1).
+ *
+ * Used by reset() (logout): visitorId rides every event payload and is what the
+ * attribution read-path resolves through, so keeping it across logout→login stitches the
+ * next user's events to the previous user's device history/attribution. (iOS reset()
+ * regenerates visitorId alongside anonymousId.) Stored as a RAW string — must match
+ * getOrCreateVisitorId's non-JSON AsyncStorage encoding. Returns the new id
+ * (memory-only on storage failure).
+ */
+export const rotateVisitorId = async (): Promise<string> => {
+  const visitorId = generateUUID();
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.VISITOR_ID, visitorId);
+  } catch (error) {
+    console.warn('Failed to rotate visitor ID:', error);
+  }
+  return visitorId;
+};
+
+/**
  * Force a brand-new session — clear the stored session id + last-activity time so the
  * next getOrCreateSessionId() creates (not resumes) one. reset() needs this because the
  * plain getOrCreateSessionId() resumes any session <30min old (always true at logout),
