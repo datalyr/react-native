@@ -1,5 +1,24 @@
 import { Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// 9.C.2: persisted SKAN high-water state (cross-launch monotonic guard). SKAN 4 accepts
+// DECREASING conversion values, so an unguarded low-funnel event after a high-funnel one
+// (view_content after begin_checkout) silently downgrades the postback the ad platform
+// receives. Keys mirror the iOS SDK's UnifiedAttributionTracker (datalyr_skan_high_*),
+// namespaced with the SDK's AsyncStorage prefix. Values are raw strings (not JSON) —
+// this module is shared by the RN and Expo builds and must not import utils/utils-expo.
+const SKAN_HIGH_FINE_KEY = '@datalyr/skan_high_fine';
+const SKAN_HIGH_COARSE_KEY = '@datalyr/skan_high_coarse'; // rank: 0=low 1=medium 2=high
+const SKAN_WINDOW_LOCKED_KEY = '@datalyr/skan_window_locked';
+
+const coarseRank = (coarse: string): number => {
+  switch ((coarse || '').toLowerCase()) {
+    case 'high': return 2;
+    case 'medium': return 1;
+    default: return 0;
+  }
+};
 
 // SKAN 4.0 / AdAttributionKit coarse value type
 export type SKANCoarseValue = 'low' | 'medium' | 'high';
@@ -101,6 +120,100 @@ if (Platform.OS === 'ios') {
 export class SKAdNetworkBridge {
   private static _isSKAN4Available: boolean | null = null;
 
+  // 9.C.2: serializes guard→send→commit (and reset) so two concurrent updates can't both
+  // pass the comparison against the same stale high-water and both send.
+  private static highWaterChain: Promise<unknown> = Promise.resolve();
+
+  /** Read the persisted high-water state. Fails open to zeros on storage errors. */
+  private static async readConversionState(): Promise<{ fine: number; coarseRank: number; locked: boolean }> {
+    try {
+      const [fine, coarse, locked] = await Promise.all([
+        AsyncStorage.getItem(SKAN_HIGH_FINE_KEY),
+        AsyncStorage.getItem(SKAN_HIGH_COARSE_KEY),
+        AsyncStorage.getItem(SKAN_WINDOW_LOCKED_KEY),
+      ]);
+      return {
+        fine: fine ? parseInt(fine, 10) || 0 : 0,
+        coarseRank: coarse ? parseInt(coarse, 10) || 0 : 0,
+        locked: locked === '1',
+      };
+    } catch {
+      return { fine: 0, coarseRank: 0, locked: false };
+    }
+  }
+
+  /**
+   * Monotonic guard: should this candidate value be sent? Skips when the persisted
+   * window-lock is set, or when the value isn't strictly higher (fine first, coarse rank
+   * as tie-break) than the persisted high-water. Same ordering as the iOS SDK.
+   */
+  private static async passesHighWater(result: SKANConversionResult): Promise<boolean> {
+    const state = await this.readConversionState();
+    if (state.locked) {
+      console.log('[Datalyr] SKAN: skipping update (conversion window locked)');
+      return false;
+    }
+    const newRank = coarseRank(result.coarseValue);
+    const isHigher =
+      result.fineValue > state.fine ||
+      (result.fineValue === state.fine && newRank > state.coarseRank);
+    if (!isHigher) {
+      console.log(`[Datalyr] SKAN: skipping update (fine=${result.fineValue}, coarse=${result.coarseValue} not higher than persisted high-water fine=${state.fine})`);
+    }
+    return isHigher;
+  }
+
+  /** Persist a sent value as the new high-water (called only after a successful send). */
+  private static async commitHighWater(result: SKANConversionResult): Promise<void> {
+    try {
+      await AsyncStorage.setItem(SKAN_HIGH_FINE_KEY, String(result.fineValue));
+      await AsyncStorage.setItem(SKAN_HIGH_COARSE_KEY, String(coarseRank(result.coarseValue)));
+      if (result.lockWindow) {
+        await AsyncStorage.setItem(SKAN_WINDOW_LOCKED_KEY, '1');
+      }
+    } catch (error) {
+      console.warn('[Datalyr] SKAN: failed to persist high-water state:', error);
+    }
+  }
+
+  /**
+   * Reset the persisted high-water state (fine + coarse + window-lock). Called from
+   * SDK.reset() (logout) so a new user identity starts a fresh conversion-value window —
+   * without this the previous user's high-water suppresses ALL of the next user's SKAN
+   * updates. (Mirrors iOS UnifiedAttributionTracker.resetConversionState.)
+   */
+  static async resetConversionState(): Promise<void> {
+    const run = this.highWaterChain.then(async () => {
+      try {
+        await Promise.all([
+          AsyncStorage.removeItem(SKAN_HIGH_FINE_KEY),
+          AsyncStorage.removeItem(SKAN_HIGH_COARSE_KEY),
+          AsyncStorage.removeItem(SKAN_WINDOW_LOCKED_KEY),
+        ]);
+      } catch (error) {
+        console.warn('[Datalyr] SKAN: failed to reset conversion state:', error);
+      }
+    });
+    this.highWaterChain = run.catch(() => undefined);
+    await run;
+  }
+
+  /**
+   * Test-only: exercise just the persisted monotonic guard without the native
+   * SKAdNetwork round-trip (unavailable under jest / the simulator). Returns whether the
+   * value WOULD be sent, committing the high-water exactly as the real path does after a
+   * successful send. (Mirrors the iOS SDK's applyHighWaterForTest.)
+   */
+  static async applyHighWaterForTest(result: SKANConversionResult): Promise<boolean> {
+    const run = this.highWaterChain.then(async () => {
+      if (!(await this.passesHighWater(result))) return false;
+      await this.commitHighWater(result);
+      return true;
+    });
+    this.highWaterChain = run.catch(() => false);
+    return run;
+  }
+
   /**
    * SKAN 3.0 - Update conversion value (0-63)
    * @deprecated Use updatePostbackConversionValue for iOS 16.1+
@@ -128,6 +241,12 @@ export class SKAdNetworkBridge {
   /**
    * SKAN 4.0 - Update postback conversion value with coarse value and lock window
    * Falls back to SKAN 3.0 on iOS 14.0-16.0
+   *
+   * 9.C.2: guarded by a PERSISTED monotonic high-water mark (AsyncStorage — survives app
+   * restarts). Only strictly-higher values are sent; the high-water commits AFTER a
+   * successful native send (a failed send leaves it unchanged so a retry can succeed),
+   * and a persisted window-lock is honored across launches. reset() clears the state via
+   * resetConversionState().
    */
   static async updatePostbackConversionValue(
     result: SKANConversionResult
@@ -136,30 +255,43 @@ export class SKAdNetworkBridge {
       return false; // Android doesn't support SKAdNetwork
     }
 
-    if (!DatalyrSKAdNetwork) {
+    const native = DatalyrSKAdNetwork;
+    if (!native) {
       console.warn('[Datalyr] SKAdNetwork native module not found. Ensure native bridge is properly configured.');
       return false;
     }
 
-    try {
-      const response = await DatalyrSKAdNetwork.updatePostbackConversionValue(
-        result.fineValue,
-        result.coarseValue,
-        result.lockWindow
-      );
-
-      const isSKAN4 = await this.isSKAN4Available();
-      if (isSKAN4) {
-        console.log(`[Datalyr] SKAN 4.0 postback updated: fineValue=${result.fineValue}, coarseValue=${result.coarseValue}, lockWindow=${result.lockWindow}`);
-      } else {
-        console.log(`[Datalyr] SKAN 3.0 fallback: conversionValue=${result.fineValue}`);
+    const run = this.highWaterChain.then(async () => {
+      if (!(await SKAdNetworkBridge.passesHighWater(result))) {
+        return false;
       }
 
-      return response.success;
-    } catch (error) {
-      console.warn('[Datalyr] Failed to update SKAdNetwork postback conversion value:', error);
-      return false;
-    }
+      try {
+        const response = await native.updatePostbackConversionValue(
+          result.fineValue,
+          result.coarseValue,
+          result.lockWindow
+        );
+
+        const isSKAN4 = await SKAdNetworkBridge.isSKAN4Available();
+        if (isSKAN4) {
+          console.log(`[Datalyr] SKAN 4.0 postback updated: fineValue=${result.fineValue}, coarseValue=${result.coarseValue}, lockWindow=${result.lockWindow}`);
+        } else {
+          console.log(`[Datalyr] SKAN 3.0 fallback: conversionValue=${result.fineValue}`);
+        }
+
+        if (response.success) {
+          await SKAdNetworkBridge.commitHighWater(result);
+        }
+
+        return response.success;
+      } catch (error) {
+        console.warn('[Datalyr] Failed to update SKAdNetwork postback conversion value:', error);
+        return false;
+      }
+    });
+    this.highWaterChain = run.catch(() => undefined);
+    return run;
   }
 
   /**
