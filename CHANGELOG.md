@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alongside a Stripe/RevenueCat webhook. Omitted/empty → a fresh UUID. Both bare + Expo.
 
 ### Fixed
+- **TR-24: LinkedIn clicks were never captured; Impact clicks used a non-canonical name.** The
+  capture whitelist had `li_click_id` (a param LinkedIn never sends) instead of `li_fat_id`
+  (LinkedIn's real param), and `irclickid` had no mapping. Now captures `li_fat_id`/`irclid`
+  (canonical wire names), maps legacy `li_click_id`→`li_fat_id` and `irclickid`→`irclid`, and
+  stores both old+new for one release. `li_fat_id` is also whitelisted for deep-link capture.
+- **9.C.6: `identify()` traits are normalized for server-side matching.** `firstName`/`lastName`/
+  `phoneNumber` now map to `first_name`/`last_name`/`phone`, and `email`/`phone` are hoisted to
+  the `$identify` event root (mirrors the iOS key set) so advanced matching finds them. Both variants.
+- **9.C.3: SKAdNetwork/AdAttributionKit registration now runs at init** (`registerForAttribution()`,
+  iOS-only, swallow-and-log) so the first conversion-value update isn't dropped for not being
+  registered. Both variants.
 - **TR-21 (data loss): `app_install` could be permanently lost.** The first-launch marker
   (`@datalyr/first_launch_time`) was persisted during attribution init — *before* `app_install`
   was tracked — so a crash/kill in between made the next launch look like a returning user and

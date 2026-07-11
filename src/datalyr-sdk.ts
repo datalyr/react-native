@@ -230,6 +230,10 @@ export class DatalyrSDK {
         appleSearchAdsIntegration.initialize(config.debug),
         // Google Play Install Referrer (Android only)
         playInstallReferrerIntegration.initialize(),
+        // 9.C.3: register for SKAdNetwork / AdAttributionKit attribution once at init (iOS-only;
+        // the bridge no-ops off-iOS and swallows-and-logs any failure). Without this the first
+        // SKAN conversion-value update could be dropped for not being registered.
+        SKAdNetworkBridge.registerForAttribution().then(() => undefined),
       ];
 
       // Wait for all platform integrations to complete
@@ -394,11 +398,28 @@ export class DatalyrSDK {
       // Persist user data
       await this.persistUserData();
 
+      // 9.C.6: normalize identity trait keys (camelCase → snake_case) and hoist email/phone to
+      // the event root, so server-side advanced matching (which keys on first_name/last_name/
+      // phone) finds them. Mirrors the iOS identify() key set. Raw props are still spread (so
+      // custom traits survive); the normalized snake keys are hoisted last and win.
+      const props = (properties || {}) as Record<string, any>;
+      const email = typeof props.email === 'string' ? props.email : undefined;
+      const phone = typeof props.phone === 'string' ? props.phone
+        : (typeof props.phoneNumber === 'string' ? props.phoneNumber : undefined);
+      const firstName = typeof props.first_name === 'string' ? props.first_name
+        : (typeof props.firstName === 'string' ? props.firstName : undefined);
+      const lastName = typeof props.last_name === 'string' ? props.last_name
+        : (typeof props.lastName === 'string' ? props.lastName : undefined);
+
       // Track $identify event for identity resolution
       await this.track('$identify', {
         userId,
         anonymous_id: this.state.anonymousId,
-        ...properties
+        ...props,
+        ...(email ? { email } : {}),
+        ...(phone ? { phone } : {}),
+        ...(firstName ? { first_name: firstName } : {}),
+        ...(lastName ? { last_name: lastName } : {}),
       });
 
       // Fetch and merge web attribution if email is provided

@@ -218,6 +218,11 @@ export class DatalyrSDKExpo {
       // Initialize Play Install Referrer (Android only)
       await playInstallReferrerIntegration.initialize();
 
+      // 9.C.3: register for SKAdNetwork / AdAttributionKit attribution once at init (iOS-only;
+      // the bridge no-ops off-iOS and swallows-and-logs any failure) so the first SKAN
+      // conversion-value update isn't dropped for not being registered.
+      await SKAdNetworkBridge.registerForAttribution();
+
       // Cache advertiser info (IDFA/GAID, ATT status) once at init to avoid per-event native bridge calls
       try {
         this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
@@ -359,10 +364,26 @@ export class DatalyrSDKExpo {
 
       await this.persistUserData();
 
+      // 9.C.6: normalize identity trait keys (camelCase → snake_case) + hoist email/phone to the
+      // event root so server-side advanced matching finds them (mirrors iOS). Raw props still
+      // spread; normalized snake keys are hoisted last and win.
+      const props = (properties || {}) as Record<string, any>;
+      const email = typeof props.email === 'string' ? props.email : undefined;
+      const phone = typeof props.phone === 'string' ? props.phone
+        : (typeof props.phoneNumber === 'string' ? props.phoneNumber : undefined);
+      const firstName = typeof props.first_name === 'string' ? props.first_name
+        : (typeof props.firstName === 'string' ? props.firstName : undefined);
+      const lastName = typeof props.last_name === 'string' ? props.last_name
+        : (typeof props.lastName === 'string' ? props.lastName : undefined);
+
       await this.track('$identify', {
         userId,
         anonymous_id: this.state.anonymousId,
-        ...properties
+        ...props,
+        ...(email ? { email } : {}),
+        ...(phone ? { phone } : {}),
+        ...(firstName ? { first_name: firstName } : {}),
+        ...(lastName ? { last_name: lastName } : {}),
       });
 
       if (this.state.config.enableWebToAppAttribution !== false) {

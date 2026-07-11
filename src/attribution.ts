@@ -25,8 +25,10 @@ const ATTRIBUTION_PARAMS = [
   // Partner tracking parameters
   'partner_id', 'affiliate_id', 'referrer_id', 'source_id',
   
-  // Other platforms
-  'twclid', 'li_click_id', 'msclkid', 'irclickid',
+  // Other platforms. TR-24: li_fat_id is LinkedIn's REAL URL param (li_click_id was never
+  // sent by LinkedIn — it captured nothing), and irclid is the canonical Impact name. Keep
+  // the legacy li_click_id/irclickid whitelisted for one release so nothing in flight is lost.
+  'twclid', 'li_click_id', 'li_fat_id', 'msclkid', 'irclickid', 'irclid',
   
   // Custom attribution parameters
   'click_id', 'campaign_id', 'ad_id', 'adset_id', 'creative_id',
@@ -61,7 +63,10 @@ export interface AttributionData {
   gclid?: string;                 // Google Click ID
   oppref?: string;                // OpenAI Ads Click ID
   twclid?: string;                // Twitter Click ID
-  li_click_id?: string;           // LinkedIn Click ID
+  li_click_id?: string;           // LinkedIn Click ID (legacy; TR-24 — never populated by LinkedIn)
+  li_fat_id?: string;             // LinkedIn's real click id (canonical)
+  irclickid?: string;             // Impact click id (raw URL param; TR-24 legacy)
+  irclid?: string;                // Impact click id (canonical)
   msclkid?: string;               // Microsoft Click ID
   
   // Partner & Affiliate Tracking
@@ -361,8 +366,22 @@ export class AttributionManager {
             case 'twclid':
               this.attributionData.twclid = value;
               break;
+            // TR-24: LinkedIn — li_fat_id is the real param and the canonical wire name.
+            // A legacy li_click_id maps to the canonical field too (store both for one release).
+            case 'li_fat_id':
+              this.attributionData.li_fat_id = value;
+              break;
             case 'li_click_id':
               this.attributionData.li_click_id = value;
+              this.attributionData.li_fat_id = this.attributionData.li_fat_id || value;
+              break;
+            // TR-24: Impact — irclid is canonical; irclickid is the raw URL param (rename it).
+            case 'irclid':
+              this.attributionData.irclid = value;
+              break;
+            case 'irclickid':
+              this.attributionData.irclickid = value;
+              this.attributionData.irclid = this.attributionData.irclid || value;
               break;
             case 'msclkid':
               this.attributionData.msclkid = value;
