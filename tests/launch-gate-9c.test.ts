@@ -270,7 +270,22 @@ describe('TR-20 event-name normalization + fleet-charset validation', () => {
   test('empty, over-long, and illegal-charset names are rejected', () => {
     expect(validateEventName('')).toBe(false);
     expect(validateEventName('a'.repeat(101))).toBe(false);
-    expect(validateEventName('emoji_🎉')).toBe(false);
+    expect(validateEventName('emoji_🎉')).toBe(false); // raw name still invalid (normalize fixes it)
+  });
+
+  // Track-3 review P2: previously-valid names must be NORMALIZED, not silently dropped on
+  // upgrade; the charset now matches iOS's Unicode alphanumerics.
+  test('punctuation (colon/slash) normalizes to underscore instead of dropping', () => {
+    expect(normalizeEventName('checkout:step_1')).toBe('checkout_step_1');
+    expect(validateEventName(normalizeEventName('checkout:step_1'))).toBe(true);
+    expect(normalizeEventName('a b:c/d')).toBe('a_b_c_d');
+    expect(normalizeEventName('emoji_🎉')).toBe('emoji__'); // trailing emoji → '_' (recorded, not dropped)
+  });
+
+  test('Unicode names are valid (iOS parity) — not ASCII-only', () => {
+    expect(validateEventName('購入完了')).toBe(true);
+    expect(validateEventName('naïve')).toBe(true);
+    expect(normalizeEventName('購入完了')).toBe('購入完了'); // in-charset → unchanged
   });
 });
 

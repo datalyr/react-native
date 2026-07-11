@@ -514,15 +514,19 @@ export const getNetworkType = (): string => {
 // TR-20 / fleet charset (matches iOS): alphanumerics + _ - . and $ (system events like
 // $identify), max 100 chars. The bare build silently ACCEPTED any string while Expo silently
 // DROPPED anything with a space — track('Order Completed') recorded on bare, vanished on Expo.
-const EVENT_NAME_PATTERN = /^[a-zA-Z0-9_.$-]+$/;
+const EVENT_NAME_PATTERN = /^[\p{L}\p{N}_.$-]+$/u;
 
 // Normalize spaces → underscores (with a one-line warn) rather than dropping the event, so
 // track('Order Completed') → 'Order_Completed' on BOTH variants instead of diverging.
 export const normalizeEventName = (eventName: string): string => {
   if (typeof eventName !== 'string') return eventName;
-  const normalized = eventName.trim().replace(/\s+/g, '_');
+  // Map any run of out-of-charset chars (spaces, ':', '/', emoji, …) to a single '_', so a
+  // previously-valid name like 'checkout:step_1' or 'Order Completed' is RECORDED, not dropped by
+  // validateEventName on upgrade. Unicode letters/numbers ARE in the charset ('購入完了' passes
+  // through unchanged), matching iOS's Unicode alphanumerics.
+  const normalized = eventName.trim().replace(/[^\p{L}\p{N}_.$-]+/gu, '_');
   if (normalized !== eventName) {
-    console.warn(`[Datalyr] Event name "${eventName}" normalized to "${normalized}" (spaces → underscores).`);
+    console.warn(`[Datalyr] Event name "${eventName}" normalized to "${normalized}".`);
   }
   return normalized;
 };

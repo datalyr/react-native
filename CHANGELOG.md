@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alongside a Stripe/RevenueCat webhook. Omitted/empty → a fresh UUID. Both bare + Expo.
 
 ### Fixed
+- **Track-3 review P2: event-name validation no longer silently drops previously-valid names.**
+  The TR-20a tightening (`/^[A-Za-z0-9_.$-]+$/`) plus a whitespace-only `normalizeEventName` meant an
+  existing app calling `track('checkout:step_1')` — or any non-ASCII name like `購入完了` — had the
+  event DROPPED on upgrade (and the reject log was `__DEV__`-only, so prod was silent). The charset
+  now matches iOS's Unicode alphanumerics (`/^[\p{L}\p{N}_.$-]+$/u`), and `normalizeEventName` maps
+  ANY run of out-of-charset chars → a single `_` (with an always-on warn) — so `checkout:step_1` →
+  `checkout_step_1` is recorded and a Unicode name passes through unchanged. Both bare + Expo.
 - **BATCH-8(j): the identify-time `/attribution/lookup` request now has a 10s timeout.** Its
   sibling deferred-lookup already bounded its `fetch` with a 10s `AbortController`, but the
   email lookup (`fetchAndMergeWebAttribution`, which runs on `identify(email)` — every session)
