@@ -26,6 +26,7 @@ import {
   getNetworkType,
   deriveCountryFromLocale,
   validateEventName,
+  normalizeEventName,
   validateEventData,
   debugLog,
   errorLog,
@@ -294,7 +295,11 @@ export class DatalyrSDKExpo {
         return;
       }
 
-      if (!validateEventName(eventName)) {
+      // TR-20: normalize (spaces → underscores) then validate against the fleet charset, so the
+      // rest of this method uses one canonical name and bare/Expo behave identically (Expo used
+      // to silently DROP a name with a space that bare accepted).
+      const name = normalizeEventName(eventName);
+      if (!validateEventName(name)) {
         errorLog(`Invalid event name: ${eventName}`);
         return;
       }
@@ -304,9 +309,9 @@ export class DatalyrSDKExpo {
         return;
       }
 
-      debugLog(`Tracking event: ${eventName}`, eventData);
+      debugLog(`Tracking event: ${name}`, eventData);
 
-      const payload = await this.createEventPayload(eventName, eventData);
+      const payload = await this.createEventPayload(name, eventData);
       await this.eventQueue.enqueue(payload);
 
       // TR-08: refresh the STORAGE session-activity time on real event activity (throttled to
@@ -317,8 +322,8 @@ export class DatalyrSDKExpo {
       // Update session activity counters (refreshes lastActivity so session_end duration
       // and the idle-window timeout track real usage). Skip the SDK's own session lifecycle
       // events so `events` counts real activity, not the session_start/end bookkeeping.
-      if (this.autoEventsManager && eventName !== 'session_start' && eventName !== 'session_end') {
-        await this.autoEventsManager.onEvent(eventName);
+      if (this.autoEventsManager && name !== 'session_start' && name !== 'session_end') {
+        await this.autoEventsManager.onEvent(name);
       }
 
     } catch (error) {
@@ -794,7 +799,9 @@ export class DatalyrSDKExpo {
     if (contentId) properties.content_id = contentId;
     if (contentName) properties.content_name = contentName;
 
-    await this.track('add_to_cart', properties);
+    // TR-20(b): route through SKAN like the bare build — mid-funnel conversion values never
+    // updated on Expo because this called plain track().
+    await this.trackWithSKAdNetwork('add_to_cart', properties);
   }
 
   async trackViewContent(contentId: string, contentName?: string, contentType?: string, value?: number, currency?: string): Promise<void> {
@@ -814,14 +821,16 @@ export class DatalyrSDKExpo {
     if (numItems !== undefined) properties.num_items = numItems;
     if (contentIds) properties.content_ids = contentIds;
 
-    await this.track('initiate_checkout', properties);
+    // TR-20(b): route mid-funnel events through SKAN like the bare build (was plain track()).
+    await this.trackWithSKAdNetwork('initiate_checkout', properties);
   }
 
   async trackCompleteRegistration(registrationMethod?: string): Promise<void> {
     const properties: Record<string, any> = {};
     if (registrationMethod) properties.registration_method = registrationMethod;
 
-    await this.track('complete_registration', properties);
+    // TR-20(b): route through SKAN like the bare build.
+    await this.trackWithSKAdNetwork('complete_registration', properties);
   }
 
   async trackSearch(searchString: string, contentIds?: string[]): Promise<void> {
@@ -836,7 +845,8 @@ export class DatalyrSDKExpo {
     if (value !== undefined) properties.value = value;
     if (currency) properties.currency = currency;
 
-    await this.track('lead', properties);
+    // TR-20(b): route through SKAN like the bare build.
+    await this.trackWithSKAdNetwork('lead', properties);
   }
 
   async trackAddPaymentInfo(success?: boolean): Promise<void> {

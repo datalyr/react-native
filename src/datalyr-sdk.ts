@@ -23,6 +23,7 @@ import {
   getNetworkType,
   deriveCountryFromLocale,
   validateEventName,
+  normalizeEventName,
   validateEventData,
   debugLog,
   errorLog,
@@ -317,7 +318,10 @@ export class DatalyrSDK {
         return;
       }
 
-      if (!validateEventName(eventName)) {
+      // TR-20: normalize (spaces → underscores) then validate against the fleet charset, so the
+      // rest of this method uses one canonical name and bare/Expo behave identically.
+      const name = normalizeEventName(eventName);
+      if (!validateEventName(name)) {
         errorLog(`Invalid event name: ${eventName}`);
         return;
       }
@@ -327,9 +331,9 @@ export class DatalyrSDK {
         return;
       }
 
-      debugLog(`Tracking event: ${eventName}`, eventData);
+      debugLog(`Tracking event: ${name}`, eventData);
 
-      const payload = await this.createEventPayload(eventName, eventData);
+      const payload = await this.createEventPayload(name, eventData);
       await this.eventQueue.enqueue(payload);
 
       // TR-08: refresh the STORAGE session-activity time on real event activity (throttled to
@@ -341,8 +345,8 @@ export class DatalyrSDK {
       // Update session activity counters (refreshes lastActivity so session_end duration
       // and the idle-window timeout track real usage). Skip the SDK's own session lifecycle
       // events so `events` counts real activity, not the session_start/end bookkeeping.
-      if (this.autoEventsManager && eventName !== 'session_start' && eventName !== 'session_end') {
-        await this.autoEventsManager.onEvent(eventName);
+      if (this.autoEventsManager && name !== 'session_start' && name !== 'session_end') {
+        await this.autoEventsManager.onEvent(name);
       }
 
     } catch (error) {

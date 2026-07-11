@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alongside a Stripe/RevenueCat webhook. Omitted/empty → a fresh UUID. Both bare + Expo.
 
 ### Fixed
+- **TR-20: the Expo and bare entry points silently diverged.** (a) Event-name validation:
+  bare accepted any non-empty string while Expo rejected anything with a space, so
+  `track('Order Completed')` recorded on bare and was silently DROPPED on Expo. Both now
+  normalize spaces→underscores (with a warn) and validate against one fleet charset
+  (`[A-Za-z0-9_.$-]`, ≤100). (b) SKAN routing: Expo's `trackAddToCart`/`trackInitiateCheckout`/
+  `trackCompleteRegistration`/`trackLead` called plain `track()` — mid-funnel conversion values
+  never updated on Expo — and now route through `trackWithSKAdNetwork` like bare. (d) Session-id
+  format: Expo used a bare UUID; it now uses the bare `sess_<ts>_<rand>` format so
+  `context.session_id` is identical across variants. (Remaining: full ecommerce-helper extraction
+  + property-name parity — `product_id`/`content_id` etc.)
 - **TR-24: LinkedIn clicks were never captured; Impact clicks used a non-canonical name.** The
   capture whitelist had `li_click_id` (a param LinkedIn never sends) instead of `li_fat_id`
   (LinkedIn's real param), and `irclickid` had no mapping. Now captures `li_fat_id`/`irclid`

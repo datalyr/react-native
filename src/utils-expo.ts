@@ -42,6 +42,12 @@ export const generateUUID = (): string => {
   return uuidv4();
 };
 
+// TR-20: unify the session-id FORMAT with the bare build (utils.ts) — `sess_<ts>_<rand>` — so
+// both variants' context.session_id look identical. Expo previously used a bare UUID here.
+export const generateSessionId = (): string => {
+  return `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+};
+
 /**
  * Derive an ISO-3166-1 alpha-2 country code from a BCP-47 locale tag.
  * Mirrors utils.ts — see that file for the rationale. Kept duplicated rather
@@ -251,7 +257,7 @@ export const getOrCreateSessionId = async (): Promise<string> => {
     }
 
     // Create new session
-    const newSessionId = generateUUID();
+    const newSessionId = generateSessionId();
     await Promise.all([
       Storage.setItem(STORAGE_KEYS.SESSION_ID, newSessionId),
       Storage.setItem(STORAGE_KEYS.SESSION_START, now),
@@ -262,7 +268,7 @@ export const getOrCreateSessionId = async (): Promise<string> => {
     return newSessionId;
   } catch (error) {
     errorLog('Error managing session ID:', error as Error);
-    return generateUUID();
+    return generateSessionId();
   }
 };
 
@@ -414,18 +420,25 @@ const refreshNetworkType = async (): Promise<void> => {
 };
 
 // Event validation
+// TR-20 / fleet charset (matches iOS + the bare build): alphanumerics + _ - . and $ (system
+// events like $identify), max 100 chars. Spaces are normalized to underscores below rather than
+// dropping the event — Expo used to silently drop track('Order Completed') while bare accepted it.
+const EVENT_NAME_PATTERN = /^[a-zA-Z0-9_.$-]+$/;
+
+export const normalizeEventName = (eventName: string): string => {
+  if (typeof eventName !== 'string') return eventName;
+  const normalized = eventName.trim().replace(/\s+/g, '_');
+  if (normalized !== eventName) {
+    console.warn(`[Datalyr] Event name "${eventName}" normalized to "${normalized}" (spaces → underscores).`);
+  }
+  return normalized;
+};
+
 export const validateEventName = (eventName: string): boolean => {
-  if (!eventName || typeof eventName !== 'string') {
-    return false;
-  }
-  
-  if (eventName.length > 100) {
-    return false;
-  }
-  
-  // Allow letters, numbers, underscores, hyphens, and $ prefix (for system events like $identify)
-  const validPattern = /^\$?[a-zA-Z0-9_-]+$/;
-  return validPattern.test(eventName);
+  return typeof eventName === 'string'
+    && eventName.length > 0
+    && eventName.length <= 100
+    && EVENT_NAME_PATTERN.test(eventName);
 };
 
 export const validateEventData = (eventData?: Record<string, any>): boolean => {

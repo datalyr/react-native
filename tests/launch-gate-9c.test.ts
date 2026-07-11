@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SKAdNetworkBridge } from '../src/native/SKAdNetworkBridge';
 import { attributionManager } from '../src/attribution';
 import { DatalyrSDK } from '../src/datalyr-sdk';
-import { Storage, STORAGE_KEYS, touchSession } from '../src/utils';
+import { Storage, STORAGE_KEYS, touchSession, normalizeEventName, validateEventName } from '../src/utils';
 
 const SKAN_FINE = '@datalyr/skan_high_fine';
 const SKAN_COARSE = '@datalyr/skan_high_coarse';
@@ -248,5 +248,27 @@ describe('TR-08: touchSession session-activity refresh', () => {
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_SESSION_TIME, 'SENTINEL');
     await touchSession();
     expect(await AsyncStorage.getItem(STORAGE_KEYS.LAST_SESSION_TIME)).toBe('SENTINEL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TR-20(a): event-name validation is unified across bare + Expo — spaces are
+// normalized to underscores (not silently dropped) and the fleet charset applies.
+// ---------------------------------------------------------------------------
+describe('TR-20 event-name normalization + fleet-charset validation', () => {
+  test('spaces normalize to underscores (was: accepted on bare, DROPPED on Expo)', () => {
+    expect(normalizeEventName('Order Completed')).toBe('Order_Completed');
+    expect(validateEventName(normalizeEventName('Order Completed'))).toBe(true);
+  });
+
+  test('$-prefixed system events + dots/hyphens are valid', () => {
+    expect(validateEventName('$identify')).toBe(true);
+    expect(validateEventName('screen.view-1')).toBe(true);
+  });
+
+  test('empty, over-long, and illegal-charset names are rejected', () => {
+    expect(validateEventName('')).toBe(false);
+    expect(validateEventName('a'.repeat(101))).toBe(false);
+    expect(validateEventName('emoji_🎉')).toBe(false);
   });
 });

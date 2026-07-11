@@ -511,8 +511,27 @@ export const getNetworkType = (): string => {
 /**
  * Validate event name
  */
+// TR-20 / fleet charset (matches iOS): alphanumerics + _ - . and $ (system events like
+// $identify), max 100 chars. The bare build silently ACCEPTED any string while Expo silently
+// DROPPED anything with a space — track('Order Completed') recorded on bare, vanished on Expo.
+const EVENT_NAME_PATTERN = /^[a-zA-Z0-9_.$-]+$/;
+
+// Normalize spaces → underscores (with a one-line warn) rather than dropping the event, so
+// track('Order Completed') → 'Order_Completed' on BOTH variants instead of diverging.
+export const normalizeEventName = (eventName: string): string => {
+  if (typeof eventName !== 'string') return eventName;
+  const normalized = eventName.trim().replace(/\s+/g, '_');
+  if (normalized !== eventName) {
+    console.warn(`[Datalyr] Event name "${eventName}" normalized to "${normalized}" (spaces → underscores).`);
+  }
+  return normalized;
+};
+
 export const validateEventName = (eventName: string): boolean => {
-  return !!(eventName && typeof eventName === 'string' && eventName.trim().length > 0);
+  return typeof eventName === 'string'
+    && eventName.length > 0
+    && eventName.length <= 100
+    && EVENT_NAME_PATTERN.test(eventName);
 };
 
 /**
