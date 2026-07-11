@@ -16,6 +16,7 @@ import {
   getOrCreateVisitorId,
   getOrCreateAnonymousId,
   getOrCreateSessionId,
+  touchSession,
   rotateAnonymousId,
   rotateVisitorId,
   clearSession,
@@ -300,6 +301,11 @@ export class DatalyrSDKExpo {
 
       const payload = await this.createEventPayload(eventName, eventData);
       await this.eventQueue.enqueue(payload);
+
+      // TR-08: refresh the STORAGE session-activity time on real event activity (throttled to
+      // 60s) so the idle window actually slides during continuous foreground use — getOrCreate
+      // SessionId (init/foreground/reset) was the only writer. Fire-and-forget.
+      void touchSession();
 
       // Update session activity counters (refreshes lastActivity so session_end duration
       // and the idle-window timeout track real usage). Skip the SDK's own session lifecycle
@@ -1141,7 +1147,7 @@ export class DatalyrSDKExpo {
 
   private setupAppStateMonitoring(): void {
     try {
-      this.appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+      this.appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
         debugLog('App state changed:', nextAppState);
 
         if (nextAppState === 'background') {
@@ -1150,7 +1156,10 @@ export class DatalyrSDKExpo {
             this.autoEventsManager.handleAppBackground();
           }
         } else if (nextAppState === 'active') {
-          this.refreshSession();
+          // TR-19: AWAIT the session refresh before notifying auto-events so a genuine expiry
+          // rotates this.state.sessionId first — the unawaited version raced, letting
+          // session_start emit with the OLD id while subsequent events carried the NEW one.
+          await this.refreshSession();
           // Refresh network status on foreground (expo-network has no listener API and
           // we poll at 30s, so a foreground refresh picks up changes that happened in
           // the background promptly).

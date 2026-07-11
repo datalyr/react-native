@@ -13,6 +13,7 @@ import {
   getOrCreateVisitorId,
   getOrCreateAnonymousId,
   getOrCreateSessionId,
+  touchSession,
   rotateAnonymousId,
   rotateVisitorId,
   clearSession,
@@ -323,6 +324,12 @@ export class DatalyrSDK {
 
       const payload = await this.createEventPayload(eventName, eventData);
       await this.eventQueue.enqueue(payload);
+
+      // TR-08: refresh the STORAGE session-activity time on real event activity (throttled to
+      // 60s), so a session doesn't wrongly expire during a long continuous-foreground stretch —
+      // getOrCreateSessionId (init/foreground/reset) was the only writer. Fire-and-forget so the
+      // (throttled) AsyncStorage write never blocks the track path.
+      void touchSession();
 
       // Update session activity counters (refreshes lastActivity so session_end duration
       // and the idle-window timeout track real usage). Skip the SDK's own session lifecycle
@@ -1385,9 +1392,9 @@ export class DatalyrSDK {
   private setupAppStateMonitoring(): void {
     try {
       // Listen for app state changes (without tracking every change)
-      this.appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+      this.appStateSubscription = AppState.addEventListener('change', async (nextAppState) => {
         debugLog('App state changed:', nextAppState);
-        
+
         // Only handle meaningful state changes for session management
         if (nextAppState === 'background') {
           // Flush events before going to background
@@ -1397,8 +1404,11 @@ export class DatalyrSDK {
             this.autoEventsManager.handleAppBackground();
           }
         } else if (nextAppState === 'active') {
-          // App became active, ensure we have fresh session if needed
-          this.refreshSession();
+          // TR-19: AWAIT the session refresh BEFORE notifying auto-events. Running them
+          // concurrently (unawaited) raced: on a genuine expiry, session_start could emit with
+          // the OLD id while subsequent events carried the NEW one. Awaiting rotates
+          // this.state.sessionId first, so session_start + everything after share the new id.
+          await this.refreshSession();
           // Refresh network status when coming back from background
           networkStatusManager.refresh();
           // Notify auto-events manager for session handling

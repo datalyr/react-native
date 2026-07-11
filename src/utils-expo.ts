@@ -232,11 +232,12 @@ export const getOrCreateSessionId = async (): Promise<string> => {
     const sessionTimeout = 30 * 60 * 1000; // 30 minutes
     const now = Date.now();
 
-    // LAST_SESSION_TIME tracks the last ACTIVITY (refreshed on every reuse below), so the
-    // 30-min window is an idle/sliding window — matching the RN build (utils.ts). The old
-    // code compared against SESSION_START only, hard-expiring a session 30min after it
-    // STARTED regardless of continuous use (and diverging from RN). SESSION_START is still
-    // written for back-compat, but the timeout is anchored to last activity.
+    // LAST_SESSION_TIME tracks the last ACTIVITY: refreshed on every reuse below AND (TR-08) by
+    // touchSession() on every tracked event, so the 30-min idle window genuinely slides with
+    // usage — matching the RN build (utils.ts). Before TR-08 this function was the only writer
+    // (init/foreground/reset), so a long continuous-foreground stretch left the stored time
+    // stale and the "sliding window" didn't actually slide. SESSION_START is still written for
+    // back-compat, but the timeout is anchored to last activity.
     const [sessionId, lastActivity] = await Promise.all([
       Storage.getItem<string>(STORAGE_KEYS.SESSION_ID),
       Storage.getItem<number>(STORAGE_KEYS.LAST_SESSION_TIME),
@@ -262,6 +263,23 @@ export const getOrCreateSessionId = async (): Promise<string> => {
   } catch (error) {
     errorLog('Error managing session ID:', error as Error);
     return generateUUID();
+  }
+};
+
+// TR-08: throttle (see utils.ts). Refresh LAST_SESSION_TIME on real event activity so the idle
+// window actually slides during continuous foreground use — getOrCreateSessionId (init/foreground/
+// reset) was the only writer, so a long active stretch left the stored activity time stale and the
+// next background→foreground rotated the session id mid-use. One write per 60s; best-effort.
+let lastSessionTouchAt = 0;
+
+export const touchSession = async (): Promise<void> => {
+  const now = Date.now();
+  if (now - lastSessionTouchAt < 60_000) return;
+  lastSessionTouchAt = now;
+  try {
+    await Storage.setItem(STORAGE_KEYS.LAST_SESSION_TIME, now);
+  } catch {
+    /* best-effort */
   }
 };
 

@@ -275,6 +275,29 @@ export const getOrCreateSessionId = async (): Promise<string> => {
   }
 };
 
+// TR-08: in-memory throttle so track() refreshes the session-activity time at most once per 60s
+// (avoids an AsyncStorage write per event while keeping the idle-timeout window honest).
+let lastSessionTouchAt = 0;
+
+/**
+ * Refresh LAST_SESSION_TIME on real event activity. getOrCreateSessionId (init / foreground /
+ * reset) was the ONLY writer, so >30 min of continuous foreground use with no foreground event
+ * left the stored activity time stale → the next background→foreground wrongly rotated the
+ * session id mid-use while auto-events resumed the old session, so events carried a session id
+ * that never got a session_start and session_end fired with the old id. Throttled to one write
+ * per 60s; best-effort (a missed write only risks an early rotation, never a crash).
+ */
+export const touchSession = async (): Promise<void> => {
+  const now = Date.now();
+  if (now - lastSessionTouchAt < 60_000) return;
+  lastSessionTouchAt = now;
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.LAST_SESSION_TIME, now.toString());
+  } catch {
+    /* best-effort */
+  }
+};
+
 // Cached device info to avoid repeated async calls
 let cachedDeviceInfo: DeviceInfoType | null = null;
 let deviceInfoPromise: Promise<DeviceInfoType> | null = null;

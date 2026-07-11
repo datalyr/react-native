@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **TR-08 (session corruption): the session id could rotate mid-session with no `session_start`.**
+  `LAST_SESSION_TIME` was refreshed only by `getOrCreateSessionId` (init / foreground / reset) —
+  never by `track()` — so after >30 min of continuous foreground use the next background→foreground
+  wrongly rotated `session_id` while auto-events resumed the old session: events carried a session
+  id that never got a `session_start`, and `session_end` fired with the old id, corrupting every
+  session join >30 min. `track()` now refreshes `LAST_SESSION_TIME` via a throttled `touchSession()`
+  (one write per 60s) in both the bare and Expo variants.
+- **TR-19 (session race): `session_start` could carry the stale session id on foreground.** The
+  AppState `active` handler ran `refreshSession()` and `handleAppForeground()` concurrently and
+  unawaited, so on a genuine expiry `session_start` could emit with the OLD id while later events
+  carried the NEW one. It now `await`s `refreshSession()` before notifying auto-events (both variants).
+
 ### Changed
 - **TR-26: `ios/PrivacyInfo.xcprivacy` now accurately declares tracking.** It said
   `NSPrivacyTracking=false` with empty domains and every data type `Linked/Tracking=false`,

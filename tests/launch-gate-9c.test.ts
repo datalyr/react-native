@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SKAdNetworkBridge } from '../src/native/SKAdNetworkBridge';
 import { attributionManager } from '../src/attribution';
 import { DatalyrSDK } from '../src/datalyr-sdk';
-import { Storage, STORAGE_KEYS } from '../src/utils';
+import { Storage, STORAGE_KEYS, touchSession } from '../src/utils';
 
 const SKAN_FINE = '@datalyr/skan_high_fine';
 const SKAN_COARSE = '@datalyr/skan_high_coarse';
@@ -232,5 +232,21 @@ describe('9.C.2 real updatePostbackConversionValue path (native present)', () =>
     jest.dontMock('expo-modules-core');
     jest.dontMock('@react-native-async-storage/async-storage');
     jest.resetModules();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TR-08: track() refreshes the stored session-activity time (throttled) so a
+// long continuous-foreground stretch doesn't wrongly rotate the session id.
+// ---------------------------------------------------------------------------
+describe('TR-08: touchSession session-activity refresh', () => {
+  test('an immediate second touch is throttled (does not re-write LAST_SESSION_TIME)', async () => {
+    // After ANY touch, lastSessionTouchAt is <60s old, so a second touch moments later is
+    // always throttled — proving track() won't hammer AsyncStorage on every event. A sentinel
+    // we plant between the two calls must survive the second (throttled) call untouched.
+    await touchSession();
+    await AsyncStorage.setItem(STORAGE_KEYS.LAST_SESSION_TIME, 'SENTINEL');
+    await touchSession();
+    expect(await AsyncStorage.getItem(STORAGE_KEYS.LAST_SESSION_TIME)).toBe('SENTINEL');
   });
 });
