@@ -255,6 +255,8 @@ export class DatalyrSDKExpo {
           sdk_variant: 'expo',
           ...installData,
         });
+        // TR-21: commit the first-launch marker only AFTER app_install is durably enqueued.
+        await attributionManager.markInstallTracked();
       }
 
       debugLog('Datalyr SDK (Expo) initialized successfully', {
@@ -596,6 +598,14 @@ export class DatalyrSDKExpo {
       await Storage.removeItem(STORAGE_KEYS.USER_ID);
       await Storage.removeItem(STORAGE_KEYS.USER_PROPERTIES);
 
+      // TR-28: wipe the previous user's attribution + journey BEFORE rotating ids, so a
+      // track() that interleaves reset can never emit the NEW visitor id WITH the OLD
+      // click-ids (fbclid/gclid/fbc/utm/lyr ride EVERY event via createEventPayload and feed
+      // Meta CAPI; the journey is per-identity). Preserves the install marker (wiping it would
+      // re-run install tracking + the deferred lookup next launch and re-import A's web attr).
+      await attributionManager.clearAttributionForReset();
+      await journeyManager.clearJourney();
+
       // Rotate anonymous id so the next user isn't merged with this one in the identity
       // graph (Meta CAPI bridge would otherwise leak click-ids/PII between users).
       this.state.anonymousId = await rotateAnonymousId();
@@ -607,15 +617,10 @@ export class DatalyrSDKExpo {
       this.state.visitorId = await rotateVisitorId();
 
       // Force a genuinely new session (getOrCreateSessionId resumes any session <30min
-      // old, always true at logout) by clearing the stored session first.
+      // old, always true at logout) by clearing the stored session first. auto-events reads
+      // the id via its getSessionId callback, so it picks up the rotation automatically.
       await clearSession();
       this.state.sessionId = await getOrCreateSessionId();
-
-      // 9.C.1: wipe the previous user's persisted attribution — fbclid/gclid/fbc/utm/lyr
-      // ride EVERY event via createEventPayload and feed Meta CAPI. Preserves the install
-      // marker (wiping it would re-run install tracking + the deferred lookup next launch
-      // and re-import the previous user's web attribution).
-      await attributionManager.clearAttributionForReset();
 
       // 9.C.1: drop the once-per-install web-attribution-checked marker so the next
       // user's identify(email) can recover THEIR web attribution (we just wiped the
@@ -1019,12 +1024,23 @@ export class DatalyrSDKExpo {
     // Use cached advertiser info (IDFA/GAID, ATT status) — cached at init, refreshed on ATT change
     const advertiserInfo = this.cachedAdvertiserInfo;
 
+    // TR-18: honor a caller-supplied idempotency key (non-empty string properties.event_id) as
+    // the wire eventId, stripping it from properties. Mirrors iOS/Node semantics. Else a UUID.
+    const callerEventId = (typeof eventData?.event_id === 'string' && eventData.event_id.trim().length > 0)
+      ? eventData.event_id
+      : undefined;
+    let cleanedEventData = eventData;
+    if (callerEventId !== undefined && eventData) {
+      cleanedEventData = { ...eventData };
+      delete (cleanedEventData as Record<string, unknown>).event_id;
+    }
+
     const payload: EventPayload = {
       workspaceId: this.state.config.workspaceId || 'mobile_sdk',
       visitorId: this.state.visitorId,
       anonymousId: this.state.anonymousId,
       sessionId: this.state.sessionId,
-      eventId: generateUUID(),
+      eventId: callerEventId ?? generateUUID(),
       eventName,
       eventData: {
         // Auto-captured + persisted attribution spread FIRST so caller's explicit event
@@ -1070,7 +1086,8 @@ export class DatalyrSDKExpo {
           ? {}
           : playInstallReferrerIntegration.getAttributionData()),
         // Caller-supplied event properties WIN over all auto/attribution fields above.
-        ...eventData,
+        // TR-18: cleanedEventData is eventData minus a consumed event_id (now the wire eventId).
+        ...cleanedEventData,
         // Always SDK-stamped (not caller-overridable).
         timestamp: Date.now(),
       },

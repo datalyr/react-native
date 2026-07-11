@@ -149,11 +149,14 @@ export class AttributionManager {
         // This is the first launch
         this.isFirstLaunch = true;
         const installTime = new Date().toISOString();
-        
+
         this.attributionData.install_time = installTime;
         this.attributionData.first_open_time = installTime;
-        
-        await Storage.setItem('@datalyr/first_launch_time', installTime);
+
+        // TR-21: do NOT persist the first-launch marker here. It is committed by
+        // markInstallTracked() AFTER app_install is enqueued — so a crash/kill between init and
+        // the app_install track re-detects the install next launch instead of losing it forever.
+        // (install_time above is in-memory; the isInstall() gate reads isFirstLaunch, not storage.)
         debugLog('First launch detected, install time:', installTime);
       } else {
         this.isFirstLaunch = false;
@@ -442,6 +445,17 @@ export class AttributionManager {
    */
   isInstall(): boolean {
     return this.isFirstLaunch;
+  }
+
+  /**
+   * TR-21: commit the first-launch marker AFTER app_install has been enqueued. Until this runs,
+   * a relaunch re-detects the install (checkFirstLaunch finds no marker → isFirstLaunch=true) and
+   * re-fires app_install — so a crash between init and the app_install track can't permanently
+   * lose install attribution (the single most valuable mobile event).
+   */
+  async markInstallTracked(): Promise<void> {
+    const installTime = this.attributionData.install_time || new Date().toISOString();
+    await Storage.setItem('@datalyr/first_launch_time', installTime);
   }
 
   /**

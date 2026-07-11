@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **TR-18: caller-supplied `event_id` for idempotent delivery.** A non-empty string
+  `properties.event_id` becomes the wire `eventId` (and is stripped from properties), mirroring
+  the iOS/Node SDKs — a deterministic dedup key for a client that double-tracks a purchase
+  alongside a Stripe/RevenueCat webhook. Omitted/empty → a fresh UUID. Both bare + Expo.
+
 ### Fixed
+- **TR-21 (data loss): `app_install` could be permanently lost.** The first-launch marker
+  (`@datalyr/first_launch_time`) was persisted during attribution init — *before* `app_install`
+  was tracked — so a crash/kill in between made the next launch look like a returning user and
+  `app_install` was never sent. The marker is now committed by `markInstallTracked()` only AFTER
+  `app_install` is enqueued (in-memory `install_time`/`isInstall()` are unaffected), so an
+  interrupted first launch re-fires `app_install`. Both bare + Expo.
+- **TR-28 (identity bleed): `reset()` cleared attribution AFTER rotating ids, and left the
+  journey.** A `track()` interleaving reset could emit the NEW visitor id with the OLD click-ids
+  (crediting the new user to the old user's ad click), and the per-identity journey carried A→B.
+  `reset()` now wipes attribution + `journeyManager.clearJourney()` BEFORE rotating anon/visitor/
+  session ids (auto-events re-reads the id via its `getSessionId` callback). Both bare + Expo.
 - **TR-08 (session corruption): the session id could rotate mid-session with no `session_start`.**
   `LAST_SESSION_TIME` was refreshed only by `getOrCreateSessionId` (init / foreground / reset) —
   never by `track()` — so after >30 min of continuous foreground use the next background→foreground

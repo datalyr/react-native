@@ -274,6 +274,9 @@ export class DatalyrSDK {
           sdk_version: '1.7.12',
           ...installData,
         });
+        // TR-21: commit the first-launch marker only AFTER app_install is durably enqueued —
+        // a crash before this re-fires app_install next launch instead of losing it.
+        await attributionManager.markInstallTracked();
       }
       
       debugLog('Datalyr SDK initialized successfully', {
@@ -660,6 +663,16 @@ export class DatalyrSDK {
       await Storage.removeItem(STORAGE_KEYS.USER_ID);
       await Storage.removeItem(STORAGE_KEYS.USER_PROPERTIES);
 
+      // TR-28: wipe the previous user's attribution + journey BEFORE rotating ids. fbclid/
+      // gclid/fbc/utm/lyr are spread into EVERY event via createEventPayload (feeding Meta
+      // CAPI), and the journey is per-identity. Clearing FIRST means a track() that
+      // interleaves reset can only ever see old-id+old-attr (pre-reset) or new-id+cleared
+      // (post-rotation), NEVER new-id+old-attr (the new user credited to the old user's ad
+      // click). Preserves the install marker (wiping it would re-run install tracking + the
+      // deferred IP lookup next launch and re-import A's web attribution).
+      await attributionManager.clearAttributionForReset();
+      await journeyManager.clearJourney();
+
       // Rotate the anonymous ID so the next user is NOT linked to this user's anon id
       // (otherwise logout→login on one device merges both users in the identity graph and
       // the Meta CAPI bridge leaks click-ids/PII between them).
@@ -672,17 +685,11 @@ export class DatalyrSDK {
       this.state.visitorId = await rotateVisitorId();
 
       // Force a genuinely new session. getOrCreateSessionId() resumes any session <30min
-      // old (always true at logout), so clear the stored session first — otherwise the
-      // next user's events would share the previous user's session id.
+      // old (always true at logout), so clear the stored session first — otherwise the next
+      // user's events would share the previous user's session id. auto-events reads the id via
+      // its getSessionId callback, so it picks up the rotation automatically (TR-28 sync).
       await clearSession();
       this.state.sessionId = await getOrCreateSessionId();
-
-      // 9.C.1: wipe the previous user's persisted attribution — fbclid/gclid/fbc/utm/lyr
-      // are spread into EVERY event via createEventPayload and feed Meta CAPI, so leaving
-      // them spreads user A's click-ids onto user B's events. Preserves the install
-      // marker (wiping it would re-run install tracking + the deferred IP lookup next
-      // launch and re-import A's web attribution).
-      await attributionManager.clearAttributionForReset();
 
       // 9.C.1: drop the once-per-install web-attribution-checked marker. It dedupes the
       // identify(email) lookup against attribution we just wiped; leaving it would
@@ -1206,12 +1213,25 @@ export class DatalyrSDK {
     // Use cached advertiser info (IDFA/GAID, ATT status) — cached at init, refreshed on ATT change
     const advertiserInfo = this.cachedAdvertiserInfo;
 
+    // TR-18: honor a caller-supplied idempotency key. A non-empty string properties.event_id
+    // becomes the wire eventId (the source's dedup key — e.g. a Stripe/RevenueCat webhook event
+    // id for a client that double-tracks a purchase alongside a server webhook), mirroring the
+    // iOS/Node semantics, and is stripped from properties so it isn't duplicated. Else a UUID.
+    const callerEventId = (typeof eventData?.event_id === 'string' && eventData.event_id.trim().length > 0)
+      ? eventData.event_id
+      : undefined;
+    let cleanedEventData = eventData;
+    if (callerEventId !== undefined && eventData) {
+      cleanedEventData = { ...eventData };
+      delete (cleanedEventData as Record<string, unknown>).event_id;
+    }
+
     const payload: EventPayload = {
       workspaceId: this.state.config.workspaceId || 'mobile_sdk',
       visitorId: this.state.visitorId,
       anonymousId: this.state.anonymousId,  // Include persistent anonymous ID
       sessionId: this.state.sessionId,
-      eventId: generateUUID(),
+      eventId: callerEventId ?? generateUUID(),
       eventName,
       eventData: {
         // Auto-captured mobile data + persisted attribution are spread FIRST so the
@@ -1262,7 +1282,8 @@ export class DatalyrSDK {
           ? {}
           : playInstallReferrerIntegration.getAttributionData()),
         // Caller-supplied event properties WIN over all auto/attribution fields above.
-        ...eventData,
+        // TR-18: cleanedEventData is eventData minus a consumed event_id (now the wire eventId).
+        ...cleanedEventData,
         // Always SDK-stamped (not caller-overridable).
         timestamp: Date.now(),
       },
