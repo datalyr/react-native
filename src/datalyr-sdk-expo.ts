@@ -33,6 +33,15 @@ import {
   Storage,
   STORAGE_KEYS,
 } from './utils-expo';  // <-- KEY DIFFERENCE: uses Expo utilities
+import {
+  purchaseProperties,
+  addToCartProperties,
+  viewContentProperties,
+  initiateCheckoutProperties,
+  completeRegistrationProperties,
+  searchProperties,
+  leadProperties,
+} from './ecommerce-properties';  // shared with bare build — single source of truth (A3-14c)
 import { createHttpClient, HttpClient } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData } from './attribution';
@@ -775,12 +784,7 @@ export class DatalyrSDKExpo {
   }
 
   async trackPurchase(value: number, currency = 'USD', productId?: string): Promise<void> {
-    // Emit BOTH `value` and `revenue` (see datalyr-sdk.ts) so a rule's value_path='value'
-    // doesn't yield $0; SKAN/value_usd read either.
-    const properties: Record<string, any> = { value, revenue: value, currency };
-    if (productId) properties.product_id = productId;
-
-    await this.trackWithSKAdNetwork('purchase', properties);
+    await this.trackWithSKAdNetwork('purchase', purchaseProperties(value, currency, productId));
   }
 
   async trackSubscription(value: number, currency = 'USD', plan?: string): Promise<void> {
@@ -795,58 +799,36 @@ export class DatalyrSDKExpo {
   // Standard e-commerce events with platform forwarding
 
   async trackAddToCart(value: number, currency: string, contentId?: string, contentName?: string): Promise<void> {
-    const properties: Record<string, any> = { value, currency };
-    if (contentId) properties.content_id = contentId;
-    if (contentName) properties.content_name = contentName;
-
-    // TR-20(b): route through SKAN like the bare build — mid-funnel conversion values never
-    // updated on Expo because this called plain track().
-    await this.trackWithSKAdNetwork('add_to_cart', properties);
+    // A3-14c: shared builder emits content_id/content_name (canonical) + product_id/product_name
+    // (legacy alias). TR-20(b): route through SKAN like bare (was plain track() → mid-funnel
+    // conversion values never updated on Expo).
+    await this.trackWithSKAdNetwork('add_to_cart', addToCartProperties(value, currency, contentId, contentName));
   }
 
   async trackViewContent(contentId: string, contentName?: string, contentType?: string, value?: number, currency?: string): Promise<void> {
-    const properties: Record<string, any> = { content_id: contentId };
-    if (contentName) properties.content_name = contentName;
-    if (contentType) properties.content_type = contentType;
-    if (value !== undefined) properties.value = value;
-    if (currency) properties.currency = currency;
-
-    await this.track('view_content', properties);
+    await this.track('view_content', viewContentProperties(contentId, contentName, contentType, value, currency));
   }
 
   async trackInitiateCheckout(value?: number, currency?: string, numItems?: number, contentIds?: string[]): Promise<void> {
-    const properties: Record<string, any> = {};
-    if (value !== undefined) properties.value = value;
-    if (currency) properties.currency = currency;
-    if (numItems !== undefined) properties.num_items = numItems;
-    if (contentIds) properties.content_ids = contentIds;
-
+    // A3-14c: emits content_ids (canonical) + product_ids (legacy alias).
     // TR-20(b): route mid-funnel events through SKAN like the bare build (was plain track()).
-    await this.trackWithSKAdNetwork('initiate_checkout', properties);
+    await this.trackWithSKAdNetwork('initiate_checkout', initiateCheckoutProperties(value, currency, numItems, contentIds));
   }
 
   async trackCompleteRegistration(registrationMethod?: string): Promise<void> {
-    const properties: Record<string, any> = {};
-    if (registrationMethod) properties.registration_method = registrationMethod;
-
+    // A3-14c: emits registration_method (canonical) + method (legacy alias).
     // TR-20(b): route through SKAN like the bare build.
-    await this.trackWithSKAdNetwork('complete_registration', properties);
+    await this.trackWithSKAdNetwork('complete_registration', completeRegistrationProperties(registrationMethod));
   }
 
   async trackSearch(searchString: string, contentIds?: string[]): Promise<void> {
-    const properties: Record<string, any> = { search_string: searchString };
-    if (contentIds) properties.content_ids = contentIds;
-
-    await this.track('search', properties);
+    // A3-14c: emits search_string/content_ids (canonical) + query/result_ids (legacy alias).
+    await this.track('search', searchProperties(searchString, contentIds));
   }
 
   async trackLead(value?: number, currency?: string): Promise<void> {
-    const properties: Record<string, any> = {};
-    if (value !== undefined) properties.value = value;
-    if (currency) properties.currency = currency;
-
     // TR-20(b): route through SKAN like the bare build.
-    await this.trackWithSKAdNetwork('lead', properties);
+    await this.trackWithSKAdNetwork('lead', leadProperties(value, currency));
   }
 
   async trackAddPaymentInfo(success?: boolean): Promise<void> {

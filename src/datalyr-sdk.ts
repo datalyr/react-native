@@ -30,6 +30,15 @@ import {
   Storage,
   STORAGE_KEYS,
 } from './utils';
+import {
+  purchaseProperties,
+  addToCartProperties,
+  viewContentProperties,
+  initiateCheckoutProperties,
+  completeRegistrationProperties,
+  searchProperties,
+  leadProperties,
+} from './ecommerce-properties';
 import { createHttpClient, HttpClient } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData } from './attribution';
@@ -894,14 +903,9 @@ export class DatalyrSDK {
     currency = 'USD',
     productId?: string
   ): Promise<void> {
-    // Emit BOTH `value` and `revenue` — the conversion-rule/CAPI postback value extractor
-    // resolves a configured value_path (commonly `value`), while SKAN/value_usd read either;
-    // sending only `revenue` risked a $0 value on rules wired to `value`. Matches the other
-    // commerce helpers (trackAddToCart/etc.), which already use `value`.
-    const properties: Record<string, any> = { value, revenue: value, currency };
-    if (productId) properties.product_id = productId;
-
-    await this.trackWithSKAdNetwork('purchase', properties);
+    // Shared builder (A3-14c): value+revenue both emitted so a rule's value_path='value'
+    // never yields $0; product_id + canonical content_id alias for cross-build parity.
+    await this.trackWithSKAdNetwork('purchase', purchaseProperties(value, currency, productId));
   }
 
   /**
@@ -933,11 +937,9 @@ export class DatalyrSDK {
     productId?: string,
     productName?: string
   ): Promise<void> {
-    const properties: Record<string, any> = { value, currency };
-    if (productId) properties.product_id = productId;
-    if (productName) properties.product_name = productName;
-
-    await this.trackWithSKAdNetwork('add_to_cart', properties);
+    // A3-14c: shared builder emits content_id/content_name (canonical) + product_id/product_name
+    // (legacy alias) so bare + Expo produce one shape.
+    await this.trackWithSKAdNetwork('add_to_cart', addToCartProperties(value, currency, productId, productName));
   }
 
   /**
@@ -950,13 +952,7 @@ export class DatalyrSDK {
     value?: number,
     currency?: string
   ): Promise<void> {
-    const properties: Record<string, any> = { content_type: contentType };
-    if (contentId) properties.content_id = contentId;
-    if (contentName) properties.content_name = contentName;
-    if (value !== undefined) properties.value = value;
-    if (currency) properties.currency = currency;
-
-    await this.track('view_content', properties);
+    await this.track('view_content', viewContentProperties(contentId, contentName, contentType, value, currency));
   }
 
   /**
@@ -968,42 +964,31 @@ export class DatalyrSDK {
     numItems?: number,
     productIds?: string[]
   ): Promise<void> {
-    const properties: Record<string, any> = { value, currency };
-    if (numItems !== undefined) properties.num_items = numItems;
-    if (productIds) properties.product_ids = productIds;
-
-    await this.trackWithSKAdNetwork('initiate_checkout', properties);
+    // A3-14c: emits content_ids (canonical) + product_ids (legacy alias).
+    await this.trackWithSKAdNetwork('initiate_checkout', initiateCheckoutProperties(value, currency, numItems, productIds));
   }
 
   /**
    * Track complete registration event
    */
   async trackCompleteRegistration(method?: string): Promise<void> {
-    const properties: Record<string, any> = {};
-    if (method) properties.method = method;
-
-    await this.trackWithSKAdNetwork('complete_registration', properties);
+    // A3-14c: emits registration_method (canonical, Meta standard) + method (legacy alias).
+    await this.trackWithSKAdNetwork('complete_registration', completeRegistrationProperties(method));
   }
 
   /**
    * Track search event
    */
   async trackSearch(query: string, resultIds?: string[]): Promise<void> {
-    const properties: Record<string, any> = { query };
-    if (resultIds) properties.result_ids = resultIds;
-
-    await this.track('search', properties);
+    // A3-14c: emits search_string/content_ids (canonical) + query/result_ids (legacy alias).
+    await this.track('search', searchProperties(query, resultIds));
   }
 
   /**
    * Track lead/contact form submission
    */
   async trackLead(value?: number, currency?: string): Promise<void> {
-    const properties: Record<string, any> = {};
-    if (value !== undefined) properties.value = value;
-    if (currency) properties.currency = currency;
-
-    await this.trackWithSKAdNetwork('lead', properties);
+    await this.trackWithSKAdNetwork('lead', leadProperties(value, currency));
   }
 
   /**

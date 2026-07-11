@@ -6,6 +6,7 @@ import { SKAdNetworkBridge } from '../src/native/SKAdNetworkBridge';
 import { attributionManager } from '../src/attribution';
 import { DatalyrSDK } from '../src/datalyr-sdk';
 import { Storage, STORAGE_KEYS, touchSession, normalizeEventName, validateEventName } from '../src/utils';
+import * as ecom from '../src/ecommerce-properties';
 
 const SKAN_FINE = '@datalyr/skan_high_fine';
 const SKAN_COARSE = '@datalyr/skan_high_coarse';
@@ -270,5 +271,63 @@ describe('TR-20 event-name normalization + fleet-charset validation', () => {
     expect(validateEventName('')).toBe(false);
     expect(validateEventName('a'.repeat(101))).toBe(false);
     expect(validateEventName('emoji_🎉')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TR-20(c) / A3-14c: e-commerce property builders are a SINGLE shared module
+// imported by BOTH bare + Expo, so the two entry points emit one shape. Each
+// builder emits the canonical Meta key AND the legacy alias (emit-both, like
+// the web SDK's utm_* / FSR-13) so dashboards keyed on either spelling work.
+// ---------------------------------------------------------------------------
+describe('TR-20c shared e-commerce property builders (bare/Expo parity)', () => {
+  test('addToCart emits content_id/content_name (canonical) + product_id/product_name (alias)', () => {
+    const p = ecom.addToCartProperties(19.99, 'USD', 'SKU1', 'Widget');
+    expect(p).toMatchObject({
+      value: 19.99, currency: 'USD',
+      content_id: 'SKU1', product_id: 'SKU1',
+      content_name: 'Widget', product_name: 'Widget',
+    });
+  });
+
+  test('initiateCheckout emits content_ids (canonical) + product_ids (alias)', () => {
+    const p = ecom.initiateCheckoutProperties(50, 'USD', 3, ['a', 'b']);
+    expect(p.content_ids).toEqual(['a', 'b']);
+    expect(p.product_ids).toEqual(['a', 'b']);
+    expect(p.num_items).toBe(3);
+  });
+
+  test('completeRegistration emits registration_method (Meta canonical) + method (alias)', () => {
+    const p = ecom.completeRegistrationProperties('google');
+    expect(p.registration_method).toBe('google');
+    expect(p.method).toBe('google');
+  });
+
+  test('search emits search_string/content_ids (canonical) + query/result_ids (alias)', () => {
+    const p = ecom.searchProperties('blue shoes', ['x', 'y']);
+    expect(p.search_string).toBe('blue shoes');
+    expect(p.query).toBe('blue shoes');
+    expect(p.content_ids).toEqual(['x', 'y']);
+    expect(p.result_ids).toEqual(['x', 'y']);
+  });
+
+  test('viewContent defaults content_type to "product" (was: bare defaulted, Expo did not)', () => {
+    expect(ecom.viewContentProperties('SKU1').content_type).toBe('product');
+    expect(ecom.viewContentProperties('SKU1', 'Widget', 'category').content_type).toBe('category');
+  });
+
+  test('purchase emits value+revenue and product_id+content_id, no $0 hole', () => {
+    const p = ecom.purchaseProperties(42, 'EUR', 'SKU9');
+    expect(p.value).toBe(42);
+    expect(p.revenue).toBe(42);
+    expect(p.currency).toBe('EUR');
+    expect(p.product_id).toBe('SKU9');
+    expect(p.content_id).toBe('SKU9');
+  });
+
+  test('optional ids are omitted, not emitted as undefined keys', () => {
+    expect('content_id' in ecom.addToCartProperties(5, 'USD')).toBe(false);
+    expect('content_ids' in ecom.initiateCheckoutProperties(5, 'USD')).toBe(false);
+    expect('method' in ecom.completeRegistrationProperties()).toBe(false);
   });
 });

@@ -25,8 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `trackCompleteRegistration`/`trackLead` called plain `track()` — mid-funnel conversion values
   never updated on Expo — and now route through `trackWithSKAdNetwork` like bare. (d) Session-id
   format: Expo used a bare UUID; it now uses the bare `sess_<ts>_<rand>` format so
-  `context.session_id` is identical across variants. (Remaining: full ecommerce-helper extraction
-  + property-name parity — `product_id`/`content_id` etc.)
+  `context.session_id` is identical across variants. (c) E-commerce property-name parity: the
+  two builds shaped the SAME conversion event with DIFFERENT keys — bare emitted
+  `product_id`/`product_ids`/`product_name`/`query`/`result_ids`/`method`, Expo emitted the
+  Meta-canonical `content_id`/`content_ids`/`content_name`/`search_string`/`registration_method`
+  — so a dashboard or conversion-rule keyed on one spelling saw only half the fleet's traffic.
+  The per-event property shaping is now a single pure module (`src/ecommerce-properties.ts`)
+  imported by **both** entry points, and each builder emits BOTH the canonical Meta key (which
+  the server's postback `fromAny()` reads first, and forwards verbatim to Pixel/CAPI) AND the
+  legacy alias (emit-both, like the web SDK's `utm_*` / FSR-13), so every existing dashboard/rule
+  keeps working. `viewContent` also now defaults `content_type` to `"product"` on Expo (bare
+  already did). +7 tests, 57/57.
 - **TR-24: LinkedIn clicks were never captured; Impact clicks used a non-canonical name.** The
   capture whitelist had `li_click_id` (a param LinkedIn never sends) instead of `li_fat_id`
   (LinkedIn's real param), and `irclickid` had no mapping. Now captures `li_fat_id`/`irclid`
