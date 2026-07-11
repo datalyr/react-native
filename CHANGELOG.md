@@ -5,6 +5,18 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **TR-26: `ios/PrivacyInfo.xcprivacy` now accurately declares tracking.** It said
+  `NSPrivacyTracking=false` with empty domains and every data type `Linked/Tracking=false`,
+  while the SDK reads the IDFA when ATT-authorized, attaches it to events, and forwards
+  click-ids / hashed email+phone / purchases to third-party ad CAPI. Now declares
+  `NSPrivacyTracking=true`, the `ingest.datalyr.com`/`api.datalyr.com` tracking domains, and
+  DeviceID / EmailAddress / PhoneNumber / PurchaseHistory / CoarseLocation / ProductInteraction
+  as Linked+Tracking (Analytics + ThirdPartyAdvertising). **App Store implication:** embedding
+  apps must reflect this in their App Privacy label; it reflects behavior already occurring.
+
 ## [1.7.12] - 2026-06-10
 
 Full-stack review (FULL_STACK_REVIEW_2026-06-10) fixes. JS-only, applied to BOTH the
