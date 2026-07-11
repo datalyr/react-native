@@ -1287,6 +1287,7 @@ export class DatalyrSDK {
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
         sdk_version: '1.7.12',
+        schema_version: 1, // A3-25: versioned-envelope stamp (see web SDK)
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
           idfa: advertiserInfo.idfa,

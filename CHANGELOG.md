@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A3-25: `schema_version` envelope stamp.** Every event now carries `schema_version: 1`,
+  the first canonical envelope version shared across the SDK fleet, on both the bare and Expo
+  entry points, so the ingest contract layer can key on one version marker.
 - **TR-18: caller-supplied `event_id` for idempotent delivery.** A non-empty string
   `properties.event_id` becomes the wire `eventId` (and is stripped from properties), mirroring
   the iOS/Node SDKs — a deterministic dedup key for a client that double-tracks a purchase

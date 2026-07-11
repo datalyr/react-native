@@ -1097,6 +1097,7 @@ export class DatalyrSDKExpo {
         carrier: deviceInfo.carrier,
         network_type: networkType,
         sdk_version: '1.7.12',
+        schema_version: 1, // A3-25: versioned-envelope stamp (see web SDK)
         sdk_variant: 'expo',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
