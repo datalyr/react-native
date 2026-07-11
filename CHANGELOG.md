@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alongside a Stripe/RevenueCat webhook. Omitted/empty → a fresh UUID. Both bare + Expo.
 
 ### Fixed
+- **BATCH-8(j): the identify-time `/attribution/lookup` request now has a 10s timeout.** Its
+  sibling deferred-lookup already bounded its `fetch` with a 10s `AbortController`, but the
+  email lookup (`fetchAndMergeWebAttribution`, which runs on `identify(email)` — every session)
+  had none, so a stalled connection hung the promise indefinitely, leaking the socket/timer. It
+  now aborts at 10s (both bare + Expo); on abort/timeout `checked` stays unset so the next
+  `identify(email)` retries. (Verified `checkAppVersion` is a no-op parity concern — it's an
+  exported consumer helper that the SDK never auto-invokes, and both builds already ship the same
+  manual `trackAppUpdate`.)
 - **TR-20: the Expo and bare entry points silently diverged.** (a) Event-name validation:
   bare accepted any non-empty string while Expo rejected anything with a space, so
   `track('Order Completed')` recorded on bare and was silently DROPPED on Expo. Both now

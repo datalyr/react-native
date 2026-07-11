@@ -478,15 +478,28 @@ export class DatalyrSDK {
 
       debugLog('Fetching web attribution for email:', email);
 
+      // BATCH-8(j): bound the request — a stalled connection would otherwise hang this
+      // promise indefinitely (identify(email) runs every session), leaking timers/sockets.
+      // Mirrors the deferred-lookup 10s guard. On abort/timeout the catch leaves `checked`
+      // unset, so the next identify(email) retries.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
       // Call API endpoint to get web attribution
-      const response = await fetch('https://api.datalyr.com/attribution/lookup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Datalyr-API-Key': this.state.config.apiKey!,
-        },
-        body: JSON.stringify({ email }),
-      });
+      let response: Response;
+      try {
+        response = await fetch('https://api.datalyr.com/attribution/lookup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Datalyr-API-Key': this.state.config.apiKey!,
+          },
+          body: JSON.stringify({ email }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!response.ok) {
         debugLog('Failed to fetch web attribution:', response.status);
