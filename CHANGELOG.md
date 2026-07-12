@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.13] - 2026-07-12
+
 ### Added
 - **A3-25: `schema_version` envelope stamp.** Every event now carries `schema_version: 1`,
   the first canonical envelope version shared across the SDK fleet, on both the bare and Expo

@@ -266,7 +266,7 @@ export class DatalyrSDKExpo {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS,
-          sdk_version: '1.7.12',
+          sdk_version: '1.7.13',
           sdk_variant: 'expo',
           ...installData,
         });
@@ -1117,7 +1117,7 @@ export class DatalyrSDKExpo {
         country: deriveCountryFromLocale(deviceInfo.locale) || undefined,
         carrier: deviceInfo.carrier,
         network_type: networkType,
-        sdk_version: '1.7.12',
+        sdk_version: '1.7.13',
         schema_version: 1, // A3-25: versioned-envelope stamp (see web SDK)
         sdk_variant: 'expo',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
