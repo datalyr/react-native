@@ -365,6 +365,18 @@ export class DatalyrSDKExpo {
   }
 
   async identify(userId: string, properties?: UserProperties): Promise<void> {
+    await this.identifyUser(userId, properties, true);
+  }
+
+  /**
+   * Apply an identity transition. Public identify() treats a different known ID as an
+   * account switch; alias() deliberately links two IDs for the same person and opts out.
+   */
+  private async identifyUser(
+    userId: string,
+    properties: UserProperties | undefined,
+    resetOnAccountSwitch: boolean,
+  ): Promise<void> {
     try {
       if (!userId || typeof userId !== 'string') {
         errorLog(`Invalid user ID for identify: ${userId}`);
@@ -372,6 +384,12 @@ export class DatalyrSDKExpo {
       }
 
       debugLog('Identifying user:', { userId, properties });
+
+      // Match the bare RN entrypoint: a direct identify(A) -> identify(B) transition is
+      // an implicit logout, so B cannot inherit A's visitor graph or click attribution.
+      if (resetOnAccountSwitch && this.state.currentUserId && this.state.currentUserId !== userId) {
+        await this.reset();
+      }
 
       this.state.currentUserId = userId;
       this.state.userProperties = { ...this.state.userProperties, ...properties };
@@ -628,7 +646,9 @@ export class DatalyrSDKExpo {
 
       // Track $alias (NOT 'alias' — ingest matches only the '$alias' event name).
       await this.track('$alias', aliasData);
-      await this.identify(newUserId);
+      // An explicit alias is a same-person identity merge, not an account switch. Preserve
+      // this visitor's attribution graph while adopting the canonical user ID.
+      await this.identifyUser(newUserId, undefined, false);
 
     } catch (error) {
       errorLog('Error aliasing user:', error as Error);
@@ -638,6 +658,13 @@ export class DatalyrSDKExpo {
   async reset(): Promise<void> {
     try {
       debugLog('Resetting user data');
+
+      // Pre-init events do not have an identity snapshot yet; they are materialized only
+      // when initialize() replays them. Drop the previous user's buffered events so an
+      // identify(A) -> identify(B) switch during startup cannot replay A on B's new IDs.
+      if (!this.state.initialized) {
+        this.preInitQueue = [];
+      }
 
       this.state.currentUserId = undefined;
       this.state.userProperties = {};

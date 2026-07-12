@@ -37,6 +37,8 @@ describe('wire contract — transformForServerAPI', () => {
     expect(wire.properties.fbclid).toBe('fb_abc');
     expect(wire.event).toBe('$web_attribution_matched');
     expect(wire.timestamp).toBe('2026-06-03T10:00:00.000Z');
+    expect(wire.userId).toBeUndefined();
+    expect(wire.anonymousId).toBe('anon_1');
   });
 });
 

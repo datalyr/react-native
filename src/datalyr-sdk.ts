@@ -394,6 +394,18 @@ export class DatalyrSDK {
    * Identify a user
    */
   async identify(userId: string, properties?: UserProperties): Promise<void> {
+    await this.identifyUser(userId, properties, true);
+  }
+
+  /**
+   * Apply an identity transition. Public identify() treats a different known ID as an
+   * account switch; alias() deliberately links two IDs for the same person and opts out.
+   */
+  private async identifyUser(
+    userId: string,
+    properties: UserProperties | undefined,
+    resetOnAccountSwitch: boolean,
+  ): Promise<void> {
     try {
       if (!userId || typeof userId !== 'string') {
         errorLog(`Invalid user ID for identify: ${userId}`);
@@ -401,6 +413,13 @@ export class DatalyrSDK {
       }
 
       debugLog('Identifying user:', { userId, properties });
+
+      // Treat an account switch as an implicit logout. This prevents a shared
+      // device anonymous/visitor node from being linked to two people when an
+      // app forgets to call reset() between accounts.
+      if (resetOnAccountSwitch && this.state.currentUserId && this.state.currentUserId !== userId) {
+        await this.reset();
+      }
 
       // Update current user ID
       this.state.currentUserId = userId;
@@ -687,8 +706,9 @@ export class DatalyrSDK {
       // bare name wrote zero visitor_user_links: alias-based identity merges were dropped).
       await this.track('$alias', aliasData);
 
-      // Update current user ID
-      await this.identify(newUserId);
+      // An explicit alias is a same-person identity merge, not an account switch. Preserve
+      // this visitor's attribution graph while adopting the canonical user ID.
+      await this.identifyUser(newUserId, undefined, false);
 
     } catch (error) {
       errorLog('Error aliasing user:', error as Error);
@@ -701,6 +721,13 @@ export class DatalyrSDK {
   async reset(): Promise<void> {
     try {
       debugLog('Resetting user data');
+
+      // Pre-init events do not have an identity snapshot yet; they are materialized only
+      // when initialize() replays them. Drop the previous user's buffered events so an
+      // identify(A) -> identify(B) switch during startup cannot replay A on B's new IDs.
+      if (!this.state.initialized) {
+        this.preInitQueue = [];
+      }
 
       // Clear user data
       this.state.currentUserId = undefined;
@@ -1711,4 +1738,4 @@ export class Datalyr {
 }
 
 // Export default instance for backward compatibility
-export default datalyr; 
+export default datalyr;

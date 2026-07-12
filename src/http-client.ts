@@ -262,7 +262,9 @@ export class HttpClient {
     return {
       event: payload.eventName,
       eventId: payload.eventId,
-      userId: payload.userId || payload.visitorId,
+      // Anonymous device identity is not an identified user. Ingest keeps
+      // visitorId/anonymousId in their own namespace until identify() occurs.
+      userId: payload.userId,
       anonymousId: payload.anonymousId || payload.visitorId,
       properties: {
         ...payload.eventData,
@@ -340,4 +342,4 @@ export const createHttpClient = (endpoint: string, config?: Partial<HttpClientCo
   };
 
   return new HttpClient(endpoint, { ...defaultConfig, ...config });
-}; 
+};
