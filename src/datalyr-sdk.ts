@@ -29,6 +29,7 @@ import {
   errorLog,
   Storage,
   STORAGE_KEYS,
+  warnAboutIgnoredOptions,
 } from './utils';
 import {
   purchaseProperties,
@@ -39,6 +40,7 @@ import {
   searchProperties,
   leadProperties,
 } from './ecommerce-properties';
+import { SDK_VERSION } from './version';
 import { createHttpClient, HttpClient } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData } from './attribution';
@@ -131,6 +133,9 @@ export class DatalyrSDK {
       // Set up configuration
       this.state.config = { ...this.state.config, ...config };
 
+      // DEP-01: surface options that are accepted and then ignored.
+      warnAboutIgnoredOptions(config as Record<string, any>);
+
       // Tear down the placeholder queue built in the constructor BEFORE installing the
       // configured one. That placeholder has an empty apiKey, started its own 30s flush
       // timer, and loaded the persisted queue from the SAME storage key — left alive it
@@ -157,6 +162,14 @@ export class DatalyrSDK {
         maxRetryCount: this.state.config.maxRetries || 3,
       });
 
+      // RN-22 / RN-24: install detection is lifecycle, not attribution — with
+      // `enableAttribution: false` app_install used to never fire for ANY user.
+      // It runs FIRST and alone, deliberately: detectInstall()'s upgrade guard
+      // reads @datalyr/visitor_id etc. as evidence of a prior install, so it must
+      // observe storage BEFORE the id creation below writes those very keys.
+      // Inside the Promise.all it raced them and could suppress a real install.
+      await attributionManager.detectInstall();
+
       // PARALLEL INITIALIZATION: IDs and core managers
       // Run ID creation and core manager initialization in parallel for faster startup
       const [visitorId, anonymousId, sessionId] = await Promise.all([
@@ -165,7 +178,9 @@ export class DatalyrSDK {
         getOrCreateSessionId(),
         // These run concurrently but don't return values we need to capture
         this.loadPersistedUserData(),
-        this.state.config.enableAttribution ? attributionManager.initialize() : Promise.resolve(),
+        this.state.config.enableAttribution
+          ? attributionManager.initialize()
+          : Promise.resolve(),
         journeyManager.initialize(),
       ]);
 
@@ -285,7 +300,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.7.15',
+          sdk_version: SDK_VERSION,
           ...installData,
         });
         // TR-21: commit the first-launch marker only AFTER app_install is durably enqueued —
@@ -434,9 +449,20 @@ export class DatalyrSDK {
       // nothing. Measured 2026-07-25: 6.8 identifies/visitor/day on shipped
       // builds, worst single user 129 in 24h. Fingerprint includes the visitor id
       // so a rotation (reset/new install) always re-emits and links are never lost.
-      const identityFingerprint = `${this.state.visitorId}|${userId}|${
-        properties ? Object.keys(properties).sort().map((k) => `${k}=${String((properties as Record<string, unknown>)[k])}`).join('&') : ''
-      }`;
+      // RN-23: HASH the fingerprint — never persist the raw identity.
+      //
+      // The 1.7.15 version stored this string verbatim in plaintext AsyncStorage,
+      // which meant the suppression feature itself wrote PII at rest:
+      //   visitor123|user@example.com|email=user@example.com&phone=+15551234
+      // iOS hashes with SHA-256 and the web SDK hashes with FNV-1a for exactly
+      // this reason; RN was the outlier. The value is only ever compared for
+      // equality, so a non-cryptographic digest is sufficient — and `identify()`
+      // is synchronous here, so an async WebCrypto-style digest is not an option.
+      const identityFingerprint = this.stableEmailHash(
+        `${this.state.visitorId}|${userId}|${
+          properties ? Object.keys(properties).sort().map((k) => `${k}=${String((properties as Record<string, unknown>)[k])}`).join('&') : ''
+        }`,
+      );
       const previousFingerprint = await Storage.getItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT);
       const isRedundantIdentify = previousFingerprint === identityFingerprint;
 
@@ -458,21 +484,33 @@ export class DatalyrSDK {
       // Track $identify event for identity resolution
       if (isRedundantIdentify) {
         debugLog('Skipping redundant identify (unchanged identity):', userId);
-        return;
+      } else {
+        await Storage.setItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT, identityFingerprint);
+
+        await this.track('$identify', {
+          userId,
+          anonymous_id: this.state.anonymousId,
+          ...props,
+          ...(email ? { email } : {}),
+          ...(phone ? { phone } : {}),
+          ...(firstName ? { first_name: firstName } : {}),
+          ...(lastName ? { last_name: lastName } : {}),
+        });
       }
-      await Storage.setItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT, identityFingerprint);
 
-      await this.track('$identify', {
-        userId,
-        anonymous_id: this.state.anonymousId,
-        ...props,
-        ...(email ? { email } : {}),
-        ...(phone ? { phone } : {}),
-        ...(firstName ? { first_name: firstName } : {}),
-        ...(lastName ? { last_name: lastName } : {}),
-      });
-
-      // Fetch and merge web attribution if email is provided
+      // Fetch and merge web attribution if email is provided.
+      //
+      // RN-19: runs on EVERY identify — redundant or not — and must stay OUTSIDE
+      // the suppression branch above. 1.7.15 returned early on a redundant
+      // identify, putting this out of reach: fetchAndMergeWebAttribution marks an
+      // email hash checked ONLY after a definitive 200 (see the
+      // WEB_ATTRIBUTION_CHECKED_KEY write), precisely so a transient 5xx/abort
+      // retries on the next identify — and that next identify was suppressed. One
+      // transient failure lost web→app attribution for the LIFETIME of the install.
+      //
+      // Unconditional is cheap and correct: the lookup is idempotent on its own
+      // terms, and after a 200 the `checked` list short-circuits it before any
+      // network I/O. The waste 1.7.15 removed (the request) stays removed.
       if (this.state.config.enableWebToAppAttribution !== false) {
         const email = properties?.email || (typeof userId === 'string' && userId.includes('@') ? userId : null);
         if (email) {
@@ -1359,7 +1397,7 @@ export class DatalyrSDK {
         country: deriveCountryFromLocale(deviceInfo.locale) || undefined,
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
-        sdk_version: '1.7.15',
+        sdk_version: SDK_VERSION,
         schema_version: 1, // A3-25: versioned-envelope stamp (see web SDK)
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {

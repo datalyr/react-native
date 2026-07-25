@@ -73,6 +73,35 @@ export class AutoEventsManager {
           await Storage.setItem('@datalyr/current_session', this.currentSession);
           debugLog('Session resumed (context session unchanged):', canonicalId);
         } else {
+          // RN-21: close out the PREVIOUS session before opening a new one.
+          //
+          // A stored session with a different canonical id is one that already
+          // ended — the app was backgrounded and then killed, or simply left for
+          // longer than the timeout, so `handleSessionTimeout` never fired (its
+          // timer only runs while the app is alive) and `handleAppForeground`'s
+          // end-and-restart path was never reached either. This branch used to
+          // abandon it silently, which is why only **7.3%** of sessions ever got
+          // a `session_end` (measured 2026-07-25 on ws 0980fb33: 106,913
+          // session_start vs 7,782 session_end over 7 days; 2.6–7.2% elsewhere).
+          // Session duration was therefore uncomputable for ~93% of sessions.
+          //
+          // endSession() stamps both `duration_ms` and the event `timestamp`
+          // from the session's own `lastActivity`, NOT from now — so the
+          // recovered event is correctly BACK-DATED to when the session actually
+          // stopped, no matter how long the app was closed. That is what makes
+          // recovering it at the next launch honest rather than a fabricated
+          // duration.
+          //
+          // Deliberately does NOT change session semantics: a session is still a
+          // 30-minute idle window, a brief background/foreground still resumes
+          // the same session, and session counts are unaffected. The only change
+          // is that a session which already ended now reports that it ended.
+          if (stored) {
+            const recovered = this.currentSession;
+            this.currentSession = stored;
+            await this.endSession();
+            this.currentSession = recovered;
+          }
           await this.startSession();
         }
         this.setupSessionMonitoring();

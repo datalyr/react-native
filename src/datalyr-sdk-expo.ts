@@ -33,6 +33,7 @@ import {
   Storage,
   STORAGE_KEYS,
 } from './utils-expo';  // <-- KEY DIFFERENCE: uses Expo utilities
+import { warnAboutIgnoredOptions } from './utils';
 import {
   purchaseProperties,
   addToCartProperties,
@@ -42,6 +43,7 @@ import {
   searchProperties,
   leadProperties,
 } from './ecommerce-properties';  // shared with bare build — single source of truth (A3-14c)
+import { SDK_VERSION } from './version';
 import { createHttpClient, HttpClient } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData } from './attribution';
@@ -127,6 +129,9 @@ export class DatalyrSDKExpo {
 
       this.state.config = { ...this.state.config, ...config };
 
+      // DEP-01: surface options that are accepted and then ignored.
+      warnAboutIgnoredOptions(config as Record<string, any>);
+
       // Tear down the placeholder queue built in the constructor BEFORE installing the
       // configured one. That placeholder has an empty apiKey, started its own 30s flush
       // timer, and loaded the persisted queue from the SAME storage key — left alive it
@@ -150,6 +155,11 @@ export class DatalyrSDKExpo {
         flushInterval: this.state.config.flushInterval || 30000,
         maxRetryCount: this.state.config.maxRetries || 3,
       });
+
+      // RN-22 / RN-24: must run BEFORE id creation — detectInstall()'s upgrade
+      // guard uses @datalyr/visitor_id etc. as evidence of a prior install, so
+      // reading it after the lines below would see this launch's own fresh id.
+      await attributionManager.detectInstall();
 
       this.state.visitorId = await getOrCreateVisitorId();
       this.state.anonymousId = await getOrCreateAnonymousId();
@@ -266,7 +276,7 @@ export class DatalyrSDKExpo {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS,
-          sdk_version: '1.7.15',
+          sdk_version: SDK_VERSION,
           sdk_variant: 'expo',
           ...installData,
         });
@@ -400,9 +410,20 @@ export class DatalyrSDKExpo {
       // nothing. Measured 2026-07-25: 6.8 identifies/visitor/day on shipped
       // builds, worst single user 129 in 24h. Fingerprint includes the visitor id
       // so a rotation (reset/new install) always re-emits and links are never lost.
-      const identityFingerprint = `${this.state.visitorId}|${userId}|${
-        properties ? Object.keys(properties).sort().map((k) => `${k}=${String((properties as Record<string, unknown>)[k])}`).join('&') : ''
-      }`;
+      // RN-23: HASH the fingerprint — never persist the raw identity.
+      //
+      // The 1.7.15 version stored this string verbatim in plaintext AsyncStorage,
+      // which meant the suppression feature itself wrote PII at rest:
+      //   visitor123|user@example.com|email=user@example.com&phone=+15551234
+      // iOS hashes with SHA-256 and the web SDK hashes with FNV-1a for exactly
+      // this reason; RN was the outlier. The value is only ever compared for
+      // equality, so a non-cryptographic digest is sufficient — and `identify()`
+      // is synchronous here, so an async WebCrypto-style digest is not an option.
+      const identityFingerprint = this.stableEmailHash(
+        `${this.state.visitorId}|${userId}|${
+          properties ? Object.keys(properties).sort().map((k) => `${k}=${String((properties as Record<string, unknown>)[k])}`).join('&') : ''
+        }`,
+      );
       const previousFingerprint = await Storage.getItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT);
       const isRedundantIdentify = previousFingerprint === identityFingerprint;
 
@@ -422,20 +443,29 @@ export class DatalyrSDKExpo {
 
       if (isRedundantIdentify) {
         debugLog('Skipping redundant identify (unchanged identity):', userId);
-        return;
+      } else {
+        await Storage.setItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT, identityFingerprint);
+
+        await this.track('$identify', {
+          userId,
+          anonymous_id: this.state.anonymousId,
+          ...props,
+          ...(email ? { email } : {}),
+          ...(phone ? { phone } : {}),
+          ...(firstName ? { first_name: firstName } : {}),
+          ...(lastName ? { last_name: lastName } : {}),
+        });
       }
-      await Storage.setItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT, identityFingerprint);
 
-      await this.track('$identify', {
-        userId,
-        anonymous_id: this.state.anonymousId,
-        ...props,
-        ...(email ? { email } : {}),
-        ...(phone ? { phone } : {}),
-        ...(firstName ? { first_name: firstName } : {}),
-        ...(lastName ? { last_name: lastName } : {}),
-      });
-
+      // Fetch and merge web attribution if email is provided.
+      //
+      // RN-19: runs on EVERY identify — redundant or not — and must stay OUTSIDE
+      // the suppression branch above. 1.7.15 returned early on a redundant
+      // identify, putting this out of reach: fetchAndMergeWebAttribution marks an
+      // email hash checked ONLY after a definitive 200, precisely so a transient
+      // 5xx/abort retries on the next identify — and that next identify was
+      // suppressed. One transient failure lost web→app attribution for the
+      // LIFETIME of the install. Kept in lockstep with datalyr-sdk.ts.
       if (this.state.config.enableWebToAppAttribution !== false) {
         const email = properties?.email || (typeof userId === 'string' && userId.includes('@') ? userId : null);
         if (email) {
@@ -1165,7 +1195,7 @@ export class DatalyrSDKExpo {
         country: deriveCountryFromLocale(deviceInfo.locale) || undefined,
         carrier: deviceInfo.carrier,
         network_type: networkType,
-        sdk_version: '1.7.15',
+        sdk_version: SDK_VERSION,
         schema_version: 1, // A3-25: versioned-envelope stamp (see web SDK)
         sdk_variant: 'expo',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback

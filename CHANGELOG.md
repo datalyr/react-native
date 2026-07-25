@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.16] - 2026-07-25
+
+### Fixed
+- **Expo: `identify()` deduplication was dead code.** `STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT`
+  existed in `utils.ts` but was missing from `utils-expo.ts`, so the Expo build read and wrote
+  an `undefined` storage key. AsyncStorage only warns on a non-string key, so the 1.7.15
+  suppression silently no-opped on every Expo app and `reset()`'s clear did nothing. Expo now
+  suppresses redundant identifies exactly as the bare build does.
+- **The whole Expo half of the package is now type-checked and compiled.** `tsconfig.json`
+  excluded `utils-expo.ts`, `expo.ts`, `expo-router-tracking.ts`, `datalyr-sdk-expo.ts` and
+  `utils-interface.ts`, so `npm run build` never checked or emitted any of them — which is why
+  the bug above shipped, and why `lib/expo.js` (the entry declared in `package.json` `exports`)
+  did not exist. Ambient declarations for the optional `expo-application` / `expo-device` /
+  `expo-network` peers replace the exclusion, so those files compile without forcing the Expo
+  SDK into bare-RN installs.
+- **A failed web-attribution lookup can retry again.** 1.7.15's redundant-identify early return
+  sat before the only call site of `fetchAndMergeWebAttribution`, which marks an email "checked"
+  only after an HTTP 200 precisely so a transient failure retries on the next `identify()`. That
+  retry became unreachable, so a single 5xx or timeout lost web→app attribution for the lifetime
+  of the install. The lookup now runs on every `identify()`; after a 200 its own marker
+  short-circuits it before any network I/O, so the request volume 1.7.15 removed stays removed.
+- **`DEAD_LETTER_QUEUE` added to the Expo `STORAGE_KEYS`** for parity. No runtime change — the
+  shared `event-queue.ts` imports that key from `./utils` on both builds — but the drift is now
+  caught by a test.
+
+### Changed
+- **The SDK version is written in exactly one place** (`src/version.ts`). It was six: the
+  envelope's `context.version`, the `User-Agent`, `properties.sdk_version` on each build, and an
+  `app_install`-only stamp on each. `tests/version-parity.test.ts` fails the build if any file in
+  `src/` or `tests/` hardcodes it again, or if it drifts from `package.json`.
+- `package-lock.json` resynced — it had been stranded at 1.7.13 through two releases.
+
+## [1.7.15] - 2026-07-25
+
+### Fixed
+- **`identify()` no longer re-emits unchanged identity.** Apps commonly call `identify()` on
+  every launch or screen; each call emitted a `$identify` event and triggered a web-attribution
+  lookup even when nothing had changed. Measured in production: 6.8 identifies per visitor per
+  day, worst single user 129 in 24 hours. A fingerprint of
+  `visitorId | userId | sorted traits` is persisted, and an exact repeat now skips both. The
+  visitor id is part of the fingerprint, so a `reset()` or reinstall always re-emits and identity
+  links are never lost. (Dead on Expo until 1.7.16 — see above.)
+
+## [1.7.14] - 2026-07-25
+
+### Fixed
+- **Identity-only and self-referential web→app matches are no longer recorded as touches.** The
+  attribution lookup could return an identity match with no actual click, and the SDK recorded it
+  as a web match anyway — including cases where the returned `visitor_id` was the device's own.
+  Both the email and deferred/IP lookup paths now return early on `identity_only === true` and on
+  a self-referential `visitor_id`.
+
 ## [1.7.13] - 2026-07-12
 
 ### Added

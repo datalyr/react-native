@@ -1,6 +1,7 @@
 // Runtime tests for the 2026-06-03 e2e-review fixes. Exercises the REAL HttpClient +
 // EventQueue source (RN native modules mocked via jest moduleNameMapper). Previously the
 // SDK had no runtime tests — only tsc.
+import { SDK_VERSION } from '../src/version';
 import { HttpClient } from '../src/http-client';
 import { EventQueue } from '../src/event-queue';
 import { Storage, STORAGE_KEYS } from '../src/utils';
@@ -28,8 +29,10 @@ describe('wire contract — transformForServerAPI', () => {
 
     // IOS-31 equivalent: ingest's server-track handler reads context.session_id.
     expect(wire.context.session_id).toBe('sess_xyz');
-    // stale-version fix (was a hardcoded stale '1.7.5'); tracks package version.
-    expect(wire.context.version).toBe('1.7.15');
+    // RN-20: assert against the shared constant, never a literal. This line
+    // itself used to be a hardcoded '1.7.15' — i.e. a seventh drift site that
+    // broke on every release, in the very test meant to catch stale versions.
+    expect(wire.context.version).toBe(SDK_VERSION);
     expect(wire.context.source).toBe('mobile_app');
     // properties still carry sessionId + the eventData (handleServerTrack spreads ...props).
     expect(wire.properties.sessionId).toBe('sess_xyz');

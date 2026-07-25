@@ -1,4 +1,5 @@
 import { Linking } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Storage, STORAGE_KEYS, debugLog, errorLog, generateUUID, parseQueryString } from './utils';
 
 // Attribution parameter mapping
@@ -141,6 +142,69 @@ export class AttributionManager {
     } catch (error) {
       errorLog('Failed to initialize attribution manager:', error as Error);
     }
+  }
+
+  /**
+   * RN-22: detect first launch WITHOUT initializing attribution.
+   *
+   * Install detection is app lifecycle, not attribution — but it lived only
+   * inside initialize(), which the SDK skips entirely when
+   * `enableAttribution: false`. The consequence was silent and permanent: with
+   * that one flag set, `checkFirstLaunch()` never ran, `isFirstLaunch` stayed
+   * false, `isInstall()` returned false, and **`app_install` never fired for any
+   * user, ever**. Worse, `markInstallTracked()` then never wrote
+   * `@datalyr/first_launch_time`, so even re-enabling attribution months later
+   * would fire `app_install` dated to that day rather than the real install.
+   *
+   * Idempotent and safe to call before initialize(); initialize() calls
+   * checkFirstLaunch() itself, which is a no-op re-read.
+   */
+  async detectInstall(): Promise<void> {
+    // RN-24: an app upgrading INTO this fix has no `@datalyr/first_launch_time`
+    // marker — only markInstallTracked() ever wrote it, and that never ran while
+    // `enableAttribution: false`. Without a guard, checkFirstLaunch() would set
+    // isFirstLaunch = true for EVERY existing device on the first launch after
+    // upgrade, firing `app_install` dated today for the entire install base at
+    // once (and, on iOS, a deferred web-attribution lookup per device). That is
+    // precisely the failure this method's docstring warns about.
+    //
+    // So before trusting the missing marker, look for evidence that this device
+    // has run the SDK before. Any of these keys means "returning user": adopt the
+    // install time we can infer and write the marker so this never re-fires.
+    //
+    // MUST run before the SDK creates its ids — `@datalyr/visitor_id` and
+    // friends are written during initialize(), so reading them afterwards would
+    // see a brand-new install's own freshly-written id and suppress a REAL
+    // install. Both entry points call this first, ahead of id creation.
+    const existing = await Storage.getItem<string>('@datalyr/first_launch_time');
+    if (!existing) {
+      // Read RAW, not through Storage. `Storage.getItem` JSON.parses and returns
+      // null on failure — and `@datalyr/visitor_id` / `@datalyr/anonymous_id` are
+      // written RAW by utils.ts (getOrCreateVisitorId uses AsyncStorage directly),
+      // so a real uuid would throw in JSON.parse and be reported as ABSENT. That
+      // conflation is exactly the bare↔Expo encoding divergence noted in
+      // 09-sdks.md; here it would have silently defeated this guard. Presence of
+      // the key is the signal, not its parsed value.
+      const evidence = await Promise.all([
+        '@datalyr/visitor_id',
+        '@datalyr/anonymous_id',
+        '@datalyr/user_id',
+        '@datalyr/attribution_data',
+        '@datalyr/current_session',
+        '@datalyr/event_queue',
+      ].map((key) => AsyncStorage.getItem(key).catch(() => null)));
+      if (evidence.some((v) => v !== null && v !== undefined)) {
+        // Returning device on an older build. We cannot know the true install
+        // date, so record the marker WITHOUT claiming one — isFirstLaunch stays
+        // false, no app_install fires, and this branch never runs again.
+        this.isFirstLaunch = false;
+        await Storage.setItem('@datalyr/first_launch_time', new Date().toISOString());
+        debugLog('Existing install detected on upgrade; suppressing retroactive app_install');
+        return;
+      }
+    }
+
+    await this.checkFirstLaunch();
   }
 
   /**

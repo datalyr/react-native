@@ -606,4 +606,49 @@ export const Storage = {
       errorLog('Failed to clear storage:', error as Error);
     }
   },
-}; 
+};
+
+/**
+ * DEP-01: warn once about config options that are accepted and then ignored.
+ *
+ * A `@deprecated` JSDoc tag only shows in an editor — it does not reach a
+ * developer who copied a config from an old README, and several of these read
+ * like working aliases ("Use `endpoint` instead") when in fact nothing reads
+ * them at all. This is the signal that actually surfaces at runtime.
+ *
+ * Deliberately NOT __DEV__-gated: the whole point is that the developer holds a
+ * false belief about what the SDK is doing, and a release build is exactly where
+ * that belief goes unchallenged. Fires at most once per process.
+ */
+let didWarnAboutIgnoredOptions = false;
+export function warnAboutIgnoredOptions(config: Record<string, any>): void {
+  if (didWarnAboutIgnoredOptions) return;
+
+  const ignored: string[] = [];
+  if (config.apiUrl !== undefined) ignored.push('apiUrl (not an alias for endpoint — ignored)');
+  if (config.maxEventQueueSize !== undefined) ignored.push('maxEventQueueSize (use maxQueueSize)');
+  if (config.autoEvents !== undefined) ignored.push('autoEvents (use autoEventConfig)');
+  if (config.retryConfig !== undefined) ignored.push('retryConfig (use maxRetries / retryDelay)');
+  if (config.respectDoNotTrack === false) {
+    ignored.push('respectDoNotTrack (no consent gate exists — collection is NOT limited)');
+  }
+  const auto = config.autoEventConfig ?? config.autoEvents;
+  if (auto?.trackAppUpdates === false) {
+    ignored.push('trackAppUpdates (app_update is manual-only via trackAppUpdate())');
+  }
+  if (auto?.trackPerformance === true) {
+    ignored.push('trackPerformance (the SDK emits no performance events)');
+  }
+  // `endpoint` is read ONLY when server tracking is off — silently discarded
+  // otherwise (http-client.ts hardcodes the ingest URL).
+  if (config.endpoint !== undefined && config.useServerTracking !== false) {
+    ignored.push('endpoint (only honoured with useServerTracking: false)');
+  }
+
+  if (ignored.length === 0) return;
+  didWarnAboutIgnoredOptions = true;
+  console.warn(
+    '[Datalyr] Ignored configuration option(s) — accepted but never read: ' +
+    ignored.join('; '),
+  );
+}

@@ -2,7 +2,11 @@
 export interface AutoEventConfig {
   trackSessions?: boolean;
   trackScreenViews?: boolean;
+  /** @deprecated **NOT IMPLEMENTED** — never read. `app_update` is manual-only
+   *  via `trackAppUpdate()`. (DEP-01) */
   trackAppUpdates?: boolean;
+  /** @deprecated **NOT IMPLEMENTED** — never read. The SDK emits no performance
+   *  events. (DEP-01) */
   trackPerformance?: boolean;
   sessionTimeoutMs?: number;
 }
@@ -49,8 +53,11 @@ export interface DatalyrConfig {
   debug?: boolean;
 
   /**
-   * API endpoint URL. Default: 'https://ingest.datalyr.com/track'
-   * @deprecated Use `endpoint` instead
+   * @deprecated **IGNORED — not read anywhere.** This is not an alias for
+   * `endpoint`; setting it has no effect at all. Use `endpoint`. (DEP-01)
+   *
+   * Note `endpoint` itself is only honoured when `useServerTracking: false` —
+   * otherwise http-client.ts hardcodes ingest.datalyr.com/track.
    */
   apiUrl?: string;
 
@@ -79,12 +86,19 @@ export interface DatalyrConfig {
   maxQueueSize?: number;
 
   /**
-   * Maximum events to store in queue. Default: 100
-   * @deprecated Use `maxQueueSize` instead
+   * @deprecated **IGNORED — not read anywhere.** Not an alias for
+   * `maxQueueSize`; setting it has no effect. Use `maxQueueSize`. (DEP-01)
    */
   maxEventQueueSize?: number;
 
-  /** Respect browser Do Not Track setting. Default: true */
+  /**
+   * @deprecated **NOT IMPLEMENTED.** Stored and never read. There is no
+   * Do-Not-Track or consent gate in the React Native SDK, and setting this does
+   * NOT stop or limit collection — the only way to stop collection is to not
+   * call `initialize()`. Honouring it means building a consent apparatus the
+   * mobile SDKs do not have; the web SDK's `shouldTrack()` is the reference.
+   * (DEP-01)
+   */
   respectDoNotTrack?: boolean;
 
   /** Enable automatic event tracking (sessions, app lifecycle). Default: true */
@@ -97,8 +111,8 @@ export interface DatalyrConfig {
   enableWebToAppAttribution?: boolean;
 
   /**
-   * Auto-events configuration
-   * @deprecated Use `autoEventConfig` instead
+   * @deprecated **IGNORED — not read anywhere.** Not an alias for
+   * `autoEventConfig`; setting it has no effect. Use `autoEventConfig`. (DEP-01)
    */
   autoEvents?: AutoEventConfig;
 
@@ -106,8 +120,8 @@ export interface DatalyrConfig {
   autoEventConfig?: AutoEventConfig;
 
   /**
-   * Retry configuration
-   * @deprecated Use `maxRetries` and `retryDelay` instead
+   * @deprecated **IGNORED — not read anywhere.** Not an alias; setting it has no
+   * effect. Use the top-level `maxRetries` and `retryDelay`. (DEP-01)
    */
   retryConfig?: {
     maxRetries: number;

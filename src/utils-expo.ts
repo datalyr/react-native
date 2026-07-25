@@ -15,11 +15,26 @@ export const STORAGE_KEYS = {
   USER_ID: '@datalyr/user_id',
   USER_PROPERTIES: '@datalyr/user_properties',
   EVENT_QUEUE: '@datalyr/event_queue',
+  // Parity with utils.ts. event-queue.ts is shared and imports STORAGE_KEYS from
+  // './utils', so the dead-letter store already worked on Expo — but leaving the
+  // key absent here is the same drift that made LAST_IDENTITY_FINGERPRINT a
+  // no-op. Kept in lockstep and enforced by tests/identify-dedupe.test.ts.
+  DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
   INSTALL_TIME: '@datalyr/install_time',
   LAST_APP_VERSION: '@datalyr/last_app_version',
   LAST_SESSION_TIME: '@datalyr/last_session_time',
   DEVICE_ID: '@datalyr/device_id',
+  // Fingerprint of the last identify() that actually emitted, so a host app
+  // calling identify() on every launch/screen does not re-emit unchanged
+  // identity. Cleared by reset(). See identifyUser().
+  //
+  // MUST stay byte-identical to utils.ts's value — bare RN and Expo share one
+  // AsyncStorage namespace, so a divergent key would silently give an app that
+  // switches entry points two independent fingerprints and re-emit once per
+  // switch. This key was present in utils.ts from 1.7.15 but MISSING here,
+  // which made the whole suppression a no-op on Expo (see CHANGELOG 1.7.16).
+  LAST_IDENTITY_FINGERPRINT: '@datalyr/last_identity_fingerprint',
 } as const;
 
 // Debug logging

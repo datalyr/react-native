@@ -1,5 +1,6 @@
 import { EventPayload, QueuedEvent } from './types';
 import { debugLog, errorLog } from './utils';
+import { SDK_VERSION, SDK_LIBRARY_NAME, SDK_USER_AGENT } from './version';
 
 interface HttpClientConfig {
   maxRetries: number;
@@ -78,7 +79,7 @@ export class HttpClient {
       
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'User-Agent': `@datalyr/react-native/1.7.15`,
+        'User-Agent': SDK_USER_AGENT,
       };
 
       // Server-side tracking uses X-API-Key header
@@ -273,8 +274,8 @@ export class HttpClient {
         fingerprint: payload.deviceContext,
       },
       context: {
-        library: '@datalyr/react-native',
-        version: '1.7.15',
+        library: SDK_LIBRARY_NAME,
+        version: SDK_VERSION,
         source: 'mobile_app',
         // session_id MUST be in context — ingest's server-track handler reads the session
         // id from context.session_id, NOT properties; without it ingest discards the SDK's
