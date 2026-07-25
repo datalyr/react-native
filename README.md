@@ -1,69 +1,65 @@
 # @datalyr/react-native
 
-Mobile analytics and attribution SDK for React Native and Expo. Track events, identify users, and capture attribution data from ad platforms.
+Mobile analytics and attribution for React Native and Expo. Track events, identify users, and capture ad attribution.
+
+Current release: **1.7.15**. Every event posts to `https://ingest.datalyr.com/track`.
+
+Full reference: [docs.datalyr.com/sdk-reference/react-native](https://docs.datalyr.com/sdk-reference/react-native).
 
 ## Table of Contents
 
+- [Requirements](#requirements)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [How It Works](#how-it-works)
 - [Configuration](#configuration)
 - [Event Tracking](#event-tracking)
-  - [Custom Events](#custom-events)
-  - [Screen Views](#screen-views)
-  - [E-Commerce Events](#e-commerce-events)
 - [User Identity](#user-identity)
-  - [Anonymous ID](#anonymous-id)
-  - [Identifying Users](#identifying-users)
-  - [Alias](#alias)
-  - [User Properties](#user-properties)
-  - [Logout](#logout)
 - [Sessions](#sessions)
 - [Attribution](#attribution)
-  - [Automatic Capture](#automatic-capture)
-  - [Manual Attribution](#manual-attribution)
-  - [Web-to-App Attribution](#web-to-app-attribution)
-  - [Deferred Attribution](#deferred-attribution)
 - [Customer Journey](#customer-journey)
-- [Event Queue](#event-queue)
 - [Automatic Screen Tracking](#automatic-screen-tracking)
-- [Auto Events](#auto-events)
 - [SKAdNetwork](#skadnetwork)
-- [Platform Integrations](#platform-integrations)
-  - [Meta (Facebook)](#meta-facebook)
-  - [TikTok](#tiktok)
-  - [Google Ads](#google-ads)
-  - [Apple Search Ads](#apple-search-ads)
-  - [Google Play Install Referrer](#google-play-install-referrer)
-  - [App Tracking Transparency](#app-tracking-transparency)
+- [Ad Platform Delivery](#ad-platform-delivery)
+- [Superwall and RevenueCat](#superwall-and-revenuecat)
 - [Enhanced App Campaigns](#enhanced-app-campaigns)
-- [Third-Party Integrations](#third-party-integrations)
-  - [Superwall](#superwall)
-  - [RevenueCat](#revenuecat)
-- [Migrating from AppsFlyer / Adjust](#migrating-from-appsflyer--adjust)
-- [Expo Support](#expo-support)
-- [TypeScript](#typescript)
+- [Migrating from AppsFlyer or Adjust](#migrating-from-appsflyer-or-adjust)
+- [Queue and Limits](#queue-and-limits)
 - [API Reference](#api-reference)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 
 ---
 
+## Requirements
+
+| Package | Version | Required |
+|---|---|---|
+| `react-native` | `>=0.72.0` | Yes |
+| `react` | `>=18.0.0` | Yes |
+| `expo-modules-core` | `>=2.0.0` | Yes, in bare React Native too |
+| `@react-native-community/netinfo` | `>=11.0.0` | Optional |
+| `react-native-device-info` | `>=12.0.0` | Optional |
+
+> **Install `expo-modules-core` even in a bare React Native app.** The SDK calls `requireNativeModule` at module load. A missing package throws before `initialize()` runs.
+
+Minimum iOS deployment target is 13.0.
+
+---
+
 ## Installation
 
 ```bash
-npm install @datalyr/react-native
-```
-
-### iOS Setup
-
-```bash
+npm install @datalyr/react-native expo-modules-core
 cd ios && pod install
 ```
 
-### Android Setup
+The package bundles `@react-native-async-storage/async-storage`, `react-native-get-random-values`, and `uuid`.
 
-No additional setup required.
+Android needs no extra setup for events. For Play Install Referrer attribution, add this line to `android/app/build.gradle`:
+
+```groovy
+implementation 'com.android.installreferrer:installreferrer:2.2'
+```
 
 ---
 
@@ -72,156 +68,160 @@ No additional setup required.
 ```typescript
 import { Datalyr } from '@datalyr/react-native';
 
-// Initialize
 await Datalyr.initialize({
   apiKey: 'dk_your_api_key',
   enableAutoEvents: true,
   enableAttribution: true,
 });
 
-// Track events
-await Datalyr.track('button_clicked', { button: 'signup' });
+await Datalyr.track('signup_completed', { plan: 'pro', seats: 5 });
 
-// Identify users
-await Datalyr.identify('user_123', { email: 'user@example.com' });
+await Datalyr.identify('user_123', { email: 'person@example.com' });
 
-// Track purchases
-await Datalyr.trackPurchase(99.99, 'USD', 'product_123');
+await Datalyr.trackPurchase(99.99, 'USD', 'pro_yearly');
 ```
 
----
-
-## How It Works
-
-The SDK collects events and sends them to the Datalyr backend for analytics and attribution.
-
-### Data Flow
-
-1. Events are created with `track()`, `screen()`, or e-commerce methods
-2. Each event includes device info, session data, and attribution parameters
-3. Events are queued locally and sent in batches
-4. If offline, events are stored and sent when connectivity returns
-5. Events are processed server-side for analytics and attribution reporting
-
-### Event Payload
-
-Every event includes:
+Expo apps import the Expo entry point instead:
 
 ```typescript
-{
-  event: 'purchase',              // Event name
-  properties: { ... },            // Custom properties
-
-  // Identity
-  anonymous_id: 'uuid',           // Persistent device ID
-  user_id: 'user_123',            // Set after identify()
-  session_id: 'uuid',             // Current session
-
-  // Device
-  platform: 'ios',
-  device_model: 'iPhone 14',
-  os_version: '17.0',
-  app_version: '1.2.0',
-
-  // Attribution (if captured)
-  utm_source: 'facebook',
-  fbclid: 'abc123',
-
-  // Timestamps
-  timestamp: '2024-01-15T10:30:00Z',
-}
+import { Datalyr } from '@datalyr/react-native/expo';
 ```
+
+> **`import Datalyr from '@datalyr/react-native'` returns the class, not the singleton.** Use the named import `{ Datalyr }` for the static facade, or `{ datalyr }` for the instance. The default import needs `new` and creates a second SDK.
+
+The SDK buffers 50 events sent before `initialize()` resolves.
 
 ---
 
 ## Configuration
 
-All fields except `apiKey` are optional.
+> **`timeout`, `retryDelay`, `flushInterval`, and `sessionTimeoutMs` are milliseconds on React Native.** The iOS SDK uses seconds for the first three. Copying `timeout: 15` from a Swift configuration aborts every request after 15 milliseconds.
 
 ```typescript
 await Datalyr.initialize({
-  // Required
-  apiKey: string,                          // API key from dashboard (starts with 'dk_')
-
-  // Optional: workspace
-  workspaceId?: string,                    // Workspace ID for multi-workspace setups
-
-  // Debugging
-  debug?: boolean,                         // Console logging (default: false)
-
-  // Network
-  endpoint?: string,                       // API endpoint URL (default: 'https://ingest.datalyr.com/track')
-  useServerTracking?: boolean,             // Use server-side tracking (default: true)
-  maxRetries?: number,                     // Max retry attempts for failed requests (default: 3)
-  retryDelay?: number,                     // Delay between retries in ms (default: 1000)
-  timeout?: number,                        // Request timeout in ms (default: 15000)
-
-  // Features
-  enableAutoEvents?: boolean,              // Track app lifecycle automatically (default: true)
-  enableAttribution?: boolean,             // Capture attribution data (default: true)
-  enableWebToAppAttribution?: boolean,     // Web-to-app attribution matching (default: true)
-
-  // Event queue
-  batchSize?: number,                      // Events per batch (default: 10)
-  flushInterval?: number,                  // Auto-flush interval in ms (default: 30000)
-  maxQueueSize?: number,                   // Max queued events (default: 100)
-
-  // Auto events
-  autoEventConfig?: AutoEventConfig,       // Fine-grained auto-event settings (see below)
-
-  // iOS
-  skadTemplate?: 'ecommerce' | 'gaming' | 'subscription',  // SKAdNetwork conversion template
+  apiKey: 'dk_your_api_key',
+  timeout: 15000,
+  batchSize: 10,
+  flushInterval: 30000,
+  maxQueueSize: 100,
 });
 ```
 
+| Option | Type | Default | Unit |
+|---|---|---|---|
+| `apiKey` | `string` | Required | — |
+| `workspaceId` | `string` | `''` | — |
+| `endpoint` | `string` | `'https://ingest.datalyr.com/track'` | URL |
+| `useServerTracking` | `boolean` | `true` | — |
+| `debug` | `boolean` | `false` | — |
+| `maxRetries` | `number` | `3` | attempts |
+| `retryDelay` | `number` | `1000` | **milliseconds** |
+| `timeout` | `number` | `15000` | **milliseconds** |
+| `batchSize` | `number` | `10` | events per queue drain |
+| `flushInterval` | `number` | `30000` | **milliseconds** |
+| `maxQueueSize` | `number` | `100` | events |
+| `enableAutoEvents` | `boolean` | `true` | — |
+| `enableAttribution` | `boolean` | `true` | — |
+| `enableWebToAppAttribution` | `boolean` | Unset. Anything other than `false` turns it on. | — |
+| `autoEventConfig` | `AutoEventConfig` | Unset | — |
+| `skadTemplate` | `'ecommerce' \| 'gaming' \| 'subscription'` | Unset | — |
+
 ### AutoEventConfig
 
-```typescript
-interface AutoEventConfig {
-  trackSessions?: boolean;       // Track session_start / session_end (default: true)
-  trackScreenViews?: boolean;    // Enable screen view events via screen() (default: true)
-  trackAppInstall?: boolean;     // Track app_install on first open (default: true)
-  sessionTimeoutMs?: number;     // Session timeout in ms
-}
-```
+> **`sessionTimeoutMs` controls only the `session_start` and `session_end` events.** The `session_id` on the wire rotates on a hardcoded 30 minutes that no option changes.
 
-Update at runtime:
+| Option | Type | Default | Unit |
+|---|---|---|---|
+| `trackSessions` | `boolean` | `true` | — |
+| `trackScreenViews` | `boolean` | `true` | — |
+| `sessionTimeoutMs` | `number` | `1800000` | **milliseconds** — 30 minutes |
+
+Update it at runtime:
 
 ```typescript
 Datalyr.updateAutoEventsConfig({
   trackSessions: true,
-  sessionTimeoutMs: 1800000, // 30 minutes
+  sessionTimeoutMs: 1800000,
 });
 ```
+
+### Two options that behave differently from their name
+
+`endpoint` is discarded while `useServerTracking` is `true`, which is the default. To point at another host, set both `endpoint` and `useServerTracking: false`. That also switches authentication to `Authorization: Bearer`.
+
+`debug` does not control logging. The log helpers test `__DEV__`. A release build prints nothing with `debug: true`, and a development build prints with `debug: false`.
+
+### Options that do nothing
+
+Setting any option below has no effect. Each is declared in the types and read nowhere.
+
+| Option | Behavior the name suggests | Actual behavior |
+|---|---|---|
+| `apiUrl` | An alias for `endpoint` | Never read. Use `endpoint`. |
+| `maxEventQueueSize` | An alias for `maxQueueSize` | Never read. Use `maxQueueSize`. |
+| `retryConfig` | An object form of `maxRetries` and `retryDelay` | Never read. Use the two flat options. |
+| `autoEvents` | An alias for `autoEventConfig` | Never read. Use `autoEventConfig`. |
+| `respectDoNotTrack` | Honors Do Not Track | No Do Not Track logic exists. |
+| `AutoEventConfig.trackAppUpdates` | Sends `app_update` automatically | Nothing auto-sends `app_update`. Call `trackAppUpdate()`. |
+| `AutoEventConfig.trackPerformance` | Records performance metrics | No performance code exists. |
+
+### getDeferredAttributionData always returns null
+
+Use `getPlayInstallReferrer()` on Android and `getAppleSearchAdsAttribution()` on iOS.
 
 ---
 
 ## Event Tracking
 
-### Custom Events
+### Events the SDK sends without your code
+
+| Wire event name | Trigger |
+|---|---|
+| `app_install` | First launch, detected by a missing `@datalyr/first_launch_time` key |
+| `session_start` | Init with a new session ID, or foreground after 30 minutes idle |
+| `session_end` | Idle timeout, `destroy()`, or recovery of an abandoned session at the next init |
+| `$att_status` | Every `updateTrackingAuthorization()` call |
+| `$network_status_change` | The network listener reports a change after init |
+| `$web_attribution_matched` | An email or IP lookup matched an earlier web visit |
+
+There is no `app_open`, `app_foreground`, or `app_background` event. Moving to the background flushes the queue and records activity time. It sends no event.
+
+### Events the SDK sends for you
+
+| Method you call | Wire event name |
+|---|---|
+| `screen()` | `pageview` |
+| `identify()` | `$identify` |
+| `alias()` | `$alias` |
+| `trackAppUpdate()` | `app_update` |
+| `trackPurchase()` | `purchase` |
+| `trackSubscription()` | `subscribe` |
+| `trackAddToCart()` | `add_to_cart` |
+| `trackViewContent()` | `view_content` |
+| `trackInitiateCheckout()` | `initiate_checkout` |
+| `trackCompleteRegistration()` | `complete_registration` |
+| `trackSearch()` | `search` |
+| `trackLead()` | `lead` |
+| `trackAddPaymentInfo()` | `add_payment_info` |
+
+Event names accept letters, digits, `_`, `.`, `$`, and `-`, up to 100 characters. Any other run of characters becomes a single `_`, with a console warning.
+
+### Custom events
 
 ```typescript
-// Simple event
 await Datalyr.track('signup_started');
 
-// Event with properties
 await Datalyr.track('product_viewed', {
   product_id: 'SKU123',
   product_name: 'Blue Shirt',
   price: 29.99,
   currency: 'USD',
-  category: 'Apparel',
-});
-
-// Event with value
-await Datalyr.track('level_completed', {
-  level: 5,
-  score: 1250,
-  time_seconds: 120,
 });
 ```
 
-### Screen Views
+### Screen views
+
+`screen()` sends an event named `pageview`, not `screen`. Filter on `pageview` in **Events**.
 
 ```typescript
 await Datalyr.screen('Home');
@@ -232,266 +232,204 @@ await Datalyr.screen('Product Details', {
 });
 ```
 
-Each `screen()` call fires a single `pageview` event with the `screen` property set. Session data (`session_id`, `pageviews_in_session`, `previous_screen`) is automatically attached.
+Each call attaches `screen`, `session_id`, `pageviews_in_session`, and `previous_screen`. Properties you pass win on a name collision.
 
-### E-Commerce Events
-
-Standard e-commerce events:
+### E-commerce events
 
 ```typescript
-// View product
 await Datalyr.trackViewContent('SKU123', 'Blue Shirt', 'product', 29.99, 'USD');
-
-// Add to cart
 await Datalyr.trackAddToCart(29.99, 'USD', 'SKU123', 'Blue Shirt');
-
-// Start checkout
 await Datalyr.trackInitiateCheckout(59.98, 'USD', 2, ['SKU123', 'SKU456']);
-
-// Complete purchase
 await Datalyr.trackPurchase(59.98, 'USD', 'order_123');
-
-// Subscription
 await Datalyr.trackSubscription(9.99, 'USD', 'monthly_pro');
-
-// Registration
 await Datalyr.trackCompleteRegistration('email');
-
-// Search
 await Datalyr.trackSearch('blue shoes', ['SKU1', 'SKU2']);
-
-// Lead
 await Datalyr.trackLead(100.0, 'USD');
-
-// Payment info
 await Datalyr.trackAddPaymentInfo(true);
 ```
 
-### Revenue Events
+The Expo entry point changes five signatures. Copying bare React Native code produces a type error or a missing default.
 
-> **Important:** If you use **Superwall** or **RevenueCat**, do not track revenue client-side. Use the [Superwall](https://docs.datalyr.com/integrations/superwall) or [RevenueCat](https://docs.datalyr.com/integrations/revenuecat) webhook integration instead — they only fire when real money changes hands. Use the SDK for behavioral events only (`track('paywall_view')`, `track('trial_start')`, `screen()`, `identify()`, etc.).
+| Method | Bare React Native | Expo |
+|---|---|---|
+| `trackAddToCart` | `(value, currency = 'USD', productId?, productName?)` | `(value, currency, contentId?, contentName?)` — `currency` required |
+| `trackViewContent` | `(contentId?, contentName?, contentType = 'product', …)` | `(contentId, contentName?, contentType?, …)` — `contentId` required, no default type |
+| `trackInitiateCheckout` | `(value, currency = 'USD', …)` | `(value?, currency?, …)` — both optional, no default |
+| `trackAddPaymentInfo` | `(success = true)` | `(success?)` — no default |
+| `updateTrackingAuthorization` | `(enabled: boolean)` | `(authorized: boolean)` |
+
+### Revenue
+
+> **Do not track subscription revenue client-side when you use Superwall or RevenueCat.** `trackPurchase()` and `trackSubscription()` fire before payment is confirmed, so trials and failed payments count as revenue. Use the [Superwall](https://docs.datalyr.com/revenue/superwall) or [RevenueCat](https://docs.datalyr.com/revenue/revenuecat) webhook integration, which fires only on a confirmed charge. Use the SDK for behavioral events: `track('paywall_view')`, `screen()`, `identify()`.
+
+This SDK has no `trackRevenue()` method. Use `track()` with your own event name.
+
+### App updates
+
+Nothing auto-sends `app_update`. Call it yourself.
+
+```typescript
+await Datalyr.trackAppUpdate('1.4.0', '1.5.0');
+```
 
 ---
 
 ## User Identity
 
-### Anonymous ID
+> **Calling `identify()` with a different user ID runs `reset()` first.** That rotates the anonymous ID and the visitor ID, and erases attribution, the journey, and SKAdNetwork state. Call `identify()` once per signed-in person, not on every screen.
 
-Every device gets a persistent anonymous ID on first launch:
+```typescript
+await Datalyr.identify('user_123', {
+  email: 'person@example.com',
+  name: 'John Doe',
+  phone: '+1234567890',
+  plan: 'premium',
+});
+```
+
+A repeat call with an unchanged identity fingerprint sends no `$identify` event.
+
+### Identity on the wire
+
+| Wire field | Value |
+|---|---|
+| `anonymousId` | Top-level. Format `anon_<uuid>`. |
+| `properties.anonymous_id` | The same value, repeated. |
+| `userId` | Your ID from `identify()`. |
+| `properties.sessionId` | Format `sess_<epoch_ms>_<9 base36 chars>`. |
+| `context.session_id` | The same session ID. This is the field Datalyr reads. |
+| `properties.fingerprint.deviceId` | A UUID for the install. |
+
+This SDK sends no `distinct_id` and no top-level `visitor_id`. Only the Web SDK sends `distinct_id`.
+
+### Anonymous ID
 
 ```typescript
 const anonymousId = Datalyr.getAnonymousId();
-// 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+// 'anon_a1b2c3d4-e5f6-7890-abcd-ef1234567890'
 ```
-
-This ID:
-- Persists across app sessions
-- Links events before and after user identification
-- Can be passed to your backend for server-side attribution
-
-### Identifying Users
-
-Link the anonymous ID to a known user:
-
-```typescript
-await Datalyr.identify('user_123', {
-  email: 'user@example.com',
-});
-```
-
-After `identify()`:
-- All future events include `user_id`
-- Historical anonymous events can be linked server-side
 
 ### Alias
 
-Associate a new user ID with a previous one. Use this when a user's identity changes (e.g., after account merge):
-
 ```typescript
-// Link new ID to the currently identified user
 await Datalyr.alias('new_user_456');
 
-// Or specify the previous ID explicitly
 await Datalyr.alias('new_user_456', 'old_user_123');
 ```
 
-### User Properties
+`alias()` links two IDs for one person. It does not run `reset()`.
 
-Pass any user attributes:
-
-```typescript
-await Datalyr.identify('user_123', {
-  // Standard fields
-  email: 'user@example.com',
-  name: 'John Doe',
-  phone: '+1234567890',
-
-  // Custom fields
-  plan: 'premium',
-  company: 'Acme Inc',
-  signup_date: '2024-01-15',
-});
-```
-
-### Logout
-
-Clear user data on logout:
+### Reset
 
 ```typescript
 await Datalyr.reset();
 ```
 
-This:
-- Clears the user ID
-- Starts a new session
-- Keeps the anonymous ID (same device)
+`reset()` rotates both the anonymous ID and the visitor ID, ends the session, and clears the user ID, user properties, attribution, the journey, and SKAdNetwork state. Call it on logout.
 
 ---
 
 ## Sessions
 
 ```typescript
-// Get current session data
 const session = Datalyr.getCurrentSession();
 
-// Force end the current session
 await Datalyr.endSession();
 ```
 
-Sessions are managed automatically when `enableAutoEvents` is enabled. A new session starts on app launch, and the current session ends after 30 minutes of inactivity (configurable via `autoEventConfig.sessionTimeoutMs`).
+A session starts on app launch and ends after 30 minutes of inactivity. `autoEventConfig.sessionTimeoutMs` changes when `session_end` fires. It does not change how the `session_id` rotates.
 
 ---
 
 ## Attribution
 
-### Automatic Capture
+The SDK subscribes to `Linking` and reads the initial URL. It reads these 44 parameters from both the query string and the URL fragment. Keys are lowercased before matching.
 
-The SDK captures attribution from deep links and referrers:
+| Group | Parameters |
+|---|---|
+| Datalyr | `lyr`, `datalyr`, `dl_tag`, `dl_campaign` |
+| Click IDs | `fbclid`, `ttclid`, `gclid`, `wbraid`, `gbraid`, `dclid`, `twclid`, `li_fat_id`, `msclkid`, `irclid`, `click_id`, `oppref` |
+| Click ID aliases | `fb_click_id` stores as `fbclid`. `tt_click_id` and `tiktok_click_id` store as `ttclid`. `li_click_id` also sets `li_fat_id`. `irclickid` also sets `irclid`. |
+| Meta extras | `fb_action_ids`, `fb_action_types` |
+| UTM | `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `utm_id`, `utm_source_platform`, `utm_creative_format`, `utm_marketing_tactic` |
+| Partner | `partner_id`, `affiliate_id`, `referrer_id`, `source_id` |
+| Ad structure | `campaign_id`, `ad_id`, `adset_id`, `creative_id`, `placement_id`, `keyword`, `matchtype`, `network`, `device` |
+
+Each `utm_*` value is mirrored to `campaign_source`, `campaign_medium`, `campaign_name`, `campaign_term`, and `campaign_content`.
 
 ```typescript
 const attribution = Datalyr.getAttributionData();
-```
 
-Captured parameters:
-
-| Type | Parameters |
-|------|------------|
-| UTM | `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` |
-| Click IDs | `fbclid`, `gclid`, `ttclid`, `oppref`, `twclid`, `li_click_id`, `msclkid` |
-| Campaign | `campaign_id`, `adset_id`, `ad_id` |
-
-### Manual Attribution
-
-Set attribution programmatically:
-
-```typescript
 await Datalyr.setAttributionData({
   utm_source: 'newsletter',
   utm_campaign: 'spring_sale',
 });
 ```
 
-### Web-to-App Attribution
+### Install attribution
 
-Automatically recover attribution from a web prelander when users install the app from an ad.
+| Platform | Mechanism | Properties added |
+|---|---|---|
+| Android | Play Install Referrer | `install_referrer_url`, `referrer_click_timestamp`, `install_begin_timestamp`, `gclid`, `gbraid`, `wbraid`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `attribution_source` |
+| iOS 14.3 and later | AdServices | `asa_campaign_id`, `asa_campaign_name`, `asa_ad_group_id`, `asa_ad_group_name`, `asa_keyword_id`, `asa_keyword`, `asa_org_id`, `asa_org_name`, `asa_click_date`, `asa_conversion_type`, `asa_country_or_region` |
 
-**How it works:**
-- **Android**: Attribution params are passed through the Play Store `referrer` URL parameter (set by the web SDK's `trackAppDownloadClick()`). The mobile SDK reads these via the Play Install Referrer API -- deterministic, ~95% accuracy.
-- **iOS**: On first install, the SDK calls the Datalyr API to match the device's IP against recent `$app_download_click` web events within 24 hours -- ~90%+ accuracy for immediate installs.
-
-No additional mobile code is needed. Attribution is recovered automatically during `initialize()` on first install, before the `app_install` event fires.
-
-After a match, the SDK:
-1. Merges web attribution (click IDs, UTMs, cookies) into the mobile session
-2. Tracks a `$web_attribution_matched` event for analytics
-3. All subsequent events (including purchases) carry the matched attribution
-
-**Fallback:** If IP matching misses (e.g., VPN toggle during install), email-based attribution is still recovered when `identify()` is called with the user's email.
-
-### Deferred Attribution
-
-Retrieve deferred attribution data captured from deep links or install referrers:
+Play Install Referrer values merge onto an event only when the event carries neither `gclid` nor `utm_source`.
 
 ```typescript
-const deferred = Datalyr.getDeferredAttributionData();
-if (deferred) {
-  console.log(deferred.url);          // Deep link URL
-  console.log(deferred.source);       // Attribution source
-  console.log(deferred.fbclid);       // Facebook click ID
-  console.log(deferred.gclid);        // Google click ID
-  console.log(deferred.ttclid);       // TikTok click ID
-  console.log(deferred.utmSource);    // UTM source
-  console.log(deferred.utmMedium);    // UTM medium
-  console.log(deferred.utmCampaign);  // UTM campaign
-  console.log(deferred.utmContent);   // UTM content
-  console.log(deferred.utmTerm);      // UTM term
-  console.log(deferred.campaignId);   // Campaign ID
-  console.log(deferred.adsetId);      // Adset ID
-  console.log(deferred.adId);         // Ad ID
-}
+const referrer = Datalyr.getPlayInstallReferrer();   // null on iOS
+const searchAds = Datalyr.getAppleSearchAdsAttribution(); // null on Android
+
+const status = Datalyr.getPlatformIntegrationStatus();
+// { appleSearchAds: boolean, playInstallReferrer: boolean }
 ```
+
+Play Install Referrer needs `implementation 'com.android.installreferrer:installreferrer:2.2'` in `android/app/build.gradle`.
+
+### Web-to-app attribution
+
+On Android the Web SDK's `trackAppDownloadClick()` writes attribution into the Play Store `referrer` parameter, and the SDK reads it through the Play Install Referrer API. On iOS the SDK asks the Datalyr API to match the device IP against `$app_download_click` web events from the last 24 hours.
+
+Both run inside `initialize()`, before `app_install` fires. Your app needs no extra code.
+
+After a match the SDK merges the web click IDs, UTM parameters, and cookies into the mobile session, sends `$web_attribution_matched`, and stamps the merged attribution on every later event.
+
+When IP matching misses — a VPN toggle during install, for example — call `identify()` with the user's email. The SDK then recovers attribution by email.
+
+### App Tracking Transparency
+
+The SDK never prompts. Call the prompt yourself, then report the result.
+
+```typescript
+import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
+
+const { granted } = await requestTrackingPermissionsAsync();
+await Datalyr.updateTrackingAuthorization(granted);
+```
+
+This sends `$att_status` and refreshes `idfa`, `idfv`, `gaid`, `att_status`, and `advertiser_tracking_enabled` on later events.
 
 ---
 
 ## Customer Journey
 
-Access multi-touch attribution journey data via the `datalyr` singleton instance:
+Journey methods live on the `datalyr` instance, not on the static `Datalyr` facade.
 
 ```typescript
 import { datalyr } from '@datalyr/react-native';
 
-// Summary: first/last touch, touchpoint count
 const summary = datalyr.getJourneySummary();
-
-// Full journey: all touchpoints in order
 const journey = datalyr.getJourney();
 ```
 
----
-
-## Event Queue
-
-Events are batched for efficiency and offline support.
-
-### Configuration
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  batchSize: 10,           // Send when 10 events queued
-  flushInterval: 30000,    // Or every 30 seconds
-  maxQueueSize: 100,       // Max events to store offline
-});
-```
-
-### Manual Flush
-
-Send all queued events immediately:
-
-```typescript
-await Datalyr.flush();
-```
-
-### Queue Status
-
-```typescript
-const status = Datalyr.getStatus();
-console.log(status.queueStats.queueSize);  // Events waiting
-console.log(status.queueStats.pending);    // Events being sent
-```
-
-### Offline Support
-
-When the device is offline:
-- Events are stored locally
-- Queue persists across app restarts
-- Events are sent when connectivity returns
+The journey holds up to 30 touchpoints over a 90-day window. The SDK attaches no journey field to any event.
 
 ---
 
 ## Automatic Screen Tracking
 
-Track screen views automatically when using React Navigation (v5+/v6+). The `datalyrScreenTracking` helper wires into the navigation container and fires a `pageview` event on every route change.
+> **Do not combine automatic tracking with manual `Datalyr.screen()` calls for the same screens.** Each path sends its own `pageview`, so the screen counts double.
+
+Automatic tracking adds `source: 'auto_navigation'` or `source: 'auto_expo_router'` to the `pageview` properties.
 
 ### React Navigation
 
@@ -509,25 +447,25 @@ function App() {
       onReady={screenTracking.onReady}
       onStateChange={screenTracking.onStateChange}
     >
-      {/* ...screens */}
+      <RootStack />
     </NavigationContainer>
   );
 }
 ```
 
-### Expo with React Navigation
+Customize names, filtering, and properties:
 
-For Expo projects using React Navigation, import from the Expo entry point:
-
-```tsx
-import { datalyrScreenTracking } from '@datalyr/react-native/expo';
+```typescript
+const screenTracking = datalyrScreenTracking(navigationRef, {
+  transformScreenName: (name) => name.replace('Screen', ''),
+  shouldTrackScreen: (name) => !['Splash', 'Loading'].includes(name),
+  extractProperties: (name, params) => ({ product_id: params?.productId }),
+});
 ```
 
-The API is identical to the React Navigation example above.
+Expo projects on React Navigation import the same helper from `@datalyr/react-native/expo`.
 
 ### Expo Router
-
-For Expo Router apps, use the `useDatalyrScreenTracking` hook in your root layout. It automatically tracks every route change as a `pageview` event:
 
 ```tsx
 // app/_layout.tsx
@@ -540,54 +478,17 @@ export default function RootLayout() {
 }
 ```
 
-Screen names are raw pathnames (e.g. `/onboarding/paywall`, `/(app)/chat`). You can map specific paths to friendly names:
+Screen names are raw pathnames, for example `/onboarding/paywall` and `/(app)/chat`. Map them to friendly names:
 
 ```tsx
 useDatalyrScreenTracking({
-  screenNames: {
-    '/onboarding/paywall': 'Paywall',
-    '/(app)/chat': 'Chat',
-  },
-});
-```
-
-Additional options:
-
-```tsx
-useDatalyrScreenTracking({
-  // Map specific paths to friendly names (checked first)
-  screenNames: { '/': 'Home' },
-
-  // Transform all other pathnames (e.g. strip route groups)
+  screenNames: { '/onboarding/paywall': 'Paywall', '/(app)/chat': 'Chat' },
   transformPathname: (path) => path.replace(/\(.*?\)\//g, ''),
-
-  // Skip tracking for certain paths
   shouldTrackPath: (path) => !path.startsWith('/modal'),
 });
 ```
 
-### Configuration
-
-You can customize screen name transforms, filtering, and property extraction:
-
-```typescript
-const screenTracking = datalyrScreenTracking(navigationRef, {
-  // Clean up route names
-  transformScreenName: (name) => name.replace('Screen', ''),
-
-  // Skip certain screens
-  shouldTrackScreen: (name) => !['Splash', 'Loading'].includes(name),
-
-  // Extract route params as event properties
-  extractProperties: (name, params) => ({
-    product_id: params?.productId,
-  }),
-});
-```
-
-### Advanced: Custom Tracking Function
-
-If you need to control which SDK instance is used, use `createScreenTrackingListeners` instead:
+### Custom tracking function
 
 ```typescript
 import { createScreenTrackingListeners } from '@datalyr/react-native';
@@ -598,32 +499,11 @@ const { onReady, onStateChange } = createScreenTrackingListeners(
 );
 ```
 
-> **Note:** If you enable automatic screen tracking, avoid also calling `Datalyr.screen()` manually for the same screens, as this will produce duplicate events.
-
----
-
-## Auto Events
-
-Enable automatic lifecycle tracking:
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  enableAutoEvents: true,
-});
-```
-
-| Event | Trigger |
-|-------|---------|
-| `app_install` | First app open |
-| `session_start` | New session begins |
-| `session_end` | Session expires (30 min inactivity) |
-
 ---
 
 ## SKAdNetwork
 
-iOS conversion tracking with Apple's SKAdNetwork:
+iOS only. Set `skadTemplate` at initialization. Without it, `getConversionValue()` returns `null` and `trackWithSKAdNetwork()` sends no conversion update.
 
 ```typescript
 await Datalyr.initialize({
@@ -631,204 +511,123 @@ await Datalyr.initialize({
   skadTemplate: 'ecommerce',
 });
 
-// Track with automatic SKAN conversion value encoding
 await Datalyr.trackWithSKAdNetwork('purchase', { value: 99.99 });
 
-// Or use e-commerce helpers (also update SKAN automatically)
-await Datalyr.trackPurchase(99.99, 'USD');
+const value = Datalyr.getConversionValue('purchase', { value: 49.99 });
+// 0 to 63, or null when skadTemplate is unset
 ```
 
 | Template | Events |
-|----------|--------|
+|---|---|
 | `ecommerce` | purchase, add_to_cart, begin_checkout, signup, subscribe, view_item |
 | `gaming` | level_complete, tutorial_complete, purchase, achievement_unlocked |
 | `subscription` | trial_start, subscribe, upgrade, cancel, signup |
 
-### Test Conversion Values
-
-Preview the conversion value an event would produce without sending it to Apple:
-
-```typescript
-const value = Datalyr.getConversionValue('purchase', { value: 49.99 });
-// Returns a number (0-63) or null if no template is configured
-```
+The fine value is `(rank & 0x7) << 3 | revenueTier`, clamped to 0 through 63. Revenue tiers run under 1, 5, 10, 25, 50, 100, and 250, then 7 above 250. The coarse value is low under 10, medium under 50, and high above. A cross-launch high-water guard stops any decrease. `reset()` clears it.
 
 ---
 
-## Platform Integrations
+## Ad Platform Delivery
 
-Conversion events are routed to ad platforms server-side via the Datalyr postback system. No client-side ad SDKs (Facebook SDK, TikTok SDK, etc.) are needed in your app. The SDK captures click IDs and attribution data from ad URLs, then the backend handles hashing, formatting, and sending conversions to each platform's API.
+Datalyr sends conversions to ad platforms server-side. Your app needs no Facebook, TikTok, Google, or OpenAI SDK. The mobile SDK captures click IDs and identity; the Datalyr backend hashes the personal data and calls each platform API.
 
-### Meta (Facebook)
+| Platform | API | Click ID the SDK captures | Cookie the Web SDK adds |
+|---|---|---|---|
+| Meta | [Conversions API](https://developers.facebook.com/docs/marketing-api/conversions-api/) | `fbclid` | `_fbc`, `_fbp` |
+| TikTok | [Events API](https://business-api.tiktok.com/portal/docs?id=1741601162187777) | `ttclid` | `_ttp` |
+| Google Ads | [Google Ads API](https://developers.google.com/google-ads/api/docs/conversions/overview) | `gclid`, `gbraid`, `wbraid` | — |
+| OpenAI Ads | [OpenAI Conversions API](https://developers.openai.com/ads/conversions-api) | `oppref` | `__oppref` |
 
-Conversions are sent to Meta via the [Conversions API (CAPI)](https://developers.facebook.com/docs/marketing-api/conversions-api/).
+Set each one up in **Sources**, then create a rule in **Conversions** that maps your Datalyr event to the platform event. For example, map `purchase` to Meta `Purchase`, TikTok `CompletePayment`, or OpenAI `order_created`.
 
-**What the SDK does:** Captures `fbclid` from ad click URLs, collects IDFA (when ATT authorized on iOS), and sends user data (email, phone) with events.
+Without a conversion rule, the platform receives nothing, even when the SDK captures every click ID.
 
-**What the backend does:** Hashes PII (SHA-256), formats the CAPI payload, and sends conversions with the `fbclid` and `_fbc`/`_fbp` cookies for matching.
+---
 
-**Setup:**
-1. Connect your Meta ad account in the Datalyr dashboard (Settings > Connections)
-2. Select your Meta Pixel
-3. Create postback rules to map events (e.g., `purchase` -> `Purchase`, `lead` -> `Lead`)
+## Superwall and RevenueCat
 
-No Facebook SDK needed in your app. No `Info.plist` changes, no `FacebookAppID`.
-
-### TikTok
-
-Conversions are sent to TikTok via the [Events API](https://business-api.tiktok.com/portal/docs?id=1741601162187777).
-
-**What the SDK does:** Captures `ttclid` from ad click URLs and collects device identifiers (IDFA on iOS, GAID on Android).
-
-**What the backend does:** Hashes user data, formats the Events API payload, and sends conversions with the `ttclid` and `_ttp` cookie for matching.
-
-**Setup:**
-1. Connect your TikTok Ads account in the Datalyr dashboard (Settings > Connections)
-2. Select your TikTok Pixel
-3. Create postback rules to map events (e.g., `purchase` -> `CompletePayment`, `add_to_cart` -> `AddToCart`)
-
-No TikTok SDK needed in your app. No access tokens, no native configuration.
-
-### Google Ads
-
-Conversions are sent to Google via the [Google Ads API](https://developers.google.com/google-ads/api/docs/conversions/overview).
-
-**What the SDK does:** Captures `gclid`, `gbraid`, and `wbraid` from ad click URLs. Collects user data for enhanced conversions.
-
-**What the backend does:** Hashes user data, maps events to Google conversion actions, and sends conversions with click IDs for attribution.
-
-**Setup:**
-1. Connect your Google Ads account in the Datalyr dashboard (Settings > Connections)
-2. Select your conversion actions
-3. Create postback rules to map events (e.g., `purchase` -> your Google conversion action)
-
-No Google SDK needed in your app beyond the Play Install Referrer (already included for Android).
-
-### OpenAI Ads
-
-Conversions are sent to OpenAI via the [OpenAI Conversions API](https://developers.openai.com/ads/conversions-api).
-
-**What the SDK does:** Captures `oppref` from ad click URLs (and the `__oppref` first-party cookie if it's present on shared web sessions). Forwards to the Datalyr backend on every event.
-
-**What the backend does:** Maps datalyr events to one of OpenAI's 11 standard event types (`order_created`, `checkout_started`, `items_added`, etc.), or sends as `custom` with a normalized `custom_event_name`. Money is converted to cents, timestamps to ms, and PII is SHA-256 hashed.
-
-**Setup:**
-1. Connect your OpenAI Ads account in the Datalyr dashboard (Settings > Connections > OpenAI Ads — paste your API key + pixel ID)
-2. Create postback rules mapping your events to OpenAI types (e.g. `purchase` → `order_created`)
-
-No OpenAI SDK needed in your app — server-side only.
-
-### Apple Search Ads
-
-Attribution for users who install from Apple Search Ads (iOS 14.3+). Automatically fetched on initialization.
+Call both methods after the two SDKs initialize, and again after the ATT prompt resolves.
 
 ```typescript
-// Check if user came from Apple Search Ads
-const asaAttribution = Datalyr.getAppleSearchAdsAttribution();
+import { Datalyr } from '@datalyr/react-native';
+import Superwall from '@superwall/react-native-superwall';
+import Purchases from 'react-native-purchases';
 
-if (asaAttribution?.attribution) {
-  console.log(asaAttribution.campaignId);    // Campaign ID
-  console.log(asaAttribution.campaignName);  // Campaign name
-  console.log(asaAttribution.adGroupId);     // Ad group ID
-  console.log(asaAttribution.keyword);       // Search keyword
-  console.log(asaAttribution.clickDate);     // Click date
-}
+Superwall.setUserAttributes(Datalyr.getSuperwallAttributes());
+await Purchases.setAttributes(Datalyr.getRevenueCatAttributes());
 ```
 
-Attribution data is automatically included in all events with the `asa_` prefix:
-- `asa_campaign_id`, `asa_campaign_name`
-- `asa_ad_group_id`, `asa_ad_group_name`
-- `asa_keyword_id`, `asa_keyword`
-- `asa_org_id`, `asa_org_name`
-- `asa_click_date`, `asa_conversion_type`
+Both methods return `Record<string, string>` and omit every empty value.
 
-No additional configuration needed. The SDK uses Apple's AdServices API.
+### getSuperwallAttributes
 
-### Google Play Install Referrer
+| Key | Value |
+|---|---|
+| `datalyr_id` | The visitor ID |
+| `media_source` | `utm_source` |
+| `campaign` | `utm_campaign` |
+| `adgroup` | `adset_id`, or `utm_content` when `adset_id` is empty |
+| `ad` | `ad_id` |
+| `keyword` | `keyword` |
+| `network` | `network` |
+| `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content` | UTM parameters |
+| `lyr` | Datalyr tracking link ID |
+| `fbclid`, `gclid`, `ttclid` | Ad click IDs |
+| `idfa` | Apple advertising ID, only when ATT is authorized |
+| `gaid` | Google advertising ID, Android only |
+| `att_status` | `notDetermined`, `restricted`, `denied`, or `authorized` |
 
-Android-only. Captures UTM parameters and click IDs from the Google Play Store install referrer URL. This data is retrieved automatically on first launch via the Play Install Referrer API.
+### getRevenueCatAttributes
 
-**How it works:**
-1. User clicks an ad or link with UTM parameters
-2. Google Play Store stores the referrer URL
-3. On first app launch, the SDK retrieves the referrer
-4. Attribution data (utm_source, utm_medium, gclid, etc.) is extracted and merged into the session
+Reserved keys:
 
-**Access the raw referrer data:**
+| Key | Value |
+|---|---|
+| `$datalyrId` | The visitor ID |
+| `$mediaSource` | `utm_source` |
+| `$campaign` | `utm_campaign` |
+| `$adGroup` | `adset_id` |
+| `$ad` | `ad_id` |
+| `$keyword` | `keyword` |
+| `$idfa` | Apple advertising ID, only when ATT is authorized |
+| `$gpsAdId` | Google advertising ID, Android only |
+| `$attConsentStatus` | `notDetermined`, `restricted`, `denied`, or `authorized` |
 
-```typescript
-import { datalyr } from '@datalyr/react-native';
+Custom keys:
 
-const referrer = datalyr.getPlayInstallReferrer();
-if (referrer) {
-  // Google Ads click IDs
-  console.log(referrer.gclid);    // Standard Google Ads click ID
-  console.log(referrer.gbraid);   // Privacy-safe click ID (iOS App campaigns)
-  console.log(referrer.wbraid);   // Privacy-safe click ID (Web-to-App campaigns)
+| Key | Value |
+|---|---|
+| `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content` | UTM parameters |
+| `lyr` | Datalyr tracking link ID |
+| `fbclid`, `gclid`, `ttclid`, `wbraid`, `gbraid` | Ad click IDs |
+| `network` | Ad network |
+| `creative_id` | Ad creative ID |
 
-  // UTM parameters
-  console.log(referrer.utmSource);
-  console.log(referrer.utmMedium);
-  console.log(referrer.utmCampaign);
-  console.log(referrer.utmTerm);
-  console.log(referrer.utmContent);
+Neither method returns `oppref`.
 
-  // Timestamps
-  console.log(referrer.referrerClickTimestamp);   // When the referrer link was clicked (ms)
-  console.log(referrer.installBeginTimestamp);     // When the install began (ms)
-  console.log(referrer.installCompleteTimestamp);  // When the install completed (ms)
-
-  // Raw referrer URL
-  console.log(referrer.referrerUrl);
-}
-```
-
-**Requirements:**
-- Android only (returns `null` on iOS)
-- Requires the Google Play Install Referrer Library in `android/app/build.gradle`:
-  ```groovy
-  implementation 'com.android.installreferrer:installreferrer:2.2'
-  ```
-
-### App Tracking Transparency
-
-Update after ATT dialog:
-
-```typescript
-const { status } = await requestTrackingPermissionsAsync();
-await Datalyr.updateTrackingAuthorization(status === 'granted');
-```
-
-### Integration Status
-
-```typescript
-const status = Datalyr.getPlatformIntegrationStatus();
-// { appleSearchAds: boolean, playInstallReferrer: boolean }
-```
+Datalyr also receives Superwall and RevenueCat events through server-side webhooks. The SDK methods and the webhooks are independent — use one or both.
 
 ---
 
 ## Enhanced App Campaigns
 
-Run mobile app ads through web campaigns (Meta Sales, TikTok Traffic, Google Ads) that redirect users to the app store through your own domain. Because these are real web campaigns landing on a page you own, ad platforms treat them as regular website traffic — full-funnel attribution and no per-campaign adset cap.
+Run app ads as web campaigns (Meta Sales, TikTok Website Conversions, Google Ads) that land on a page you own and then send the user to the app store. Ad platforms treat that traffic as a website campaign, so there is no per-campaign ad set cap.
 
-### How It Works
+1. The user clicks your ad and lands on your domain, which loads the Datalyr Web SDK (`dl.js`).
+2. The Web SDK captures `fbclid`, `ttclid`, `gclid`, `oppref`, UTM parameters, and the `_fbp`, `_fbc`, `_ttp`, and `__oppref` cookies.
+3. `trackAppDownloadClick()` fires and sends the user to the app store.
+4. After install, the mobile SDK matches through the Play Store referrer on Android, or IP matching on iOS.
+5. In-app events fire, and conversion rules deliver them to each platform server-side.
 
-1. User clicks your ad -> lands on a page on your domain with the Datalyr web SDK (`dl.js`)
-2. SDK captures attribution (fbclid, ttclid, gclid, oppref, UTMs, ad cookies like `_fbp`/`_fbc`/`_ttp`/`__oppref`)
-3. User redirects to app store (via button click or auto-redirect)
-4. User installs app -> mobile SDK matches via Play Store referrer (Android, ~95%) or IP matching (iOS, ~90%+)
-5. In-app events fire -> conversions sent to Meta/TikTok/Google server-side via postbacks
+### Create the link
 
-### Setup
+In Datalyr, open **Track**, create a link, and choose **App Link**. Enter your prelander URL. The app store URL goes in your page code, inside `trackAppDownloadClick()`.
 
-**1. Create a tracking link** in the Datalyr dashboard: Track -> Create Link -> App Link. Enter your prelander page URL and app store URLs.
+### Host the page
 
-**2. Host a page on your domain** with one of these options:
+> **The page must run JavaScript.** A server-side redirect — 301, 302, nginx, or a Cloudflare Page Rule — never loads `dl.js`, so attribution is lost. Host the page on your own domain, not on `datalyr.com`.
 
-#### Option A: Prelander (Recommended)
-
-A real landing page with a download button. Better ad platform compliance, higher intent.
+#### Prelander
 
 ```html
 <!DOCTYPE html>
@@ -845,13 +644,13 @@ A real landing page with a download button. Better ad platform compliance, highe
   <button id="android-download">Download for Android</button>
 
   <script>
-    document.getElementById('ios-download').addEventListener('click', function() {
+    document.getElementById('ios-download').addEventListener('click', function () {
       Datalyr.trackAppDownloadClick({
         targetPlatform: 'ios',
         appStoreUrl: 'https://apps.apple.com/app/idXXXXXXXXXX'
       });
     });
-    document.getElementById('android-download').addEventListener('click', function() {
+    document.getElementById('android-download').addEventListener('click', function () {
       Datalyr.trackAppDownloadClick({
         targetPlatform: 'android',
         appStoreUrl: 'https://play.google.com/store/apps/details?id=com.example.app'
@@ -862,11 +661,9 @@ A real landing page with a download button. Better ad platform compliance, highe
 </html>
 ```
 
-#### Option B: Redirect Page
+#### Redirect page
 
-Instant redirect -- no visible content, user goes straight to app store.
-
-> **Note:** Some ad platforms (particularly Meta) may flag redirect pages with no visible content as low-quality landing pages or cloaking. Use the prelander option if compliance is a concern.
+> **Meta flags redirect pages with no visible content as low-quality or cloaking.** Use the prelander when ad platform compliance matters.
 
 ```html
 <!DOCTYPE html>
@@ -874,7 +671,7 @@ Instant redirect -- no visible content, user goes straight to app store.
 <head>
   <script src="https://track.datalyr.com/dl.js" data-workspace-id="YOUR_WORKSPACE_ID"></script>
   <script>
-    window.addEventListener('DOMContentLoaded', function() {
+    window.addEventListener('DOMContentLoaded', function () {
       var isAndroid = /android/i.test(navigator.userAgent);
       Datalyr.trackAppDownloadClick({
         targetPlatform: isAndroid ? 'android' : 'ios',
@@ -889,165 +686,35 @@ Instant redirect -- no visible content, user goes straight to app store.
 </html>
 ```
 
-**3. Set up your ad campaign:**
+The redirect page adds roughly 100 to 200 ms while `dl.js` loads. The prelander adds none, because the user clicks a button.
 
-- **Meta Ads**: Campaign objective -> Sales, conversion location -> Website, placements -> Mobile only. Paste your page URL as the Website URL. Runs as a regular web campaign with no per-campaign adset cap.
-- **TikTok Ads**: Campaign objective -> Website Conversions, paste your page URL as destination. Select your TikTok Pixel from Datalyr.
-- **Google Ads**: Performance Max or Search campaign. Use your page URL as the landing page.
+### Campaign settings
 
-Add UTM parameters to the URL so attribution flows through:
-- Meta: `?utm_source=facebook&utm_medium=cpc&utm_campaign={{campaign.name}}&utm_content={{adset.name}}&utm_term={{ad.name}}`
-- TikTok: `?utm_source=tiktok&utm_medium=cpc&utm_campaign=__CAMPAIGN_NAME__&utm_content=__AID_NAME__&utm_term=__CID_NAME__`
-- Google: `?utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_content={adgroupid}&utm_term={keyword}`
-
-### Important
-
-- The page **must load JavaScript**. Server-side redirects (301/302, nginx, Cloudflare Page Rules) will NOT work.
-- Host on your own domain -- do not use `datalyr.com` or shared domains.
-- The redirect page adds ~100-200ms for the SDK to load. Prelander has no latency since the user clicks a button.
+| Platform | Objective | Destination | UTM template |
+|---|---|---|---|
+| Meta | Sales, conversion location Website, mobile placements only | Your page URL as **Website URL** | `?utm_source=facebook&utm_medium=cpc&utm_campaign={{campaign.name}}&utm_content={{adset.name}}&utm_term={{ad.name}}` |
+| TikTok | Website Conversions | Your page URL | `?utm_source=tiktok&utm_medium=cpc&utm_campaign=__CAMPAIGN_NAME__&utm_content=__AID_NAME__&utm_term=__CID_NAME__` |
+| Google Ads | Performance Max or Search | Your page URL as the landing page | `?utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_content={adgroupid}&utm_term={keyword}` |
 
 ---
 
-## Third-Party Integrations
-
-### Superwall
-
-Pass Datalyr attribution data to Superwall to personalize paywalls by ad source, campaign, ad set, and keyword.
+## Migrating from AppsFlyer or Adjust
 
 ```typescript
-import { Datalyr } from '@datalyr/react-native';
-import Superwall from '@superwall/react-native-superwall';
-
-// After both SDKs are initialized
-Superwall.setUserAttributes(Datalyr.getSuperwallAttributes());
-
-// Your placements will now have attribution data available as filters
-Superwall.register({ placement: 'onboarding_paywall' });
-```
-
-Call after `Datalyr.initialize()` completes. If using ATT on iOS, call again after the user responds to the ATT prompt to include the IDFA.
-
-**Returned attribute keys:**
-
-| Key | Description |
-|-----|-------------|
-| `datalyr_id` | The user's DATALYR visitor ID |
-| `media_source` | Traffic source (e.g., `facebook`, `google`) |
-| `campaign` | Campaign name from the ad |
-| `adgroup` | Ad group or ad set name |
-| `ad` | Individual ad ID |
-| `keyword` | Search keyword that triggered the ad |
-| `network` | Ad network name |
-| `utm_source` | UTM source parameter |
-| `utm_medium` | UTM medium parameter (e.g., `cpc`) |
-| `utm_campaign` | UTM campaign parameter |
-| `utm_term` | UTM term parameter |
-| `utm_content` | UTM content parameter |
-| `lyr` | DATALYR tracking link ID |
-| `fbclid` | Meta click ID from the ad URL |
-| `gclid` | Google click ID from the ad URL |
-| `ttclid` | TikTok click ID from the ad URL |
-| `idfa` | Apple advertising ID (only if ATT authorized) |
-| `gaid` | Google advertising ID (Android) |
-| `att_status` | App Tracking Transparency status (`0`-`3`) |
-
-Only non-empty values are included.
-
-### RevenueCat
-
-Pass Datalyr attribution data to RevenueCat for revenue attribution and offering targeting.
-
-```typescript
-import { Datalyr } from '@datalyr/react-native';
-import Purchases from 'react-native-purchases';
-
-// After both SDKs are configured
-Purchases.setAttributes(Datalyr.getRevenueCatAttributes());
-```
-
-Call after configuring the Purchases SDK and before the first purchase. If using ATT, call again after permission is granted to include IDFA.
-
-**Reserved attributes (`$`-prefixed):**
-
-| Key | Description |
-|-----|-------------|
-| `$datalyrId` | The user's DATALYR visitor ID |
-| `$mediaSource` | Traffic source (e.g., `facebook`, `google`) |
-| `$campaign` | Campaign name from the ad |
-| `$adGroup` | Ad group or ad set name |
-| `$ad` | Individual ad ID |
-| `$keyword` | Search keyword that triggered the ad |
-| `$idfa` | Apple advertising ID (only if ATT authorized) |
-| `$gpsAdId` | Google advertising ID (Android) |
-| `$attConsentStatus` | ATT consent status (see mapping below) |
-
-**ATT status mapping for `$attConsentStatus`:**
-
-| ATT Value | String |
-|-----------|--------|
-| 0 | `notDetermined` |
-| 1 | `restricted` |
-| 2 | `denied` |
-| 3 | `authorized` |
-
-**Custom attributes:**
-
-| Key | Description |
-|-----|-------------|
-| `utm_source` | UTM source parameter |
-| `utm_medium` | UTM medium parameter (e.g., `cpc`) |
-| `utm_campaign` | UTM campaign parameter |
-| `utm_term` | UTM term parameter |
-| `utm_content` | UTM content parameter |
-| `lyr` | DATALYR tracking link ID |
-| `fbclid` | Meta click ID from the ad URL |
-| `gclid` | Google click ID from the ad URL |
-| `ttclid` | TikTok click ID from the ad URL |
-| `wbraid` | Google web-to-app click ID |
-| `gbraid` | Google app click ID |
-| `network` | Ad network |
-| `creative_id` | Creative ID |
-
-Only non-empty values are included.
-
-> Datalyr also receives Superwall and RevenueCat events via server-side webhooks for analytics. The SDK methods and webhook integration are independent -- you can use one or both.
-
----
-
-## Migrating from AppsFlyer / Adjust
-
-Datalyr provides similar functionality with a simpler integration.
-
-### From AppsFlyer
-
-```typescript
-// BEFORE: AppsFlyer
-import appsFlyer from 'react-native-appsflyer';
+// AppsFlyer
 appsFlyer.logEvent('af_purchase', { af_revenue: 99.99, af_currency: 'USD' });
 
-// AFTER: Datalyr
-import { Datalyr } from '@datalyr/react-native';
-await Datalyr.trackPurchase(99.99, 'USD', 'product_id');
-```
-
-### From Adjust
-
-```typescript
-// BEFORE: Adjust
-import { Adjust, AdjustEvent } from 'react-native-adjust';
+// Adjust
 const event = new AdjustEvent('abc123');
 event.setRevenue(99.99, 'USD');
 Adjust.trackEvent(event);
 
-// AFTER: Datalyr
-import { Datalyr } from '@datalyr/react-native';
-await Datalyr.trackPurchase(99.99, 'USD');
+// Datalyr
+await Datalyr.trackPurchase(99.99, 'USD', 'pro_yearly');
 ```
 
-### Event Mapping
-
 | AppsFlyer | Adjust | Datalyr |
-|-----------|--------|---------|
+|---|---|---|
 | `af_purchase` | `PURCHASE` | `trackPurchase()` |
 | `af_add_to_cart` | `ADD_TO_CART` | `trackAddToCart()` |
 | `af_initiated_checkout` | `INITIATE_CHECKOUT` | `trackInitiateCheckout()` |
@@ -1055,31 +722,103 @@ await Datalyr.trackPurchase(99.99, 'USD');
 | `af_content_view` | `VIEW_CONTENT` | `trackViewContent()` |
 | `af_subscribe` | `SUBSCRIBE` | `trackSubscription()` |
 
-### Migration Checklist
-
-- [ ] Remove old SDK: `npm uninstall react-native-appsflyer`
-- [ ] Install Datalyr: `npm install @datalyr/react-native`
-- [ ] Run `cd ios && pod install`
-- [ ] Replace initialization and event tracking code
-- [ ] Verify events in Datalyr dashboard
+1. Remove the old package: `npm uninstall react-native-appsflyer`.
+2. Install Datalyr: `npm install @datalyr/react-native expo-modules-core`.
+3. Run `cd ios && pod install`.
+4. Replace initialization and event calls.
+5. Open **Events** in Datalyr and confirm `app_install` arrives.
 
 ---
 
-## Expo Support
+## Queue and Limits
+
+> **Nothing batches over the network.** The queue drains `batchSize` events per pass, then sends one HTTP request per event. There is no batch endpoint, and `batchSize` is not a send threshold — every `enqueue()` triggers a send while online.
+
+| Limit | Value |
+|---|---|
+| Events drained per pass | 10, from `batchSize` |
+| HTTP requests per drain | One per event |
+| Flush interval | 30,000 ms |
+| Retries per event | 3 |
+| Retry backoff | `2^n × retryDelay + random(0…1000)` ms, capped at 30,000 ms |
+| `Retry-After` honored | Capped at 30,000 ms |
+| Request timeout | 15,000 ms |
+| Client rate limit | 100 requests per 60,000 ms. The SDK waits, up to 60,100 ms. |
+| Queue | 100 events |
+| Dead-letter queue | 100 events, 3 replays each, discarded after 7 days |
+| Pre-init buffer | 50 events |
+| Event name | 100 characters |
+| Journey | 30 touchpoints over 90 days |
+| Attribution lookup timeout | 10,000 ms |
+
+| Response | Behavior |
+|---|---|
+| `429`, `408` | Retried with backoff, honoring `Retry-After` |
+| `401`, other `4xx` | Dropped. A wrong API key produces this. |
+| `5xx`, network failure, timeout | Retried up to `maxRetries`, then moved to the dead-letter queue |
+
+Events persist in AsyncStorage across app restarts and send when connectivity returns.
 
 ```typescript
-import { Datalyr } from '@datalyr/react-native/expo';
-```
+await Datalyr.flush();
 
-Same API as standard React Native.
+const status = Datalyr.getStatus();
+console.log(status.initialized);
+console.log(status.queueStats.queueSize);
+console.log(status.queueStats.isOnline);
+```
 
 ---
 
-## TypeScript
+## API Reference
+
+Every method below is static on `Datalyr`, except where marked.
+
+| Method | Signature |
+|---|---|
+| `initialize` | `(config: DatalyrConfig) => Promise<void>` |
+| `track` | `(eventName: string, eventData?: EventData) => Promise<void>` |
+| `screen` | `(screenName: string, properties?: EventData) => Promise<void>` |
+| `identify` | `(userId: string, properties?: UserProperties) => Promise<void>` |
+| `alias` | `(newUserId: string, previousId?: string) => Promise<void>` |
+| `reset` | `() => Promise<void>` |
+| `flush` | `() => Promise<void>` |
+| `destroy` | `() => void` — instance only |
+| `getStatus` | `() => { initialized, workspaceId, visitorId, anonymousId, sessionId, currentUserId?, queueStats, attribution, journey }` |
+| `getAnonymousId` | `() => string` |
+| `getAttributionData` | `() => AttributionData` |
+| `setAttributionData` | `(data: Partial<AttributionData>) => Promise<void>` |
+| `getDeferredAttributionData` | `() => DeferredDeepLinkResult \| null` — always `null` |
+| `getJourney` | `() => TouchPoint[]` — instance only |
+| `getJourneySummary` | `() => JourneySummary` — instance only |
+| `getCurrentSession` | `() => SessionData \| null` |
+| `endSession` | `() => Promise<void>` |
+| `updateAutoEventsConfig` | `(config: Partial<AutoEventConfig>) => void` |
+| `trackAppUpdate` | `(previousVersion: string, currentVersion: string) => Promise<void>` |
+| `trackWithSKAdNetwork` | `(event: string, properties?: EventData) => Promise<void>` |
+| `trackPurchase` | `(value: number, currency = 'USD', productId?: string) => Promise<void>` |
+| `trackSubscription` | `(value: number, currency = 'USD', plan?: string) => Promise<void>` |
+| `trackAddToCart` | `(value: number, currency = 'USD', productId?: string, productName?: string) => Promise<void>` |
+| `trackViewContent` | `(contentId?: string, contentName?: string, contentType = 'product', value?: number, currency?: string) => Promise<void>` |
+| `trackInitiateCheckout` | `(value: number, currency = 'USD', numItems?: number, productIds?: string[]) => Promise<void>` |
+| `trackCompleteRegistration` | `(method?: string) => Promise<void>` |
+| `trackSearch` | `(query: string, resultIds?: string[]) => Promise<void>` |
+| `trackLead` | `(value?: number, currency?: string) => Promise<void>` |
+| `trackAddPaymentInfo` | `(success = true) => Promise<void>` |
+| `getConversionValue` | `(event: string, properties?: Record<string, any>) => number \| null` |
+| `getPlatformIntegrationStatus` | `() => { appleSearchAds: boolean; playInstallReferrer: boolean }` |
+| `getAppleSearchAdsAttribution` | `() => AppleSearchAdsAttribution \| null` |
+| `getPlayInstallReferrer` | `() => Record<string, any> \| null` — instance, and static on the Expo entry point |
+| `getSuperwallAttributes` | `() => Record<string, string>` |
+| `getRevenueCatAttributes` | `() => Record<string, string>` |
+| `updateTrackingAuthorization` | `(enabled: boolean) => Promise<void>` |
+
+### TypeScript
 
 ```typescript
 import {
   Datalyr,
+  datalyr,
   DatalyrConfig,
   EventData,
   UserProperties,
@@ -1091,135 +830,47 @@ import {
 
 ---
 
-## API Reference
-
-All methods are static on the `Datalyr` class unless noted otherwise.
-
-### Initialization
-
-| Method | Description |
-|--------|-------------|
-| `initialize(config: DatalyrConfig)` | Initialize the SDK. Must be called before any other method. |
-
-### Event Tracking
-
-| Method | Description |
-|--------|-------------|
-| `track(eventName, eventData?)` | Track a custom event |
-| `screen(screenName, properties?)` | Track a screen view |
-| `trackWithSKAdNetwork(event, properties?)` | Track event with SKAN conversion value encoding |
-| `trackPurchase(value, currency?, productId?)` | Track a purchase |
-| `trackSubscription(value, currency?, plan?)` | Track a subscription |
-| `trackAddToCart(value, currency?, productId?, productName?)` | Track add-to-cart |
-| `trackViewContent(contentId?, contentName?, contentType?, value?, currency?)` | Track content view |
-| `trackInitiateCheckout(value, currency?, numItems?, productIds?)` | Track checkout start |
-| `trackCompleteRegistration(method?)` | Track registration |
-| `trackSearch(query, resultIds?)` | Track a search |
-| `trackLead(value?, currency?)` | Track a lead |
-| `trackAddPaymentInfo(success?)` | Track payment info added |
-
-### User Identity
-
-| Method | Description |
-|--------|-------------|
-| `identify(userId, properties?)` | Identify a user |
-| `alias(newUserId, previousId?)` | Associate a new user ID with a previous one |
-| `reset()` | Clear user ID and start new session |
-| `getAnonymousId()` | Get the persistent anonymous device ID |
-
-### Sessions
-
-| Method | Description |
-|--------|-------------|
-| `getCurrentSession()` | Get current session data |
-| `endSession()` | Force end the current session |
-
-### Attribution
-
-| Method | Description |
-|--------|-------------|
-| `getAttributionData()` | Get captured attribution data |
-| `setAttributionData(data)` | Set attribution data manually |
-| `getDeferredAttributionData()` | Get deferred attribution from deep links / install referrer |
-
-### Configuration
-
-| Method | Description |
-|--------|-------------|
-| `updateAutoEventsConfig(config)` | Update auto-event settings at runtime |
-
-### Platform Integrations
-
-| Method | Description |
-|--------|-------------|
-| `getAppleSearchAdsAttribution()` | Get Apple Search Ads attribution (iOS) |
-| `getPlatformIntegrationStatus()` | Check which platform integrations are active |
-| `updateTrackingAuthorization(enabled)` | Update ATT status after user responds to dialog |
-
-### SKAdNetwork
-
-| Method | Description |
-|--------|-------------|
-| `getConversionValue(event, properties?)` | Preview conversion value without sending to Apple |
-
-### Third-Party Integrations
-
-| Method | Description |
-|--------|-------------|
-| `getSuperwallAttributes()` | Get attribution formatted for Superwall |
-| `getRevenueCatAttributes()` | Get attribution formatted for RevenueCat |
-
-### Status
-
-| Method | Description |
-|--------|-------------|
-| `getStatus()` | Get SDK status (initialized, queue stats, online) |
-| `flush()` | Send all queued events immediately |
-
-### Instance Methods (via `datalyr` singleton)
-
-These methods are available on the `datalyr` instance export, not on the static `Datalyr` class:
-
-```typescript
-import { datalyr } from '@datalyr/react-native';
-```
-
-| Method | Description |
-|--------|-------------|
-| `getJourneySummary()` | Get journey summary (first/last touch, touchpoint count) |
-| `getJourney()` | Get full customer journey (all touchpoints) |
-| `getPlayInstallReferrer()` | Get raw Play Install Referrer data (Android) |
-
----
-
 ## Troubleshooting
 
-### Events Not Appearing
+### No events in the dashboard
 
-**1. Check SDK Status**
-```typescript
-const status = Datalyr.getStatus();
-console.log('Initialized:', status.initialized);
-console.log('Queue size:', status.queueStats.queueSize);
-console.log('Online:', status.queueStats.isOnline);
-```
+1. Confirm the API key starts with `dk_`.
+2. Read `Datalyr.getStatus().initialized`.
+3. Read `Datalyr.getStatus().queueStats.queueSize`. A queue that grows without draining means the API key is wrong.
+4. Call `Datalyr.flush()`.
+5. Open **Events** in Datalyr and filter on `app_install`.
 
-**2. Enable Debug Mode**
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  debug: true,
-});
-```
+Log lines carry a `[Datalyr]` prefix. They print only in a development build, because the log helpers test `__DEV__`. Setting `debug: true` does not turn them on in a release build.
 
-**3. Force Flush**
-```typescript
-await Datalyr.flush();
-```
+### Screen views are missing
 
-**4. Verify API Key** - Should start with `dk_`
+Filter on `pageview`, not `screen`. `screen()` sends the event name `pageview`.
 
-### iOS Build Errors
+### Duplicate screen views
+
+Automatic screen tracking and manual `Datalyr.screen()` calls each send their own `pageview`. Use one path per screen.
+
+### Attribution is empty
+
+1. Confirm `enableAttribution` is `true`.
+2. Read `Datalyr.getPlatformIntegrationStatus()`.
+3. On Android, confirm `installreferrer:2.2` is in `android/app/build.gradle`.
+4. On iOS, confirm the device runs 14.3 or later for Apple Search Ads.
+5. Call `identify()` with the user's email as the IP-match fallback.
+
+`getDeferredAttributionData()` always returns `null`. Use `getPlayInstallReferrer()` or `getAppleSearchAdsAttribution()`.
+
+### Events go to the wrong host
+
+`endpoint` is ignored while `useServerTracking` is `true`. Set `useServerTracking: false` alongside `endpoint`.
+
+### Conversion values never update
+
+1. Confirm `skadTemplate` is set in the config.
+2. Call `trackWithSKAdNetwork()` rather than `track()`.
+3. Confirm the device runs iOS 14.0 or later, and 16.1 or later for SKAN 4.0.
+
+### iOS build errors
 
 ```bash
 cd ios
@@ -1228,49 +879,23 @@ pod cache clean --all
 pod install
 ```
 
-**Clean Reset**
+Full reset:
+
 ```bash
 rm -rf node_modules ios/Pods ios/Podfile.lock
 npm install && cd ios && pod install
 ```
 
-### Android Build Errors
+### Android build errors
 
 ```bash
 cd android && ./gradlew clean
 npx react-native run-android
 ```
 
-### SKAdNetwork Not Updating
+### The app throws before initialize() runs
 
-1. iOS 14.0+ required (16.1+ for SKAN 4.0)
-2. Set `skadTemplate` in config
-3. Use `trackWithSKAdNetwork()` instead of `track()`
-
-### Attribution Not Captured
-
-```typescript
-await Datalyr.initialize({
-  apiKey: 'dk_your_api_key',
-  enableAttribution: true,
-});
-
-// Check data
-const attribution = Datalyr.getAttributionData();
-```
-
-### App Tracking Transparency (iOS 14.5+)
-
-```typescript
-import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
-
-const { status } = await requestTrackingPermissionsAsync();
-await Datalyr.updateTrackingAuthorization(status === 'granted');
-```
-
-### Debug Logging
-
-Look for `[Datalyr]` prefixed messages in console.
+Install `expo-modules-core`. The SDK calls `requireNativeModule` at module load, in bare React Native too.
 
 ---
 
