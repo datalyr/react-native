@@ -549,6 +549,21 @@ export class DatalyrSDK {
         utm_source: webAttribution.utm_source,
       });
 
+      // Never record an identity-only result as a web match: a real browser
+      // visitor with NO click found is an identity, not a touch. The server's
+      // public route now returns found:false for these, but guard here too —
+      // recording them minted ~1,700/hr of false self-referential bridge rows
+      // on one workspace. Same for a result whose visitor_id is OUR OWN
+      // current visitor: that is this SDK's prior events reflected back.
+      if (webAttribution.identity_only === true) {
+        debugLog('Web attribution is identity-only — skipping bridge event');
+        return;
+      }
+      if (webAttribution.visitor_id && webAttribution.visitor_id === this.state.visitorId) {
+        debugLog('Web attribution visitor is our own visitor id — skipping bridge event');
+        return;
+      }
+
       // Merge BEFORE tracking (matches the IP/deferred path). This makes
       // $web_attribution_matched self-consistent — see createEventPayload, which spreads
       // attributionData FIRST so the explicit web-recovered fields below win over any
@@ -643,6 +658,18 @@ export class DatalyrSDK {
         has_gclid: !!webAttribution.gclid,
         utm_source: webAttribution.utm_source,
       });
+
+      // Same guard as the email path: identity-only results and results
+      // pointing at our own visitor id are not web touches — do not merge
+      // and do not fire the bridge event.
+      if (webAttribution.identity_only === true) {
+        debugLog('Deferred web attribution is identity-only — skipping bridge event');
+        return;
+      }
+      if (webAttribution.visitor_id && webAttribution.visitor_id === this.state.visitorId) {
+        debugLog('Deferred web attribution visitor is our own visitor id — skipping bridge event');
+        return;
+      }
 
       // Merge web attribution into current session
       await attributionManager.mergeWebAttribution(webAttribution);
