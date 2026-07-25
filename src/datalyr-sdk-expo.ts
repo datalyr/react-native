@@ -1227,7 +1227,6 @@ export class DatalyrSDKExpo {
     try {
       const [userId, userProperties] = await Promise.all([
         Storage.getItem<string>(STORAGE_KEYS.USER_ID),
-        Storage.removeItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT),
         Storage.getItem<UserProperties>(STORAGE_KEYS.USER_PROPERTIES),
       ]);
 
