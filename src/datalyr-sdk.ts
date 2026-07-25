@@ -285,7 +285,7 @@ export class DatalyrSDK {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
-          sdk_version: '1.7.14',
+          sdk_version: '1.7.15',
           ...installData,
         });
         // TR-21: commit the first-launch marker only AFTER app_install is durably enqueued —
@@ -1359,7 +1359,7 @@ export class DatalyrSDK {
         country: deriveCountryFromLocale(deviceInfo.locale) || undefined,
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
-        sdk_version: '1.7.14',
+        sdk_version: '1.7.15',
         schema_version: 1, // A3-25: versioned-envelope stamp (see web SDK)
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
