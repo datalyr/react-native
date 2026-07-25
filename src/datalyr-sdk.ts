@@ -428,6 +428,18 @@ export class DatalyrSDK {
       this.state.userProperties = { ...this.state.userProperties, ...properties };
 
       // Persist user data
+      // Redundant-identify suppression: identify() is host-app-driven and apps
+      // commonly call it every launch/screen. Re-emitting $identify and re-running
+      // the web-attribution lookup for an UNCHANGED identity teaches the server
+      // nothing. Measured 2026-07-25: 6.8 identifies/visitor/day on shipped
+      // builds, worst single user 129 in 24h. Fingerprint includes the visitor id
+      // so a rotation (reset/new install) always re-emits and links are never lost.
+      const identityFingerprint = `${this.state.visitorId}|${userId}|${
+        properties ? Object.keys(properties).sort().map((k) => `${k}=${String((properties as Record<string, unknown>)[k])}`).join('&') : ''
+      }`;
+      const previousFingerprint = await Storage.getItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT);
+      const isRedundantIdentify = previousFingerprint === identityFingerprint;
+
       await this.persistUserData();
 
       // 9.C.6: normalize identity trait keys (camelCase → snake_case) and hoist email/phone to
@@ -444,6 +456,12 @@ export class DatalyrSDK {
         : (typeof props.lastName === 'string' ? props.lastName : undefined);
 
       // Track $identify event for identity resolution
+      if (isRedundantIdentify) {
+        debugLog('Skipping redundant identify (unchanged identity):', userId);
+        return;
+      }
+      await Storage.setItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT, identityFingerprint);
+
       await this.track('$identify', {
         userId,
         anonymous_id: this.state.anonymousId,
@@ -763,6 +781,9 @@ export class DatalyrSDK {
       // Remove from storage
       await Storage.removeItem(STORAGE_KEYS.USER_ID);
       await Storage.removeItem(STORAGE_KEYS.USER_PROPERTIES);
+      // Clear the identify fingerprint so the NEXT identify after a logout /
+      // account switch always re-emits (the new identity must relink).
+      await Storage.removeItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT);
 
       // TR-28: wipe the previous user's attribution + journey BEFORE rotating ids. fbclid/
       // gclid/fbc/utm/lyr are spread into EVERY event via createEventPayload (feeding Meta

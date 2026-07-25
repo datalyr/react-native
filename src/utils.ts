@@ -24,6 +24,10 @@ export const STORAGE_KEYS = {
   DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',  // capped store for events that exhausted retries (vs silent drop)
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
   LAST_SESSION_TIME: '@datalyr/last_session_time',
+  // Fingerprint of the last identify() that actually emitted, so a host app
+  // calling identify() on every launch/screen does not re-emit unchanged
+  // identity. Cleared by reset(). See identifyUser().
+  LAST_IDENTITY_FINGERPRINT: '@datalyr/last_identity_fingerprint',
 };
 
 // Constants
