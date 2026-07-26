@@ -1163,6 +1163,36 @@ export class DatalyrSDK {
   // MARK: - Third-Party Integration Methods
 
   /**
+   * Bind a provider-side user id to this install (person contract §8).
+   *
+   * Call this with EXACTLY the id you hand the provider — e.g.
+   * `bindProviderIdentity('revenuecat', await Purchases.getAppUserID())` or
+   * `bindProviderIdentity('superwall', appUserId)` — right after configuring
+   * that SDK. It emits a deterministic identity edge (install ↔
+   * ext:<namespace>), so provider webhooks resolve to this person through
+   * the backend registry WITHOUT depending on the datalyr_id attribute
+   * forwarding, and the backend gains a real eligible/complete coverage
+   * denominator for the handoff. Safe to call on every launch — the
+   * backend edge write is idempotent.
+   */
+  async bindProviderIdentity(namespace: string, providerUserId: string): Promise<void> {
+    try {
+      const ns = String(namespace || '').trim().toLowerCase();
+      const id = String(providerUserId || '').trim();
+      if (!ns || !id) {
+        errorLog(`bindProviderIdentity requires a namespace and a provider user id (got '${namespace}', '${providerUserId}')`);
+        return;
+      }
+      await this.track('$provider_identity_bound', {
+        external_ids: { [ns]: id },
+        provider_namespace: ns,
+      });
+    } catch (error) {
+      errorLog('Error binding provider identity:', error as Error);
+    }
+  }
+
+  /**
    * Get attribution data formatted for Superwall's setUserAttributes()
    * Returns a flat Record<string, string> with only non-empty values
    */
@@ -1708,6 +1738,10 @@ export class Datalyr {
 
   static async alias(newUserId: string, previousId?: string): Promise<void> {
     await datalyr.alias(newUserId, previousId);
+  }
+
+  static async bindProviderIdentity(namespace: string, providerUserId: string): Promise<void> {
+    await datalyr.bindProviderIdentity(namespace, providerUserId);
   }
 
   static async reset(): Promise<void> {

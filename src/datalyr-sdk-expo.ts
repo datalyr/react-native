@@ -987,6 +987,28 @@ export class DatalyrSDKExpo {
   // MARK: - Third-Party Integration Methods
 
   /**
+   * Bind a provider-side user id to this install (person contract §8).
+   * Mirror of datalyr-sdk.ts — call with exactly the id you hand the
+   * provider (RevenueCat appUserID, Superwall appUserId). Idempotent.
+   */
+  async bindProviderIdentity(namespace: string, providerUserId: string): Promise<void> {
+    try {
+      const ns = String(namespace || '').trim().toLowerCase();
+      const id = String(providerUserId || '').trim();
+      if (!ns || !id) {
+        errorLog(`bindProviderIdentity requires a namespace and a provider user id (got '${namespace}', '${providerUserId}')`);
+        return;
+      }
+      await this.track('$provider_identity_bound', {
+        external_ids: { [ns]: id },
+        provider_namespace: ns,
+      });
+    } catch (error) {
+      errorLog('Error binding provider identity:', error as Error);
+    }
+  }
+
+  /**
    * Get attribution data formatted for Superwall's setUserAttributes()
    */
   getSuperwallAttributes(): Record<string, string> {
@@ -1545,6 +1567,10 @@ export class DatalyrExpo {
 
   static getSuperwallAttributes(): Record<string, string> {
     return datalyrExpo.getSuperwallAttributes();
+  }
+
+  static async bindProviderIdentity(namespace: string, providerUserId: string): Promise<void> {
+    await datalyrExpo.bindProviderIdentity(namespace, providerUserId);
   }
 
   static getRevenueCatAttributes(): Record<string, string> {
