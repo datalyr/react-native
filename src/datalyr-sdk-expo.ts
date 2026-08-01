@@ -1061,7 +1061,9 @@ export class DatalyrSDKExpo {
     };
 
     // Reserved attributes ($ prefix)
-    set('$datalyrId', this.state.visitorId);
+    // CUSTOM key, deliberately un-prefixed — RevenueCat strips unknown `$`
+    // keys; the server reads `datalyr_id` (webhooks/platforms/revenuecat.js).
+    set('datalyr_id', this.state.visitorId);
     set('$mediaSource', attribution.utm_source);
     set('$campaign', attribution.utm_campaign);
     set('$adGroup', attribution.adset_id);

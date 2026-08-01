@@ -1244,8 +1244,14 @@ export class DatalyrSDK {
       if (value != null && String(value) !== '') attrs[key] = String(value);
     };
 
+    // Datalyr visitor id — CUSTOM key, deliberately un-prefixed: RevenueCat
+    // reserves the `$` namespace for its own attribute vocabulary and strips
+    // unknown `$` keys, so the old `$datalyrId` never reached the webhook and
+    // killed the deterministic visitor-id match. The server reads `datalyr_id`
+    // (webhooks/platforms/revenuecat.js).
+    set('datalyr_id', this.state.visitorId);
+
     // Reserved attributes ($ prefix)
-    set('$datalyrId', this.state.visitorId);
     set('$mediaSource', attribution.utm_source);
     set('$campaign', attribution.utm_campaign);
     set('$adGroup', attribution.adset_id);
