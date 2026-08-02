@@ -35,6 +35,11 @@ export const STORAGE_KEYS = {
   // switch. This key was present in utils.ts from 1.7.15 but MISSING here,
   // which made the whole suppression a no-op on Expo (see CHANGELOG 1.7.16).
   LAST_IDENTITY_FINGERPRINT: '@datalyr/last_identity_fingerprint',
+  // Deferred web→app IP-lookup state. Mirrors utils.ts — attribution.ts is shared and
+  // reads these through './utils', so the values MUST stay byte-identical (both builds
+  // share one AsyncStorage namespace).
+  DEFERRED_LOOKUP_RESOLVED: '@datalyr/deferred_lookup_resolved',
+  DEFERRED_LOOKUP_ATTEMPTS: '@datalyr/deferred_lookup_attempts',
 } as const;
 
 // Debug logging

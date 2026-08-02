@@ -289,14 +289,22 @@ export class DatalyrSDK {
         }
       }
 
+      // iOS: attempt deferred web-to-app attribution via IP matching, before app_install so
+      // the recovered click-ids ride on it. Android: the Play Store referrer covers this via
+      // playInstallReferrerIntegration.
+      //
+      // Gated on the lookup not having been ANSWERED yet, not on isInstall(): the
+      // first-launch flag is spent by the launch that observed the install whether or not
+      // the request ever reached the server, so an offline cold start — the ordinary state
+      // right after a store install — permanently forfeited the only web→app bridge.
+      // shouldAttemptDeferredLookup() bounds the retries by the server's match window and
+      // an attempt cap.
+      if (Platform.OS === 'ios' && (await attributionManager.shouldAttemptDeferredLookup())) {
+        await this.fetchDeferredWebAttribution();
+      }
+
       // Check for app install (after SDK is marked as initialized)
       if (attributionManager.isInstall()) {
-        // iOS: Attempt deferred web-to-app attribution via IP matching before tracking install
-        // Android: Play Store referrer is handled by playInstallReferrerIntegration
-        if (Platform.OS === 'ios') {
-          await this.fetchDeferredWebAttribution();
-        }
-
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
@@ -666,24 +674,33 @@ export class DatalyrSDK {
   }
 
   /**
-   * Fetch deferred web attribution on first app install.
-   * Uses IP-based matching (iOS) or Play Store referrer (Android) to recover
-   * attribution data (fbclid, utm_*, etc.) from a prelander web visit.
-   * Called automatically during initialize() when a fresh install is detected.
+   * Fetch deferred web attribution via IP-based matching, recovering attribution data
+   * (fbclid, utm_*, etc.) from a prelander web visit. Called automatically during
+   * initialize() while the lookup is still eligible (see
+   * AttributionManager.shouldAttemptDeferredLookup).
+   *
+   * Every exit path either marks the lookup resolved (the server answered) or leaves it
+   * eligible for a later launch (nothing reached the server / nothing usable came back).
    */
   private async fetchDeferredWebAttribution(): Promise<void> {
     if (!this.state.config?.apiKey) {
-      debugLog('API key not available for deferred attribution fetch');
+      // Not an answer from the server — a later launch with a configured key retries.
+      errorLog('API key not available for deferred attribution fetch — web→app match skipped');
       return;
     }
 
+    debugLog('Fetching deferred web attribution via IP matching...');
+
+    // Spend the attempt before the request goes out: a request that never returns (app
+    // killed mid-flight, hung connection) must still count against the bound.
+    await attributionManager.recordDeferredLookupAttempt();
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    let response: Response;
     try {
-      debugLog('Fetching deferred web attribution via IP matching...');
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-
-      const response = await fetch('https://api.datalyr.com/attribution/deferred-lookup', {
+      response = await fetch('https://api.datalyr.com/attribution/deferred-lookup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -692,16 +709,47 @@ export class DatalyrSDK {
         body: JSON.stringify({ platform: Platform.OS }),
         signal: controller.signal,
       });
-
+    } catch (error) {
+      // Transport-level failure (offline, captive portal, timeout) — the ordinary state
+      // right after a store install. Nothing was answered, so the lookup stays eligible
+      // and a later launch inside the match window retries it.
+      errorLog('Deferred attribution lookup did not reach the server — retrying on a later launch', error as Error);
+      return;
+    } finally {
       clearTimeout(timeout);
+    }
 
-      if (!response.ok) {
-        debugLog('Deferred attribution lookup failed:', response.status);
-        return;
+    if (!response.ok) {
+      // 5xx/408/429 are transient, so stay eligible. Anything else is definitive for this
+      // install — a disabled route (410), a rejected key (401) or a malformed request will
+      // not start working inside the server's match window.
+      const retryable = response.status >= 500 || response.status === 408 || response.status === 429;
+      if (!retryable) {
+        await attributionManager.markDeferredLookupResolved();
       }
+      errorLog(
+        `Deferred attribution lookup failed with status ${response.status}` +
+        (retryable ? ' — retrying on a later launch' : ' — not retryable, no further attempts'),
+      );
+      return;
+    }
 
-      const result = await response.json() as { found: boolean; attribution?: any };
+    let result: { found: boolean; attribution?: any };
+    try {
+      // Parse BEFORE marking resolved (same ordering as the email path): a truncated body
+      // or an HTML error page served as 200 is not an answer, and must not burn the
+      // install's one shot at the bridge.
+      result = await response.json() as { found: boolean; attribution?: any };
+    } catch (error) {
+      errorLog('Deferred attribution lookup returned an unparseable body — retrying on a later launch', error as Error);
+      return;
+    }
 
+    // A parsed 200 is the server's definitive answer, matched or not. A genuine "no web
+    // touch for this IP" is terminal — re-asking on every launch would never match.
+    await attributionManager.markDeferredLookupResolved();
+
+    try {
       if (!result.found || !result.attribution) {
         debugLog('No deferred web attribution found for this IP');
         return;
@@ -758,8 +806,9 @@ export class DatalyrSDK {
       debugLog('Successfully merged deferred web attribution');
 
     } catch (error) {
-      errorLog('Error fetching deferred web attribution:', error as Error);
-      // Non-blocking - email-based fallback will catch this on identify()
+      // The server already answered, so this is a local merge/track failure, not a reason
+      // to re-ask. Non-blocking — the email-based path still runs on identify().
+      errorLog('Error merging deferred web attribution:', error as Error);
     }
   }
 

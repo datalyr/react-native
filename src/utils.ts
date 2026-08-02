@@ -28,6 +28,12 @@ export const STORAGE_KEYS = {
   // calling identify() on every launch/screen does not re-emit unchanged
   // identity. Cleared by reset(). See identifyUser().
   LAST_IDENTITY_FINGERPRINT: '@datalyr/last_identity_fingerprint',
+  // Deferred web→app IP-lookup state, per install: whether the server has given a
+  // definitive answer, and how many requests have been issued. `first_launch_time`
+  // cannot serve as that state — it records that a launch was OBSERVED, not that the
+  // lookup was ANSWERED. See AttributionManager.shouldAttemptDeferredLookup().
+  DEFERRED_LOOKUP_RESOLVED: '@datalyr/deferred_lookup_resolved',
+  DEFERRED_LOOKUP_ATTEMPTS: '@datalyr/deferred_lookup_attempts',
 };
 
 // Constants

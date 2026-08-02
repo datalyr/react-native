@@ -109,6 +109,12 @@ export class AttributionManager {
   private isFirstLaunch: boolean = false;
   private initialized: boolean = false;
   private deepLinkSubscription: { remove: () => void } | null = null;
+  /**
+   * Install time in epoch ms, used to bound the deferred web→app lookup. null when the
+   * install time is unknown or unparseable — such a device cannot be bounded by the
+   * server's match window and is by definition not a fresh install, so it is not eligible.
+   */
+  private installTimeMs: number | null = null;
 
   /**
    * Initialize attribution tracking
@@ -199,6 +205,11 @@ export class AttributionManager {
         // false, no app_install fires, and this branch never runs again.
         this.isFirstLaunch = false;
         await Storage.setItem('@datalyr/first_launch_time', new Date().toISOString());
+        // The marker we just wrote is dated NOW, which would otherwise put this device
+        // inside the deferred lookup's match window and fire an IP lookup for the entire
+        // existing install base on the launch after an upgrade. This device installed long
+        // ago; no web touch from the last hour belongs to it, so the lookup is terminal.
+        await Storage.setItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED, true);
         debugLog('Existing install detected on upgrade; suppressing retroactive app_install');
         return;
       }
@@ -221,6 +232,7 @@ export class AttributionManager {
 
         this.attributionData.install_time = installTime;
         this.attributionData.first_open_time = installTime;
+        this.installTimeMs = Date.parse(installTime);
 
         // TR-21: do NOT persist the first-launch marker here. It is committed by
         // markInstallTracked() AFTER app_install is enqueued — so a crash/kill between init and
@@ -230,6 +242,8 @@ export class AttributionManager {
       } else {
         this.isFirstLaunch = false;
         this.attributionData.install_time = firstLaunchTime;
+        const parsed = Date.parse(firstLaunchTime);
+        this.installTimeMs = Number.isNaN(parsed) ? null : parsed;
         debugLog('Returning user, install time:', firstLaunchTime);
       }
     } catch (error) {
@@ -542,6 +556,75 @@ export class AttributionManager {
   }
 
   /**
+   * Deferred web→app lookup eligibility.
+   *
+   * The IP lookup is the ONLY web→app bridge for web-ad → app-install campaigns, and it
+   * runs during initialize() — exactly when a freshly installed device is least likely to
+   * have a usable network (store hand-off, captive portal, airplane mode). First launch is
+   * therefore the wrong gate: isFirstLaunch records that a launch was OBSERVED, and is
+   * spent whether or not the request ever reached the server, so one offline cold start
+   * forfeited attribution for the life of the install. Eligibility is instead "the server
+   * has not given a definitive answer".
+   *
+   * Two hard bounds, so retrying can never continue indefinitely:
+   * - the server only matches a web touch to this IP within its match window
+   *   (DEFERRED_IP_MATCH_WINDOW_MINUTES, 60 by default), so past an hour from install
+   *   there is nothing left to match and elapsed time can never shrink back;
+   * - the attempt counter is persisted BEFORE each request is issued, so attempts are
+   *   spent even by requests that never return (process killed mid-flight, hung socket),
+   *   and a device with a broken or rolled-back clock still runs out.
+   */
+  private static readonly DEFERRED_LOOKUP_WINDOW_MS = 60 * 60 * 1000;
+  private static readonly MAX_DEFERRED_LOOKUP_ATTEMPTS = 3;
+
+  /**
+   * Whether the deferred web→app IP lookup should be attempted on this launch.
+   */
+  async shouldAttemptDeferredLookup(): Promise<boolean> {
+    const resolved = await Storage.getItem<boolean>(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED);
+    if (resolved === true) {
+      return false;
+    }
+
+    if (this.installTimeMs === null) {
+      debugLog('Deferred lookup not attempted: install time unknown');
+      return false;
+    }
+
+    const elapsed = Date.now() - this.installTimeMs;
+    if (elapsed < 0 || elapsed >= AttributionManager.DEFERRED_LOOKUP_WINDOW_MS) {
+      debugLog('Deferred lookup not attempted: outside the server IP match window');
+      return false;
+    }
+
+    const attempts = (await Storage.getItem<number>(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS)) || 0;
+    if (attempts >= AttributionManager.MAX_DEFERRED_LOOKUP_ATTEMPTS) {
+      debugLog(`Deferred lookup not attempted: attempt limit reached (${attempts})`);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Count an issued lookup request. Called BEFORE the request goes out so an attempt that
+   * never returns still consumes budget.
+   */
+  async recordDeferredLookupAttempt(): Promise<void> {
+    const attempts = (await Storage.getItem<number>(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS)) || 0;
+    await Storage.setItem(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS, attempts + 1);
+  }
+
+  /**
+   * Record that the server answered definitively — matched or not. Terminal: a genuine
+   * "no web touch for this IP" must not re-ask on every launch.
+   */
+  async markDeferredLookupResolved(): Promise<void> {
+    await Storage.setItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED, true);
+    debugLog('Deferred lookup resolved; no further attempts this install');
+  }
+
+  /**
    * Track install event with attribution data
    */
   async trackInstall(): Promise<AttributionData> {
@@ -630,8 +713,13 @@ export class AttributionManager {
    */
   async clearAttributionData(): Promise<void> {
     this.attributionData = {};
+    this.installTimeMs = null;
     await Storage.removeItem(STORAGE_KEYS.ATTRIBUTION_DATA);
     await Storage.removeItem('@datalyr/first_launch_time');
+    // The deferred-lookup state is scoped to the install this marker describes; leaving it
+    // behind a wiped marker would make the "fresh install" this simulates ineligible.
+    await Storage.removeItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED);
+    await Storage.removeItem(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS);
     debugLog('Attribution data cleared');
   }
 
@@ -644,6 +732,10 @@ export class AttributionManager {
    * user's web click-ids into the new user, exactly the cross-user bleed reset() exists
    * to prevent. install_time is kept in memory too (it's device-install metadata, not
    * user-scoped), so subsequent events still carry it.
+   *
+   * For the same reason the deferred-lookup state (resolved/attempts) is deliberately NOT
+   * cleared here: the IP match is a per-INSTALL device fact, and re-opening it on logout
+   * would re-import one user's web touch into the next user's identity.
    */
   async clearAttributionForReset(): Promise<void> {
     const installTime = this.attributionData.install_time;
