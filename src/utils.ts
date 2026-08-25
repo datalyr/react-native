@@ -328,6 +328,56 @@ const getRuntimeLocale = (): string | undefined => {
 };
 
 /**
+ * Android SDK API level -> the marketing version a user agent reports.
+ *
+ * `Platform.Version` on Android is the API LEVEL (34), not the marketing version
+ * (14) — and the device-info fallbacks below have no other source for it. The
+ * deferred-lookup fingerprint is compared server-side against a version parsed
+ * out of the CLICK's user agent, which is always the marketing form, so sending
+ * "34" guarantees disagreement: neither the exact nor the major-version
+ * comparison can ever match, and the strongest single corroborating signal
+ * (+2) is dead for every app on this path.
+ *
+ * Unknown levels return undefined so the field is omitted rather than sent
+ * wrong — an absent signal costs nothing, a mismatched one costs the match.
+ */
+const ANDROID_API_TO_RELEASE: Record<number, string> = {
+  21: '5.0', 22: '5.1', 23: '6.0', 24: '7.0', 25: '7.1', 26: '8.0', 27: '8.1',
+  28: '9', 29: '10', 30: '11', 31: '12', 32: '12', 33: '13', 34: '14', 35: '15',
+  36: '16',
+};
+
+/**
+ * The OS version to use as a FINGERPRINT signal, in the marketing form the
+ * click side reports. Returns undefined when it cannot be determined.
+ */
+export const fingerprintOsVersion = (osVersion: string | undefined): string | undefined => {
+  if (!osVersion) return undefined;
+  if (Platform.OS !== 'android') return osVersion;
+  // A bare integer on Android is an API level (react-native-device-info's
+  // getSystemVersion already returns the marketing form, e.g. "14", which is
+  // also a bare integer — but every marketing version in use is <= 20 while
+  // every supported API level is >= 21, so the ranges do not overlap).
+  const n = Number(osVersion);
+  if (Number.isInteger(n) && n >= 21) return ANDROID_API_TO_RELEASE[n];
+  return osVersion;
+};
+
+/** Placeholder device models the fallbacks emit; never a real hardware model. */
+const PLACEHOLDER_MODELS = new Set(['android', 'unknown', 'iphone', 'ipad', 'test device']);
+
+/**
+ * The device model to use as a FINGERPRINT signal. The device-info fallbacks
+ * emit literals like 'Android' / 'Unknown' when the real model is unavailable;
+ * those can never match a click-side model ("SM-S918B") and would only ever be
+ * noise in the corroboration score.
+ */
+export const fingerprintDeviceModel = (model: string | undefined): string | undefined => {
+  if (!model) return undefined;
+  return PLACEHOLDER_MODELS.has(model.trim().toLowerCase()) ? undefined : model;
+};
+
+/**
  * A STABLE fallback device id, persisted in AsyncStorage so fingerprint_hash doesn't churn
  * on every launch when react-native-device-info is unavailable / throws. Reuses the
  * VISITOR_ID storage namespace via a dedicated key.

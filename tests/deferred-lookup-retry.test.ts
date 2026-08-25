@@ -41,12 +41,14 @@ const variants: Array<[string, () => any]> = [
 
 /** Count of deferred-lookup requests issued, plus a programmable responder. */
 let deferredCalls = 0;
+let deferredBodies: any[] = [];
 let respond: () => Promise<any> = async () => ({ ok: true, status: 200, json: async () => ({ found: false }) });
 
 const installFetchMock = () => {
-  (globalThis as any).fetch = async (url: string, _init?: any) => {
+  (globalThis as any).fetch = async (url: string, init?: any) => {
     if (typeof url === 'string' && url.startsWith(DEFERRED_URL)) {
       deferredCalls += 1;
+      try { deferredBodies.push(JSON.parse(init?.body ?? '{}')); } catch { deferredBodies.push({}); }
       return respond();
     }
     // Event ingest and everything else: succeed quietly.
@@ -81,6 +83,7 @@ beforeEach(async () => {
   (attributionManager as any).isFirstLaunch = false;
   await journeyManager.clearJourney();
   deferredCalls = 0;
+  deferredBodies = [];
   respond = async () => ({ ok: true, status: 200, json: async () => ({ found: false }) });
   installFetchMock();
 });
@@ -102,7 +105,15 @@ for (const [variant, createSDK] of variants) {
       expect(deferredCalls).toBe(2);
     });
 
-    it('treats a parsed 200 reporting no match as terminal', async () => {
+    it('treats a parsed 200 reporting no match as terminal (past the ingest-lag grace)', async () => {
+      // A no-match inside the first hour stays eligible (ingest lag — covered in the
+      // fingerprint describe below); past it, the same answer is terminal. Seed an
+      // install two hours old so this exercises the terminal path.
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(twoHoursAgo));
+      await AsyncStorage.setItem('@datalyr/visitor_id', 'visitor_from_earlier_launch');
+      await attributionManager.detectInstall();
+
       const first = createSDK();
       try { await initSDK(first); } finally { first.destroy(); }
       expect(deferredCalls).toBe(1);
@@ -185,11 +196,11 @@ describe('deferred web→app lookup bounds', () => {
   });
 
   it('is not eligible once the server match window has elapsed', async () => {
-    // Past the backend's IP match window (DEFERRED_IP_MATCH_WINDOW_MINUTES, 60 by default)
-    // no web touch can match this device, so elapsed time is a hard stop that never
-    // shrinks back.
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(twoHoursAgo));
+    // Past the backend's reach no web touch can match this device, so elapsed time is a
+    // hard stop that never shrinks back. The SDK bound is 7 days, matching the server's
+    // tier-2 fingerprint window (DEFERRED_FP_MATCH_MAX_DAYS) — eight days is past it.
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(eightDaysAgo));
     await AsyncStorage.setItem('@datalyr/visitor_id', 'visitor_from_earlier_launch');
 
     await attributionManager.detectInstall();
@@ -201,9 +212,33 @@ describe('deferred web→app lookup bounds', () => {
     expect(deferredCalls).toBe(0);
   });
 
+  it('is still eligible days after install — the tier-2 window is server-side history', async () => {
+    // Regression guard, twice over: the bound was 60 minutes against a 180-minute
+    // server (two thirds of the window forfeited), then 180 minutes against the 7-day
+    // tier-2 fingerprint matcher. A device that was offline at install, or whose first
+    // attempts failed in transit, must still get its lookup days later — the click
+    // history lives server-side and does not expire with the SDK's patience.
+    for (const hoursAgo of [2, 4, 6 * 24]) {
+      await (AsyncStorage as any).clear();
+      const t = new Date(Date.now() - hoursAgo * 60 * 60 * 1000).toISOString();
+      await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(t));
+      await AsyncStorage.setItem('@datalyr/visitor_id', 'visitor_from_earlier_launch');
+      (attributionManager as any).initialized = false;
+      (attributionManager as any).installTimeMs = null;
+      await attributionManager.detectInstall();
+      expect(await attributionManager.shouldAttemptDeferredLookup()).toBe(true);
+    }
+  });
+
   it('does not re-open on reset(): the IP match is a per-install device fact', async () => {
     // Clearing it on logout would re-import one user's web touch into the next user's
-    // identity — the same cross-user bleed reset() exists to prevent.
+    // identity — the same cross-user bleed reset() exists to prevent. Install seeded
+    // past the ingest-lag grace so the no-match answer is terminal before the reset.
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(twoHoursAgo));
+    await AsyncStorage.setItem('@datalyr/visitor_id', 'visitor_from_earlier_launch');
+    await attributionManager.detectInstall();
+
     const sdk = new DatalyrSDK();
     try {
       await initSDK(sdk);
@@ -215,6 +250,48 @@ describe('deferred web→app lookup bounds', () => {
       expect(await attributionManager.shouldAttemptDeferredLookup()).toBe(false);
     } finally {
       sdk.destroy();
+    }
+  });
+});
+
+describe('deferred lookup fingerprint + ingest-lag retry', () => {
+  it('sends the device fingerprint the tier-2 matcher scores against', async () => {
+    const sdk = new DatalyrSDK();
+    try { await initSDK(sdk); } finally { sdk.destroy(); }
+
+    expect(deferredCalls).toBe(1);
+    const body = deferredBodies[0];
+    expect(body.platform).toBeDefined();
+    // Exact values from inside the app — the click side only ever has the
+    // UA/header approximations, and the server scores the overlap.
+    expect(body.os_version).toBeDefined();
+    expect(body.timezone).toBeDefined();
+    expect(body.language).toBeDefined();
+  });
+
+  it('a no_candidates answer right after install stays eligible — ingest lag is not an answer', async () => {
+    respond = async () => ({ ok: true, status: 200, json: async () => ({ found: false, reason: 'no_candidates' }) });
+
+    const first = new DatalyrSDK();
+    try { await initSDK(first); } finally { first.destroy(); }
+    expect(deferredCalls).toBe(1);
+    // NOT terminal: the click may simply not have landed in the analytics store yet.
+    expect(await AsyncStorage.getItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED)).toBeNull();
+
+    relaunch();
+    const second = new DatalyrSDK();
+    try { await initSDK(second); } finally { second.destroy(); }
+    expect(deferredCalls).toBe(2);
+  });
+
+  it('every other miss reason is terminal on the first answer', async () => {
+    for (const reason of ['no_web_traffic', 'not_enabled', 'below_threshold', 'ambiguous']) {
+      await (AsyncStorage as any).clear();
+      relaunch();
+      respond = async () => ({ ok: true, status: 200, json: async () => ({ found: false, reason }) });
+      const sdk = new DatalyrSDK();
+      try { await initSDK(sdk); } finally { sdk.destroy(); }
+      expect(await AsyncStorage.getItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED)).toBe('true');
     }
   });
 });

@@ -34,6 +34,11 @@ const ATTRIBUTION_PARAMS = [
   // Custom attribution parameters
   'click_id', 'campaign_id', 'ad_id', 'adset_id', 'creative_id',
   'placement_id', 'keyword', 'matchtype', 'network', 'device',
+
+  // Meta ad-entity breakdowns, delivered by the Play install referrer (Android) and by
+  // the web→app bridge response. `placement` is Meta's own macro name and is NOT the
+  // same field as `placement_id` above (Feed/Reels/Story vs an id).
+  'placement', 'site_source_name',
 ];
 
 export interface AttributionData {
@@ -82,6 +87,8 @@ export interface AttributionData {
   adset_id?: string;              // Ad Set ID
   creative_id?: string;           // Creative ID
   placement_id?: string;          // Placement ID
+  placement?: string;             // Meta {{placement}} — a NAME (Feed/Reels/Story), not an id
+  site_source_name?: string;      // Meta {{site_source_name}} — which surface ran the ad (ig/fb/msg)
   keyword?: string;               // Keyword (for search)
   matchtype?: string;             // Match type
   network?: string;               // Ad network
@@ -495,6 +502,12 @@ export class AttributionManager {
             case 'placement_id':
               this.attributionData.placement_id = value;
               break;
+            case 'placement':
+              this.attributionData.placement = value;
+              break;
+            case 'site_source_name':
+              this.attributionData.site_source_name = value;
+              break;
             case 'keyword':
               this.attributionData.keyword = value;
               break;
@@ -567,14 +580,24 @@ export class AttributionManager {
    * has not given a definitive answer".
    *
    * Two hard bounds, so retrying can never continue indefinitely:
-   * - the server only matches a web touch to this IP within its match window
-   *   (DEFERRED_IP_MATCH_WINDOW_MINUTES, 60 by default), so past an hour from install
-   *   there is nothing left to match and elapsed time can never shrink back;
+   * - the server only matches a web touch to this IP within its match window, so past
+   *   that window from install there is nothing left to match and elapsed time can
+   *   never shrink back;
    * - the attempt counter is persisted BEFORE each request is issued, so attempts are
    *   spent even by requests that never return (process killed mid-flight, hung socket),
    *   and a device with a broken or rolled-back clock still runs out.
+   *
+   * This MUST NOT be tighter than the server's match reach, or the SDK stops asking
+   * while the server would still have answered — the original 60-minute bound sat
+   * against a server configured for 180 and forfeited two thirds of the window. Now
+   * 7 days, matching the server's tier-2 fingerprint matcher
+   * (DEFERRED_FP_MATCH_MAX_DAYS): the click history is server-side, so a device that
+   * was offline at install — or whose first attempts failed in transit — can still
+   * recover its attribution days later. The attempt cap, not the window, bounds the
+   * request volume. Keep in lockstep with the Swift SDK's
+   * AttributionManager.deferredLookupWindow.
    */
-  private static readonly DEFERRED_LOOKUP_WINDOW_MS = 60 * 60 * 1000;
+  private static readonly DEFERRED_LOOKUP_WINDOW_MS = 7 * 24 * 3600 * 1000;
   private static readonly MAX_DEFERRED_LOOKUP_ATTEMPTS = 3;
 
   /**
@@ -604,6 +627,17 @@ export class AttributionManager {
     }
 
     return true;
+  }
+
+  /**
+   * Minutes since install, or null when the install time is unknown. Drives the
+   * ingest-lag retry: a `no_candidates` answer in the first hour may just mean the
+   * click has not landed in the analytics store yet.
+   */
+  installAgeMinutes(): number | null {
+    if (this.installTimeMs === null) return null;
+    const elapsed = Date.now() - this.installTimeMs;
+    return elapsed >= 0 ? elapsed / 60000 : null;
   }
 
   /**
@@ -686,6 +720,17 @@ export class AttributionManager {
     gapFill('utm_campaign', webAttribution.utm_campaign);
     gapFill('utm_content', webAttribution.utm_content);
     gapFill('utm_term', webAttribution.utm_term);
+
+    // Ad ENTITY ids recovered from the matched web click. Without these the app side knew
+    // the campaign only by NAME (the UTMs above), and a name join back to synced spend
+    // breaks retroactively the moment a buyer renames a campaign mid-flight — so an
+    // install could be perfectly matched and still land in the unattributed bucket a week
+    // later. `placement` / `site_source_name` carry no join duty; they are Meta breakdowns.
+    gapFill('campaign_id', webAttribution.campaign_id);
+    gapFill('adset_id', webAttribution.adset_id);
+    gapFill('ad_id', webAttribution.ad_id);
+    gapFill('placement', webAttribution.placement);
+    gapFill('site_source_name', webAttribution.site_source_name);
 
     // Store web visitor ID for cross-device tracking
     if (webAttribution.visitor_id) {

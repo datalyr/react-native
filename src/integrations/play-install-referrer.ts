@@ -209,7 +209,7 @@ class PlayInstallReferrerIntegration {
   getAttributionData(): Record<string, any> {
     if (!this.referrerData) return {};
 
-    return {
+    const data: Record<string, any> = {
       // Install referrer specific
       install_referrer_url: this.referrerData.referrerUrl,
       referrer_click_timestamp: this.referrerData.referrerClickTimestamp,
@@ -230,6 +230,30 @@ class PlayInstallReferrerIntegration {
       // Source indicators
       attribution_source: 'play_install_referrer',
     };
+
+    // Datalyr edge-redirect referrer payload. appendPlayReferrer packs
+    // dl_click_id/dl_click_id_type plus the ad ENTITY ids alongside the UTMs,
+    // and parseReferrerUrl keeps them on referrerData — but this fixed-shape
+    // return dropped them, so the ONE deterministic Android bridge delivered
+    // names and Google ids while the Meta/TikTok click id and every ad entity
+    // id died right here. Added conditionally: an absent key must stay absent,
+    // because this object is spread into event payloads AFTER persisted
+    // attribution, and an explicit `undefined` would erase a value the deep
+    // link or web bridge already recovered.
+    //
+    // clickId/clickIdType use the same wire shape the web SDK sends — ingest's
+    // transformClickIdToPlatformFields maps them back onto the platform param
+    // (fbclid/ttclid/...), so a Meta-ad Android install carries its click id
+    // deterministically instead of waiting on the probabilistic IP bridge.
+    if (this.referrerData['dl_click_id']) {
+      data.clickId = this.referrerData['dl_click_id'];
+      data.clickIdType = this.referrerData['dl_click_id_type'];
+    }
+    for (const key of ['campaign_id', 'adset_id', 'ad_id', 'placement', 'site_source_name']) {
+      if (this.referrerData[key]) data[key] = this.referrerData[key];
+    }
+
+    return data;
   }
 }
 

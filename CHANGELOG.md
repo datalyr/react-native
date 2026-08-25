@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.19] - 2026-08-25
+
+### Fixed
+- **The Play install referrer delivered names and Google ids, and dropped everything
+  else.** `parseReferrerUrl` kept every referrer param on `referrerData`, but
+  `getAttributionData()` — the fixed-shape object spread into event payloads — forwarded
+  only `utm_*` and `gclid`/`gbraid`/`wbraid`. The edge redirect has packed `dl_click_id` /
+  `dl_click_id_type` into the referrer all along, so the ONE deterministic Android bridge
+  was silently discarding the Meta/TikTok/Snap click id at this boundary; those installs
+  fell back to the probabilistic IP match for a value they already carried. Forwarded now
+  as `clickId`/`clickIdType` (the wire shape ingest maps back onto `fbclid`/`ttclid`/...),
+  plus the new ad entity ids below. Keys are added only when present: this object is
+  spread after persisted attribution, and an explicit `undefined` would erase a value the
+  deep link or web bridge already recovered.
+- **The deferred web→app lookup stopped asking two hours before the server stopped
+  answering.** `DEFERRED_LOOKUP_WINDOW_MS` was 60 minutes against a server configured for
+  180 (`DEFERRED_IP_MATCH_WINDOW_MINUTES` in `api/wrangler.toml`), and its comment asserted
+  the server default was 60. Two thirds of the eligible window was discarded, on exactly
+  the segment where the tail lives: a store download over cellular, or the ordinary
+  install-now-open-later. The bound is now 180, inside the server's own 5-360 clamp so a
+  raised server value cannot silently outrun it again. Kept in lockstep with the Swift
+  SDK's `AttributionManager.deferredLookupWindow`.
+
+### Fixed
+- **The Android fingerprint reported an API level where a marketing version was
+  expected.** Both device-info fallback paths (`utils.ts`, no react-native-device-info
+  or a getter throw) send `Platform.Version`, which on Android is the SDK API level
+  (34), while the server compares it against the version parsed from the CLICK's user
+  agent (14). Neither the exact nor the major-version comparison could ever match, so
+  the strongest single corroborating signal was dead on those paths; the same fallbacks
+  emit `'Android'`/`'Unknown'` as the model, which likewise never matches real hardware.
+  `fingerprintOsVersion()` now maps API level → release (omitting unmappable levels
+  rather than sending a wrong one) and `fingerprintDeviceModel()` drops the placeholders.
+
+### Added
+- **Device-fingerprint matching opens the server's 7-day tier-2 window.** The deferred
+  lookup now sends the device's exact os_version / model / language / timezone. The edge
+  worker stamps the click-side approximations of the same signals (Accept-Language,
+  UA-parsed OS/model, CF timezone/ASN) on every redirect click, and the server scores the
+  overlap: store clicks up to 7 days old can now match, gated by a threshold, a margin
+  over the runner-up, and at least one agreeing device signal — misses report
+  `below_threshold` or `ambiguous`. The SDK's own eligibility window widens 180 min → 7
+  days to match (the click history is server-side; a device offline at install can still
+  recover attribution days later), and a `no_candidates` answer inside the first hour
+  after install stays eligible for one more launch instead of burning the install's one
+  shot on ingest lag. Old SDKs send no fingerprint, so for them the server's behavior is
+  byte-identical to before.
+- **`getSuperwallAttributes()` / `getRevenueCatAttributes()` carry the ad entity ids**
+  (both the bare and Expo builds). Both helpers re-list fields by hand and neither was
+  updated when the ids landed: they emitted `campaign`/`$campaign` (the campaign NAME)
+  with no id equivalent, so a Superwall audience filter or a RevenueCat-sourced
+  conversion could only ever be keyed by a name that breaks on rename. A new
+  `attribution-passthrough-contract` test suite pins the contract for both builds, so
+  adding a field to `AttributionData` without threading it through now fails a test.
+- **Ad entity IDs cross the web→app bridge.** `campaign_id`, `adset_id`, `ad_id`,
+  `placement` and `site_source_name` are merged from the lookup response into persisted
+  attribution, so they ride every later event and reach the Superwall / RevenueCat
+  attribute helpers. Ad identity previously reached revenue only as NAMES via the UTMs,
+  and a name join back to synced spend breaks retroactively for a whole reporting period
+  the moment a buyer renames a campaign mid-flight. The Android install referrer carries
+  the same IDs, so a Play-referrer install gets them deterministically with no match.
+  `placement` and `site_source_name` are new `AttributionData` fields; `placement` is
+  Meta's placement NAME, distinct from the existing numeric `placement_id`.
+- **`$attribution_match` reports every match attempt, matched or not,** in both the bare
+  and Expo builds. A miss used to be a debug log and nothing else, so the only installs
+  producing an event were the ones that matched, which makes the match rate uncomputable
+  from event data. Carries `matched`, `reason` (`matched` / `no_candidates` /
+  `no_web_traffic` / `request_failed` / `identity_only` / `self_match` / `not_enabled`),
+  `match_candidates`, `match_score` and `match_window_minutes`. Deliberately separate from
+  `$web_attribution_matched`, which stays the bridge event downstream readers consume and
+  still fires only on a real match.
+
 ## [1.7.16] - 2026-07-25
 
 ### Fixed

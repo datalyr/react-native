@@ -33,7 +33,7 @@ import {
   Storage,
   STORAGE_KEYS,
 } from './utils-expo';  // <-- KEY DIFFERENCE: uses Expo utilities
-import { warnAboutIgnoredOptions } from './utils';
+import { warnAboutIgnoredOptions, fingerprintOsVersion, fingerprintDeviceModel } from './utils';
 import {
   purchaseProperties,
   addToCartProperties,
@@ -633,6 +633,12 @@ export class DatalyrSDKExpo {
     // killed mid-flight, hung connection) must still count against the bound.
     await attributionManager.recordDeferredLookupAttempt();
 
+    // Fetched before the request so a device-info failure surfaces here, not as a
+    // half-built body. getDeviceInfo() is cached after first resolution.
+    const deviceFp = await getDeviceInfo().catch(() => ({
+      osVersion: undefined, model: undefined, locale: undefined, timezone: undefined,
+    } as any));
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -644,7 +650,17 @@ export class DatalyrSDKExpo {
           'Content-Type': 'application/json',
           'X-Datalyr-API-Key': this.state.config.apiKey!,
         },
-        body: JSON.stringify({ platform: Platform.OS }),
+        // Device fingerprint — the exact values the click-side fp_* capture
+        // approximates from the redirect request's headers. This is what opens the
+        // server's tier-2 matcher (fingerprint-corroborated store clicks up to 7
+        // days old); without it the server only runs the short exact-IP window.
+        body: JSON.stringify({
+          platform: Platform.OS,
+          os_version: fingerprintOsVersion(deviceFp.osVersion),
+          device_model: fingerprintDeviceModel(deviceFp.model),
+          language: deviceFp.locale,
+          timezone: deviceFp.timezone,
+        }),
         signal: controller.signal,
       });
     } catch (error) {
@@ -652,6 +668,9 @@ export class DatalyrSDKExpo {
       // right after a store install. Nothing was answered, so the lookup stays eligible
       // and a later launch inside the match window retries it.
       errorLog('Deferred attribution lookup did not reach the server — retrying on a later launch', error as Error);
+      // Still reported: a workspace whose misses are overwhelmingly `request_failed` has a
+      // connectivity problem, not an attribution problem, and those need different fixes.
+      await this.trackAttributionMatchOutcome(false, 'request_failed');
       return;
     } finally {
       clearTimeout(timeout);
@@ -672,24 +691,43 @@ export class DatalyrSDKExpo {
       return;
     }
 
-    let result: { found: boolean; attribution?: any };
+    let result: { found: boolean; attribution?: any; reason?: string; window_minutes?: number };
     try {
       // Parse BEFORE marking resolved (same ordering as the email path): a truncated body
       // or an HTML error page served as 200 is not an answer, and must not burn the
       // install's one shot at the bridge.
-      result = await response.json() as { found: boolean; attribution?: any };
+      result = await response.json() as { found: boolean; attribution?: any; reason?: string; window_minutes?: number };
     } catch (error) {
       errorLog('Deferred attribution lookup returned an unparseable body — retrying on a later launch', error as Error);
       return;
     }
 
-    // A parsed 200 is the server's definitive answer, matched or not. A genuine "no web
-    // touch for this IP" is terminal — re-asking on every launch would never match.
-    await attributionManager.markDeferredLookupResolved();
+    // A parsed 200 is the server's definitive answer, matched or not — with ONE
+    // exception: `no_candidates` inside the first hour after install may just be
+    // ingest lag (click → queue → analytics store takes seconds to minutes), so it
+    // stays eligible for one more launch. Every other reason is terminal — a genuine
+    // "no web touch for this IP" must not re-ask forever — and the attempt cap
+    // bounds the retry either way.
+    const missReason = result.found === false ? (result.reason || 'no_candidates') : null;
+    const installAge = attributionManager.installAgeMinutes();
+    const freshNoCandidates = missReason === 'no_candidates' && installAge !== null && installAge < 60;
+    if (!freshNoCandidates) {
+      await attributionManager.markDeferredLookupResolved();
+    }
 
     try {
       if (!result.found || !result.attribution) {
+        // A MISS is a measurement, not a non-event. This used to be a debug log and
+        // nothing else, so the only installs producing an event were the ones that
+        // MATCHED — which makes the match rate (matched / attempted) uncomputable from
+        // event data, and a matcher whose threshold nobody can observe is a matcher
+        // nobody can tune. The server's `reason` separates no_candidates /
+        // no_web_traffic / request_failed / not_enabled: four very different problems
+        // that all looked identical from here.
         debugLog('No deferred web attribution found for this IP');
+        await this.trackAttributionMatchOutcome(false, result.reason || 'no_candidates', {
+          match_window_minutes: result.window_minutes,
+        });
         return;
       }
 
@@ -706,10 +744,12 @@ export class DatalyrSDKExpo {
       // and do not fire the bridge event.
       if (webAttribution.identity_only === true) {
         debugLog('Deferred web attribution is identity-only — skipping bridge event');
+        await this.trackAttributionMatchOutcome(false, 'identity_only');
         return;
       }
       if (webAttribution.visitor_id && webAttribution.visitor_id === this.state.visitorId) {
         debugLog('Deferred web attribution visitor is our own visitor id — skipping bridge event');
+        await this.trackAttributionMatchOutcome(false, 'self_match');
         return;
       }
 
@@ -736,8 +776,24 @@ export class DatalyrSDKExpo {
         utm_campaign: webAttribution.utm_campaign,
         utm_content: webAttribution.utm_content,
         utm_term: webAttribution.utm_term,
+        // Ad ENTITY ids — the rename-proof join key back to synced spend. The UTMs above
+        // carry the same entities by NAME, for display.
+        campaign_id: webAttribution.campaign_id,
+        adset_id: webAttribution.adset_id,
+        ad_id: webAttribution.ad_id,
+        placement: webAttribution.placement,
+        site_source_name: webAttribution.site_source_name,
         web_timestamp: webAttribution.timestamp,
         match_method: 'ip',
+      });
+
+      // Paired with the miss branches above: together these make
+      // matched / (matched + missed) computable per workspace and per day.
+      await this.trackAttributionMatchOutcome(true, 'matched', {
+        match_candidates: webAttribution.match_candidates,
+        match_score: webAttribution.match_score,
+        match_confidence: webAttribution.match_confidence,
+        match_window_minutes: webAttribution.match_window_minutes,
       });
 
       debugLog('Successfully merged deferred web attribution');
@@ -746,6 +802,39 @@ export class DatalyrSDKExpo {
       // The server already answered, so this is a local merge/track failure, not a reason
       // to re-ask. Non-blocking — the email-based path still runs on identify().
       errorLog('Error merging deferred web attribution:', error as Error);
+    }
+  }
+
+  /**
+   * Emit the outcome of one deferred web→app match attempt, matched or not.
+   *
+   * `$attribution_match` is deliberately separate from `$web_attribution_matched`:
+   * the latter is the BRIDGE event downstream readers consume to thread web attribution
+   * onto mobile conversions (ingest's lyr bridge follows it, and api/core/identity.js
+   * resolves Meta CAPI recovery through it), so it must keep firing only when there IS a
+   * real match to thread. This one is pure telemetry — it fires on every definitive
+   * attempt, which is what turns "we matched 40 installs" into "we matched 40 of 300,
+   * and 180 of the misses were no_candidates".
+   */
+  private async trackAttributionMatchOutcome(
+    matched: boolean,
+    reason: string,
+    extra: Record<string, any> = {},
+  ): Promise<void> {
+    try {
+      const data: Record<string, any> = {
+        provider: 'mmp',
+        match_method: 'ip',
+        matched,
+        reason,
+      };
+      for (const [k, v] of Object.entries(extra)) {
+        if (v !== undefined && v !== null) data[k] = v;
+      }
+      await this.track('$attribution_match', data);
+    } catch (error) {
+      // Telemetry must never be able to break the bridge it is measuring.
+      errorLog('Failed to record attribution match outcome:', error as Error);
     }
   }
 
@@ -1082,6 +1171,15 @@ export class DatalyrSDKExpo {
     set('utm_term', attribution.utm_term);
     set('utm_content', attribution.utm_content);
     set('lyr', attribution.lyr);
+    // Raw ad ENTITY ids. `campaign`/`adgroup`/`ad` above are the provider's
+    // conventional keys and carry NAMES when no id is known; these are the ids
+    // themselves, so a Superwall audience filter can target by ad without
+    // breaking the moment a buyer renames the campaign.
+    set('campaign_id', attribution.campaign_id);
+    set('adset_id', attribution.adset_id);
+    set('ad_id', attribution.ad_id);
+    set('placement', attribution.placement);
+    set('site_source_name', attribution.site_source_name);
     set('fbclid', attribution.fbclid);
     set('gclid', attribution.gclid);
     set('ttclid', attribution.ttclid);
@@ -1139,6 +1237,15 @@ export class DatalyrSDKExpo {
     set('gbraid', attribution.gbraid);
     set('network', attribution.network);
     set('creative_id', attribution.creative_id);
+    // Raw ad ENTITY ids alongside RevenueCat's reserved $adGroup/$ad above,
+    // which carry only the ad-set/ad level. campaign_id in particular has no
+    // reserved equivalent ($campaign is the NAME), so without this a
+    // RevenueCat-sourced conversion could never join spend by campaign id.
+    set('campaign_id', attribution.campaign_id);
+    set('adset_id', attribution.adset_id);
+    set('ad_id', attribution.ad_id);
+    set('placement', attribution.placement);
+    set('site_source_name', attribution.site_source_name);
 
     return attrs;
   }
