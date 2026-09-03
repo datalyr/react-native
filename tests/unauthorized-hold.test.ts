@@ -36,3 +36,19 @@ describe('HTTP 401 → held, not dropped, during the grace window', () => {
     }
   });
 });
+
+describe('tracking domain routing', () => {
+  test('only IDFA-bearing events go to tracking.datalyr.com', async () => {
+    const urls: string[] = [];
+    (global as any).fetch = jest.fn(async (url: string) => { urls.push(String(url)); return { ok: true, status: 200, json: async () => ({}), headers: { get: () => null } }; });
+    const client = new HttpClient('https://ingest.datalyr.com/track', { apiKey: 'dl_x', useServerTracking: true } as any);
+    await client.sendEvent({ ...payload, eventId: 'a', eventData: { screen: 'home' } });
+    await client.sendEvent({ ...payload, eventId: 'b', eventData: { idfa: '6D92078A-8246-4BA4-AE5B-76104861E7DC' } });
+    await client.sendEvent({ ...payload, eventId: 'c', eventData: { idfa: '' } });
+    expect(urls).toEqual([
+      'https://ingest.datalyr.com/track',
+      'https://tracking.datalyr.com/track',
+      'https://ingest.datalyr.com/track',
+    ]);
+  });
+});

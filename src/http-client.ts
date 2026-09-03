@@ -60,6 +60,19 @@ export class HttpClient {
     this.config = config;
   }
 
+  // Apple privacy manifest: NSPrivacyTracking=true REQUIRES a non-empty
+  // NSPrivacyTrackingDomains, and iOS fails every request to a listed host until the
+  // user grants ATT. So the manifest lists ONLY tracking.datalyr.com, and only events
+  // that actually carry the IDFA (i.e. ATT already authorized) are sent there; all
+  // other events go to ingest.datalyr.com and are never blocked. Same backend handler.
+  static readonly TRACKING_ENDPOINT = 'https://tracking.datalyr.com/track';
+
+  private endpointFor(payload: EventPayload): string {
+    if (this.config.useServerTracking === false) return this.endpoint;
+    const idfa = (payload.eventData as Record<string, unknown> | undefined)?.idfa;
+    return typeof idfa === 'string' && idfa.length > 0 ? HttpClient.TRACKING_ENDPOINT : this.endpoint;
+  }
+
   /**
    * Send a single event with retry logic
    */
@@ -125,7 +138,7 @@ export class HttpClient {
         : payload;
 
       const body = JSON.stringify(requestBody);
-      const response = await fetch(this.endpoint, {
+      const response = await fetch(this.endpointFor(payload), {
         method: 'POST',
         headers,
         body,

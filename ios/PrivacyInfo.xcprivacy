@@ -9,12 +9,15 @@
          types flagged Linked (associated with identity) + Tracking (used to track). -->
     <key>NSPrivacyTracking</key>
     <true/>
-    <!-- Intentionally empty: iOS fails every request to a listed tracking domain
-         until the user grants ATT, which would block first-party event ingest
-         (app_install, sessions, deferred lookup) for un-prompted and denied users.
-         NSPrivacyTracking stays true; the SDK gates IDFA on ATT itself. -->
+    <!-- Apple requires a non-empty domain list when NSPrivacyTracking is true, and
+         iOS fails every request to a listed host until the user grants ATT. Only
+         tracking.datalyr.com is listed: the SDK sends IDFA-bearing events (ATT already
+         authorized) there and everything else to ingest.datalyr.com, so un-prompted
+         and denied users are never blocked. -->
     <key>NSPrivacyTrackingDomains</key>
-    <array/>
+    <array>
+        <string>tracking.datalyr.com</string>
+    </array>
     <key>NSPrivacyCollectedDataTypes</key>
     <array>
         <dict>
