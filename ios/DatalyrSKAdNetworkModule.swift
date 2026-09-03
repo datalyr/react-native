@@ -1,5 +1,45 @@
 import ExpoModulesCore
 import StoreKit
+#if canImport(AdAttributionKit)
+import AdAttributionKit
+#endif
+
+// SKAdNetwork and AdAttributionKit are separate attribution systems; an ad network
+// may run either. On iOS 17.4+ every conversion value is sent to BOTH. SKAdNetwork's
+// completion is the authority for the JS high-water guard; the AdAttributionKit call
+// is best-effort (it throws when there is no AAK impression for this install).
+@available(iOS 17.4, *)
+private func updateAdAttributionKit(fine: Int, coarse: String, lock: Bool, reengagement: Bool = false) async -> Bool {
+  #if canImport(AdAttributionKit)
+  let coarseValue: AdAttributionKit.CoarseConversionValue
+  switch coarse {
+  case "high": coarseValue = .high
+  case "medium": coarseValue = .medium
+  default: coarseValue = .low
+  }
+  do {
+    if #available(iOS 18.0, *) {
+      try await Postback.updateConversionValue(PostbackUpdate(
+        fineConversionValue: fine,
+        lockPostback: lock,
+        coarseConversionValue: coarseValue,
+        conversionTypes: reengagement ? [.reengagement] : nil))
+    } else {
+      try await Postback.updateConversionValue(fine, coarseConversionValue: coarseValue, lockPostback: lock)
+    }
+    return true
+  } catch {
+    return false
+  }
+  #else
+  return false
+  #endif
+}
+
+private var reengagementSupported: Bool {
+  if #available(iOS 18.0, *) { return true }
+  return false
+}
 
 public class DatalyrSKAdNetworkModule: Module {
   public func definition() -> ModuleDefinition {
@@ -29,14 +69,22 @@ public class DatalyrSKAdNetworkModule: Module {
         SKAdNetwork.updatePostbackConversionValue(fineValue, coarseValue: coarse, lockWindow: lockWindow) { error in
           if let error = error {
             promise.reject("skadnetwork_error", error.localizedDescription)
-          } else {
-            var framework = "SKAdNetwork"
-            if #available(iOS 17.4, *) {
-              framework = "AdAttributionKit"
+          } else if #available(iOS 17.4, *) {
+            Task {
+              let aak = await updateAdAttributionKit(fine: fineValue, coarse: coarseValue, lock: lockWindow)
+              promise.resolve([
+                "success": true,
+                "framework": "AdAttributionKit",
+                "adAttributionKitAccepted": aak,
+                "fineValue": fineValue,
+                "coarseValue": coarseValue,
+                "lockWindow": lockWindow
+              ] as [String: Any])
             }
+          } else {
             promise.resolve([
               "success": true,
-              "framework": framework,
+              "framework": "SKAdNetwork",
               "fineValue": fineValue,
               "coarseValue": coarseValue,
               "lockWindow": lockWindow
@@ -109,19 +157,18 @@ public class DatalyrSKAdNetworkModule: Module {
     }
 
     // Update conversion value for re-engagement (AdAttributionKit iOS 17.4+ only)
+    // Re-engagement postback (AdAttributionKit PostbackUpdate.conversionTypes, iOS 18.0+).
+    // The app must opt in with EligibleForAdAttributionKitReengagementPostbackCopies to
+    // receive copies (the config plugin sets it via `reengagementPostbackCopies: true`).
     AsyncFunction("updateReengagementConversionValue") { (fineValue: Int, coarseValue: String, lockWindow: Bool, promise: Promise) in
-      if #available(iOS 17.4, *) {
-        guard fineValue >= 0 && fineValue <= 63 else {
-          promise.reject("invalid_value", "Conversion value must be between 0 and 63")
-          return
-        }
-
-        let coarse = Self.mapCoarseValue(coarseValue)
-
-        SKAdNetwork.updatePostbackConversionValue(fineValue, coarseValue: coarse, lockWindow: lockWindow) { error in
-          if let error = error {
-            promise.reject("reengagement_error", error.localizedDescription)
-          } else {
+      guard fineValue >= 0 && fineValue <= 63 else {
+        promise.reject("invalid_value", "Conversion value must be between 0 and 63")
+        return
+      }
+      if #available(iOS 18.0, *) {
+        Task {
+          let accepted = await updateAdAttributionKit(fine: fineValue, coarse: coarseValue, lock: lockWindow, reengagement: true)
+          if accepted {
             promise.resolve([
               "success": true,
               "type": "reengagement",
@@ -130,10 +177,12 @@ public class DatalyrSKAdNetworkModule: Module {
               "coarseValue": coarseValue,
               "lockWindow": lockWindow
             ] as [String: Any])
+          } else {
+            promise.reject("reengagement_error", "AdAttributionKit did not accept the re-engagement postback update (no eligible impression on this device?)")
           }
         }
       } else {
-        promise.reject("unsupported", "Re-engagement attribution requires iOS 17.4+ (AdAttributionKit)")
+        promise.reject("unsupported", "Re-engagement postbacks require iOS 18.0+ (AdAttributionKit PostbackUpdate)")
       }
     }
 
@@ -197,6 +246,9 @@ public class DatalyrSKAdNetworkModule: Module {
               framework = "AdAttributionKit"
               version = "1.0"
             }
+            if #available(iOS 17.4, *) {
+              Task { _ = await updateAdAttributionKit(fine: fineValue, coarse: coarseValue, lock: lockWindow) }
+            }
 
             promise.resolve([
               "success": true,
@@ -233,7 +285,7 @@ public class DatalyrSKAdNetworkModule: Module {
     if #available(iOS 17.4, *) {
       info["framework"] = "AdAttributionKit"
       info["version"] = "1.0"
-      info["reengagement_available"] = true
+      info["reengagement_available"] = reengagementSupported
       info["fine_value_range"] = ["min": 0, "max": 63]
       info["coarse_values"] = ["low", "medium", "high"]
       if #available(iOS 18.4, *) {
@@ -284,13 +336,13 @@ public class DatalyrSKAdNetworkModule: Module {
       return [
         "framework": "AdAttributionKit",
         "version": "1.0",
-        "reengagement_available": true,
+        "reengagement_available": reengagementSupported,
         "overlapping_windows": false,
         "geo_postback_available": false,
         "development_postbacks": false,
         "fine_value_range": ["min": 0, "max": 63],
         "coarse_values": ["low", "medium", "high"],
-        "features": ["reengagement"]
+        "features": reengagementSupported ? ["reengagement"] : [] as [String]
       ] as [String: Any]
     } else if #available(iOS 16.1, *) {
       return [

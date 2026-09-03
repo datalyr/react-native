@@ -20,7 +20,7 @@ Pod::Spec.new do |s|
   # Ship the privacy manifest (tracking domains + accessed-API reasons).
   s.resource_bundles = { "DatalyrReactNativePrivacy" => ["ios/PrivacyInfo.xcprivacy"] }
   s.frameworks = ["AdSupport", "AppTrackingTransparency", "StoreKit"]
-  s.weak_frameworks = ["AdServices"]
+  s.weak_frameworks = ["AdServices", "AdAttributionKit"]
   s.swift_version = "5.0"
 
   s.dependency "ExpoModulesCore"

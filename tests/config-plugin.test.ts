@@ -29,7 +29,11 @@ describe('Expo config plugin (app.plugin.js)', () => {
       networks: ['meta', 'tiktok', 'apple'],
       skAdNetworkIds: ['custom123.skadnetwork'],
       trackingUsageDescription: 'We measure ad performance.',
+      attributionCopyEndpoint: 'https://attribution.example.com/',
+      reengagementPostbackCopies: true,
     });
+    expect(out.ios.infoPlist.AttributionCopyEndpoint).toBe('https://attribution.example.com');
+    expect(out.ios.infoPlist.EligibleForAdAttributionKitReengagementPostbackCopies).toBe(true);
 
     expect(idsOf(out)).toEqual([
       'v9wttpbfk9.skadnetwork',

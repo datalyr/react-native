@@ -5,9 +5,17 @@
 //     ["@datalyr/react-native", {
 //       "networks": ["meta", "tiktok"],
 //       "skAdNetworkIds": ["abcd1234ef.skadnetwork"],
-//       "trackingUsageDescription": "We use this to measure ad performance."
+//       "trackingUsageDescription": "We use this to measure ad performance.",
+//       "attributionCopyEndpoint": "https://example.com",
+//       "reengagementPostbackCopies": true
 //     }]
 //   ]
+//
+// AdAttributionKit (iOS 17.4+): `attributionCopyEndpoint` sets AttributionCopyEndpoint so
+// your server receives copies of winning postbacks at
+// https://<host>/.well-known/appattribution/report-attribution/; `reengagementPostbackCopies`
+// sets EligibleForAdAttributionKitReengagementPostbackCopies (iOS 18+). Neither is required
+// for attribution itself.
 //
 // iOS: merges SKAdNetworkItems into Info.plist (dedupes, never removes existing entries)
 // and sets NSUserTrackingUsageDescription when not already set. Android: no-op (the
@@ -101,6 +109,16 @@ function withDatalyrInfoPlist(config, options) {
       !plist.NSUserTrackingUsageDescription
     ) {
       plist.NSUserTrackingUsageDescription = opts.trackingUsageDescription;
+    }
+    if (
+      typeof opts.attributionCopyEndpoint === 'string' &&
+      /^https:\/\//.test(opts.attributionCopyEndpoint.trim()) &&
+      !plist.AttributionCopyEndpoint
+    ) {
+      plist.AttributionCopyEndpoint = opts.attributionCopyEndpoint.trim().replace(/\/+$/, '');
+    }
+    if (opts.reengagementPostbackCopies === true) {
+      plist.EligibleForAdAttributionKitReengagementPostbackCopies = true;
     }
     return cfg;
   });

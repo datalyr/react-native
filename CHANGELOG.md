@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.7.20] - 2026-09-03
 
 ### Added
+- AdAttributionKit is now actually called: on iOS 17.4+ `updatePostbackConversionValue` / `updatePostbackWithWindow` send the value to both SKAdNetwork and `AdAttributionKit.Postback` (the response carries `adAttributionKitAccepted`). On iOS 18+ `updateReengagementConversionValue` sends a real re-engagement `PostbackUpdate`; on 17.4-17.x it rejects with `unsupported` instead of silently re-sending the install value. Config plugin options `attributionCopyEndpoint` (AttributionCopyEndpoint) and `reengagementPostbackCopies` (EligibleForAdAttributionKitReengagementPostbackCopies).
 - Expo config plugin (`app.plugin.js`): `["@datalyr/react-native", { networks: ['meta','tiktok','google','snapchat','apple'], skAdNetworkIds, trackingUsageDescription }]` merges `SKAdNetworkItems` into `Info.plist` (deduped, existing entries kept) and sets `NSUserTrackingUsageDescription` when unset. Apple Search Ads needs no SKAdNetwork id. Android is a no-op. `@expo/config-plugins` is an optional peer.
 
 ### Fixed

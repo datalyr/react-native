@@ -77,7 +77,10 @@ Add the config plugin to `app.json` so prebuild writes the SKAdNetwork ids and t
   ["@datalyr/react-native", {
     "networks": ["meta", "tiktok"],
     "trackingUsageDescription": "We use this to measure ad performance."
-  }]
+  ,
+      "attributionCopyEndpoint": "https://example.com",
+      "reengagementPostbackCopies": true
+    }]
 ]
 ```
 
