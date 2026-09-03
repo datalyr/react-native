@@ -70,14 +70,15 @@ public class DatalyrNativeModule extends ReactContextBaseJavaModule {
                         result.putString("gaid", gaid);
                     }
                 } catch (GooglePlayServicesNotAvailableException e) {
-                    // Google Play Services not available (e.g., Huawei devices)
-                    result.putInt("att_status", 3);
-                    result.putBoolean("advertiser_tracking_enabled", true);
+                    // Google Play Services not available (e.g., Huawei devices): no ad id,
+                    // so report "not determined" rather than a false "authorized".
+                    result.putInt("att_status", 0);
+                    result.putBoolean("advertiser_tracking_enabled", false);
                     Log.d(TAG, "Google Play Services not available for GAID");
                 } catch (Exception e) {
                     // Fallback — GAID not available but not blocking
-                    result.putInt("att_status", 3);
-                    result.putBoolean("advertiser_tracking_enabled", true);
+                    result.putInt("att_status", 0);
+                    result.putBoolean("advertiser_tracking_enabled", false);
                     Log.d(TAG, "GAID not available: " + e.getMessage());
                 }
 

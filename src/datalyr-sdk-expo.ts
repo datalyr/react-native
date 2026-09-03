@@ -176,6 +176,9 @@ export class DatalyrSDKExpo {
       // RN-22 / RN-24: must run BEFORE id creation — detectInstall()'s upgrade
       // guard uses @datalyr/visitor_id etc. as evidence of a prior install, so
       // reading it after the lines below would see this launch's own fresh id.
+      attributionManager.setDeepLinkHandler((params, url) => {
+        void this.track('$deep_link', { ...params, deep_link_url: url, source: 'deep_link' });
+      });
       await attributionManager.detectInstall();
 
       this.state.visitorId = await getOrCreateVisitorId();
@@ -603,7 +606,7 @@ export class DatalyrSDKExpo {
         debugLog('Web attribution is identity-only — skipping bridge event');
         return;
       }
-      if (webAttribution.visitor_id && webAttribution.visitor_id === this.state.visitorId) {
+      if (webAttribution.visitor_id && webAttribution.visitor_id === this.state.anonymousId) {
         debugLog('Web attribution visitor is our own visitor id — skipping bridge event');
         return;
       }
@@ -783,7 +786,7 @@ export class DatalyrSDKExpo {
         await this.trackAttributionMatchOutcome(false, 'identity_only');
         return;
       }
-      if (webAttribution.visitor_id && webAttribution.visitor_id === this.state.visitorId) {
+      if (webAttribution.visitor_id && webAttribution.visitor_id === this.state.anonymousId) {
         debugLog('Deferred web attribution visitor is our own visitor id — skipping bridge event');
         await this.trackAttributionMatchOutcome(false, 'self_match');
         return;
@@ -1309,6 +1312,7 @@ export class DatalyrSDKExpo {
       authorized: authorized,
       status: authorized ? 3 : 2,
       status_name: authorized ? 'authorized' : 'denied',
+      att_status: authorized ? 3 : 2, // key the Meta/Snapchat postback mappers read
     });
 
     debugLog(`ATT status updated: ${authorized ? 'authorized' : 'denied'}`);
@@ -1359,10 +1363,11 @@ export class DatalyrSDKExpo {
     // Get Apple Search Ads attribution if available
     const asaAttribution = appleSearchAdsIntegration.getAttributionData();
     const asaData = asaAttribution?.attribution ? {
+      asa_attribution: true,
       asa_campaign_id: asaAttribution.campaignId,
       asa_campaign_name: asaAttribution.campaignName,
-      asa_ad_group_id: asaAttribution.adGroupId,
-      asa_ad_group_name: asaAttribution.adGroupName,
+      asa_adgroup_id: asaAttribution.adGroupId,
+      asa_adgroup_name: asaAttribution.adGroupName,
       asa_keyword_id: asaAttribution.keywordId,
       asa_keyword: asaAttribution.keyword,
       asa_org_id: asaAttribution.orgId,

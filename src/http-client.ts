@@ -47,6 +47,10 @@ export class HttpClient {
   private endpoint: string;
   // Timestamps of recent sends for a sliding-window rate limit (see enforceRateLimit).
   private requestTimes: number[] = [];
+  // 401 grace window: hold events instead of dead-lettering them (see sendEvent).
+  private static readonly UNAUTHORIZED_HOLD_MS = 10 * 60 * 1000;
+  private firstUnauthorizedAt: number | null = null;
+  private warnedUnauthorized = false;
 
   constructor(endpoint: string, config: HttpClientConfig) {
     // Use server-side API if flag is set (default to true for v1.0.0)
@@ -130,6 +134,10 @@ export class HttpClient {
 
       clearTimeout(timeoutId);
 
+      if (response.ok) {
+        this.firstUnauthorizedAt = null;
+        this.warnedUnauthorized = false;
+      }
       if (!response.ok) {
         if (response.status === 413) {
           // Payload too large: no retry can fix it. Return (don't throw) so the queue can
@@ -145,6 +153,19 @@ export class HttpClient {
           };
         }
         if (response.status === 401) {
+          // A 401 right after a key rotation / workspace move is usually transient
+          // (propagation) or a config mistake being fixed. Hold the queue for a grace
+          // window instead of burning the retry budget and dead-lettering cold-start
+          // events; after the window, fall through to the permanent 4xx path.
+          const now = Date.now();
+          if (this.firstUnauthorizedAt === null) this.firstUnauthorizedAt = now;
+          if (now - this.firstUnauthorizedAt < HttpClient.UNAUTHORIZED_HOLD_MS) {
+            if (!this.warnedUnauthorized) {
+              this.warnedUnauthorized = true;
+              errorLog(`HTTP 401 from ingest: check the API key. Events are held (not dropped) for ${Math.round(HttpClient.UNAUTHORIZED_HOLD_MS / 60000)} minutes.`);
+            }
+            return { success: false, status: 401, error: 'HTTP 401: Authentication failed', authPending: true };
+          }
           throw new Error(`HTTP 401: Authentication failed. Check your API key and workspace ID.`);
         }
         if (response.status === 429 || response.status === 408) {

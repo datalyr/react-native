@@ -116,6 +116,14 @@ export class AttributionManager {
   private isFirstLaunch: boolean = false;
   private initialized: boolean = false;
   private deepLinkSubscription: { remove: () => void } | null = null;
+  // Set by the SDK: called with the attribution params of every attributable deep link so
+  // a `$deep_link` event is tracked (parity with the iOS SDK). Post-install re-engagement
+  // clicks otherwise have no event of their own for CAPI / attribution timing.
+  private deepLinkHandler: ((params: Record<string, string>, url: string) => void) | null = null;
+
+  setDeepLinkHandler(handler: ((params: Record<string, string>, url: string) => void) | null): void {
+    this.deepLinkHandler = handler;
+  }
   /**
    * Install time in epoch ms, used to bound the deferred web→app lookup. null when the
    * install time is unknown or unparseable — such a device cannot be bounded by the
@@ -350,7 +358,14 @@ export class AttributionManager {
       
       // Save updated attribution data
       await this.saveAttributionData();
-      
+
+      const attributable = Object.keys(urlParams).some((k) =>
+        /^(lyr|utm_|fbclid|gclid|ttclid|gbraid|wbraid|msclkid|dclid|sccid|oppref)/.test(k)
+      );
+      if (attributable && this.deepLinkHandler) {
+        try { this.deepLinkHandler(urlParams, url); } catch (e) { errorLog('deep link handler failed', e as Error); }
+      }
+
     } catch (error) {
       errorLog('Error handling deep link:', error as Error);
     }

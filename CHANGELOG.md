@@ -8,10 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.7.20] - 2026-09-03
 
 ### Added
+- `$deep_link` event (parity with the iOS SDK): tracked with the URL's attribution params whenever a deep link carries `lyr`, click ids or UTMs, so post-install re-engagement clicks have an event of their own.
 - AdAttributionKit is now actually called: on iOS 17.4+ `updatePostbackConversionValue` / `updatePostbackWithWindow` send the value to both SKAdNetwork and `AdAttributionKit.Postback` (the response carries `adAttributionKitAccepted`). On iOS 18+ `updateReengagementConversionValue` sends a real re-engagement `PostbackUpdate`; on 17.4-17.x it rejects with `unsupported` instead of silently re-sending the install value. Config plugin options `attributionCopyEndpoint` (AttributionCopyEndpoint) and `reengagementPostbackCopies` (EligibleForAdAttributionKitReengagementPostbackCopies).
 - Expo config plugin (`app.plugin.js`): `["@datalyr/react-native", { networks: ['meta','tiktok','google','snapchat','apple'], skAdNetworkIds, trackingUsageDescription }]` merges `SKAdNetworkItems` into `Info.plist` (deduped, existing entries kept) and sets `NSUserTrackingUsageDescription` when unset. Apple Search Ads needs no SKAdNetwork id. Android is a no-op. `@expo/config-plugins` is an optional peer.
 
 ### Fixed
+- HTTP 401 from ingest no longer burns the retry budget and dead-letters cold-start events: the queue is held for a 10-minute grace window with one unconditional warning, then the permanent-4xx path applies.
+- `$att_status` event also carries `att_status` (the key the Meta/Snapchat postback mappers read), alongside `status`/`status_name`.
+- Android `getAdvertiserInfo` reported `att_status: 3` / tracking enabled when the advertising id was unavailable (no Play Services); now `0` / false.
+- Deferred-lookup self-match guard compared the server's `visitor_id` against the internal `visitorId` (never sent); now `anonymousId`.
+- Apple Search Ads keys aligned with the iOS SDK (`asa_adgroup_id`, `asa_adgroup_name`, plus `asa_attribution: true`).
 - Docs: Expo Go runs events only; SKAdNetwork / IDFA / Apple Search Ads / Play Install Referrer need a development build. Bare React Native must run `npx install-expo-modules@latest` (the package is built on Expo Modules). `expo-application` / `expo-device` / `expo-network` are listed as required for the `/expo` entry point. Dropped the instruction to add `installreferrer` to the app's `build.gradle` (the library declares it). iOS 17.4+ wording is now "SKAdNetwork 4 postback APIs (AdAttributionKit-compatible)".
 - HTTP 413 (payload too large) is no longer retried: the event is dead-lettered immediately with an unconditional log naming the event and its byte size, marked `permanent: true`, and skipped by dead-letter replay. `track()` drops `eventData` over 200 000 bytes before enqueue with an `errorLog`.
 - `trackWithSKAdNetwork()` without `skadTemplate` now warns once per process unconditionally (was debug-only), so disabled conversion values are visible.
