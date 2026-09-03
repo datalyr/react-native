@@ -63,6 +63,7 @@ public class DatalyrNativeModule: Module {
 
           var request = URLRequest(url: URL(string: "https://api-adservices.apple.com/api/v1/")!)
           request.httpMethod = "POST"
+          request.timeoutInterval = 5
           request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
           request.httpBody = token.data(using: .utf8)
 

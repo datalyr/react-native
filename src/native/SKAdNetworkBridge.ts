@@ -11,6 +11,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SKAN_HIGH_FINE_KEY = '@datalyr/skan_high_fine';
 const SKAN_HIGH_COARSE_KEY = '@datalyr/skan_high_coarse'; // rank: 0=low 1=medium 2=high
 const SKAN_WINDOW_LOCKED_KEY = '@datalyr/skan_window_locked';
+// Registration is once per install. On iOS 17.4+ the native call sends a real
+// 0/low postback value; re-sending it on every cold launch would reset any
+// in-window high-water value (same bug the iOS SDK fixed as FSR-3).
+const SKAN_REGISTERED_KEY = '@datalyr/skan_registered';
 
 const coarseRank = (coarse: string): number => {
   switch ((coarse || '').toLowerCase()) {
@@ -323,8 +327,8 @@ export class SKAdNetworkBridge {
   }
 
   /**
-   * Check if AdAttributionKit is available (iOS 17.4+)
-   * AdAttributionKit is Apple's replacement for SKAdNetwork with enhanced features
+   * Check whether the SKAdNetwork 4 postback APIs (AdAttributionKit-compatible) are
+   * available (iOS 17.4+).
    */
   private static _isAdAttributionKitAvailable: boolean | null = null;
 
@@ -351,7 +355,8 @@ export class SKAdNetworkBridge {
 
   /**
    * Register for ad network attribution
-   * Uses AdAttributionKit on iOS 17.4+, SKAdNetwork on earlier versions
+   * Uses the SKAdNetwork 4 postback APIs (AdAttributionKit-compatible) on iOS 17.4+,
+   * SKAdNetwork 3 on earlier versions
    */
   static async registerForAttribution(): Promise<{ framework: string; registered: boolean } | null> {
     if (Platform.OS !== 'ios') {
@@ -364,7 +369,14 @@ export class SKAdNetworkBridge {
     }
 
     try {
+      const already = await AsyncStorage.getItem(SKAN_REGISTERED_KEY);
+      if (already) {
+        return { framework: already, registered: true };
+      }
       const result = await DatalyrSKAdNetwork.registerForAttribution();
+      if (result?.registered) {
+        await AsyncStorage.setItem(SKAN_REGISTERED_KEY, String(result.framework || 'skadnetwork'));
+      }
       console.log(`[Datalyr] Registered for attribution: ${result.framework}`);
       return result;
     } catch (error) {

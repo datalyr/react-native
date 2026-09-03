@@ -197,3 +197,14 @@ describe('SKAN conversion-value encoder (mixed model: 0-63, upward-only safe)', 
     expect(enc().encode('not_a_real_event')).toBe(0);
   });
 });
+
+describe('ConversionValueEncoder coarse value with no revenue', () => {
+  const { ConversionValueEncoder, ConversionTemplates } = require('../src/ConversionValueEncoder');
+  it('keeps the template coarse value when a revenue event carries no amount', () => {
+    const enc = new ConversionValueEncoder(ConversionTemplates.subscription);
+    expect(enc.encodeWithSKAN4('subscribe', {}).coarseValue).toBe('high');
+    expect(enc.encodeWithSKAN4('subscribe').coarseValue).toBe('high');
+    expect(enc.encodeWithSKAN4('subscribe', { revenue: 4 }).coarseValue).toBe('low');
+    expect(enc.encodeWithSKAN4('subscribe', { value: 99 }).coarseValue).toBe('high');
+  });
+});

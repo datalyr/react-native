@@ -52,8 +52,10 @@ export class ConversionValueEncoder {
 
     // Low 3 bits = revenue tier (only for monetary events).
     let coarseValue: SKANCoarseValue = mapping.coarseValue || 'medium';
-    if (mapping.hasRevenue && properties) {
-      const revenue = properties.revenue || properties.value || 0;
+    // Only let revenue drive the tier/coarse when the event actually carries a
+    // number — an empty properties bag must not demote a 'high' template to 'low'.
+    const revenue = properties ? Number(properties.revenue ?? properties.value) : NaN;
+    if (mapping.hasRevenue && Number.isFinite(revenue)) {
       conversionValue |= this.getRevenueTier(revenue);
       coarseValue = this.getCoarseValueForRevenue(revenue);
     }

@@ -5,7 +5,29 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.7.20] - 2026-09-03
+
+### Added
+- Expo config plugin (`app.plugin.js`): `["@datalyr/react-native", { networks: ['meta','tiktok','google','snapchat','apple'], skAdNetworkIds, trackingUsageDescription }]` merges `SKAdNetworkItems` into `Info.plist` (deduped, existing entries kept) and sets `NSUserTrackingUsageDescription` when unset. Apple Search Ads needs no SKAdNetwork id. Android is a no-op. `@expo/config-plugins` is an optional peer.
+
+### Fixed
+- Docs: Expo Go runs events only; SKAdNetwork / IDFA / Apple Search Ads / Play Install Referrer need a development build. Bare React Native must run `npx install-expo-modules@latest` (the package is built on Expo Modules). `expo-application` / `expo-device` / `expo-network` are listed as required for the `/expo` entry point. Dropped the instruction to add `installreferrer` to the app's `build.gradle` (the library declares it). iOS 17.4+ wording is now "SKAdNetwork 4 postback APIs (AdAttributionKit-compatible)".
+- HTTP 413 (payload too large) is no longer retried: the event is dead-lettered immediately with an unconditional log naming the event and its byte size, marked `permanent: true`, and skipped by dead-letter replay. `track()` drops `eventData` over 200 000 bytes before enqueue with an `errorLog`.
+- `trackWithSKAdNetwork()` without `skadTemplate` now warns once per process unconditionally (was debug-only), so disabled conversion values are visible.
+- `bindProviderIdentity()` warns once per unknown namespace (anything outside the server's `KNOWN_EXTERNAL_NAMESPACES`) that no webhook will join it; the event is still sent.
+- iOS: `initialize()` warns once, unconditionally, when the native modules are not linked (Expo Go, or a build without `pod install`) so SKAdNetwork / IDFA / Apple Search Ads being disabled is no longer silent.
+- `getSuperwallAttributes()` / `getRevenueCatAttributes()` set `datalyr_id` to the internal `visitorId`, which is never sent to the server (the wire carries `anonymousId`, stored as `visitor_id`). The webhook visitor-id leg could therefore never match. Now sends `anonymousId`.
+- `alias()` defaulted `previousId` to `visitorId` (never on the wire); now `currentUserId` or `anonymousId`, so prior anonymous events actually link (port of iOS FSR-32).
+- SKAdNetwork registration on iOS 17.4+ sent a `0/low` postback value on every cold launch, resetting any in-window high-water value. Registration is now once per install (persisted flag; port of iOS FSR-3).
+- `PrivacyInfo.xcprivacy` no longer lists `ingest.datalyr.com` / `api.datalyr.com` under `NSPrivacyTrackingDomains`: iOS fails requests to listed domains until ATT is granted, which would block event ingest for un-prompted and denied users.
+- `errorLog` (dropped events, dead-letter moves, bad keys) is now visible in release builds, not only under `__DEV__`. The Expo build (`utils-expo.ts`) had its own `__DEV__`-gated copy; it now matches.
+- Event queue load now merges with events enqueued while the async load was in flight instead of replacing them.
+- Apple Search Ads attribution request has a 5s timeout instead of URLSession's 60s default, so SDK init is not gated on Apple.
+- Android: Play Install Referrer settles its promise on service disconnect (init could hang forever); GAID fetch catches `Throwable` (a missing ads-identifier class would have crashed the process) and filters the Android 13 zero id.
+- Android in Expo apps: `expo-module.config.json` listed the React Native `DatalyrPackage` under `android.modules`, which Expo emits into its Kotlin `Module` list (a compile error) while its react-native-config resolver suppressed normal RN autolinking for the package. The config is now Apple-only, so RN autolinking registers `DatalyrPackage` (GAID, Play Install Referrer) on Android.
+- Podspec now ships `PrivacyInfo.xcprivacy` as a resource bundle and declares the AdSupport / AppTrackingTransparency / StoreKit frameworks (AdServices weak-linked).
+- `ConversionValueEncoder.encodeWithSKAN4`: a revenue-bearing template event (`subscribe`, `purchase`, `upgrade`) tracked without a numeric `revenue`/`value` was demoted to coarse `low`; the template's coarse value now stands unless a real amount is present.
+- Expo SDK 54 autolinking (expo-modules-autolinking 3.x) never registered `DatalyrNativeModule` / `DatalyrSKAdNetworkModule`: the resolver only scans top-level subdirectories for podspecs, and ours lives at the package root. `expo-module.config.json` now uses the `apple` platform key and declares `podspecPath`, so the Expo modules provider imports the pod again (restores SKAdNetwork/AdAttributionKit registration, native IDFA and Apple Search Ads attribution in Expo apps).
 
 ## [1.7.19] - 2026-08-25
 

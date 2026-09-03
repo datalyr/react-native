@@ -206,6 +206,9 @@ export interface QueuedEvent {
   // How many times this event has been pulled back out of the dead-letter store and
   // replayed. Bounds replay so a permanently-bad event can't loop forever.
   replayCount?: number;
+  // Set on dead-letter entries that can never deliver (e.g. server 413 payload too
+  // large). replayDeadLetter skips them; they are kept only for inspection.
+  permanent?: boolean;
 }
 
 // App State - Updated for React Native 0.80

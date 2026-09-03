@@ -41,12 +41,16 @@ export class EventQueue {
         // Filter out corrupted entries (null / missing payload / no eventName) — a partial
         // write or cross-version schema drift would otherwise throw inside processQueue's
         // catch handler and jam the queue head every cycle (head-of-line blockage).
-        this.queue = persistedQueue.filter(
+        const loaded = persistedQueue.filter(
           (e) => e && e.payload && typeof e.payload.eventName === 'string'
         );
-        if (this.queue.length !== persistedQueue.length) {
-          errorLog(`Dropped ${persistedQueue.length - this.queue.length} corrupted queue entr(ies) on load`);
+        if (loaded.length !== persistedQueue.length) {
+          errorLog(`Dropped ${persistedQueue.length - loaded.length} corrupted queue entr(ies) on load`);
         }
+        // Prepend: events enqueued while this load was in flight (pre-init replay,
+        // app_install) must survive, and the persisted backlog is older.
+        const inFlight = new Set(this.queue.map((e) => e.payload.eventId));
+        this.queue = [...loaded.filter((e) => !inFlight.has(e.payload.eventId)), ...this.queue];
         debugLog(`Loaded ${this.queue.length} events from storage`);
       }
 
@@ -85,6 +89,8 @@ export class EventQueue {
       let replayed = 0;
       for (const event of stored) {
         if (!event || !event.payload || typeof event.payload.eventName !== 'string') continue;
+        // Permanent entries (413 payload-too-large) can never deliver; never replay them.
+        if (event.permanent) continue;
         const replayCount = event.replayCount || 0;
         const age = now - (event.timestamp || now);
         if (replayCount >= MAX_REPLAYS || age > MAX_DEAD_LETTER_AGE_MS) continue;
@@ -200,6 +206,15 @@ export class EventQueue {
               // transient missing key. The flush timer retries once the key is set.
               debugLog(`Auth not ready; keeping event queued: ${queuedEvent.payload.eventName}`);
               return;
+            } else if (response.payloadTooLarge) {
+              // 413: the server will never accept this body. Dead-letter NOW (no retry
+              // budget, no replay) and say so unconditionally — a silently-parked
+              // purchase is the worst outcome.
+              const bytes = response.bodyBytes != null ? `${response.bodyBytes} bytes` : 'size unknown';
+              errorLog(`Event '${queuedEvent.payload.eventName}' rejected by server as too large (HTTP 413, ${bytes}); moved to dead-letter permanently (will not be replayed)`);
+              await this.deadLetter({ ...queuedEvent, permanent: true }, 'payload too large (HTTP 413)');
+              this.removeFromQueue(queuedEvent);
+              removedThisBatch++;
             } else {
               // Connectivity-class failures (httpClient surfaces them as success:false with
               // an error message after its internal retries) are NOT the event's fault —
@@ -256,8 +271,12 @@ export class EventQueue {
    * Park a permanently-failed event in a capped dead-letter store instead of silently
    * dropping it — surfaced (errorLog) and recoverable for replay/inspection.
    */
-  private async deadLetter(event: QueuedEvent): Promise<void> {
-    errorLog(`Event exceeded max retries (${this.config.maxRetryCount}); moved to dead-letter: ${event.payload.eventName}`);
+  private async deadLetter(event: QueuedEvent, reason?: string): Promise<void> {
+    if (reason) {
+      errorLog(`Event moved to dead-letter (${reason}): ${event.payload.eventName}`);
+    } else {
+      errorLog(`Event exceeded max retries (${this.config.maxRetryCount}); moved to dead-letter: ${event.payload.eventName}`);
+    }
     try {
       const existing = (await Storage.getItem<QueuedEvent[]>(STORAGE_KEYS.DEAD_LETTER_QUEUE)) || [];
       existing.push(event);

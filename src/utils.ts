@@ -618,8 +618,12 @@ export const debugLog = (message: string, ...args: any[]): void => {
  * Error logging utility
  */
 export const errorLog = (message: string, error?: Error): void => {
-  if (__DEV__) {
-    console.error(`[Datalyr Error] ${message}`, error);
+  // Unconditional: dropped events, dead-letter moves and bad keys must be
+  // visible in release builds, not only under __DEV__.
+  if (error !== undefined) {
+    console.warn(`[Datalyr Error] ${message}`, error);
+  } else {
+    console.warn(`[Datalyr Error] ${message}`);
   }
 };
 

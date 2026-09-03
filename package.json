@@ -1,6 +1,6 @@
 {
   "name": "@datalyr/react-native",
-  "version": "1.7.19",
+  "version": "1.7.20",
   "description": "Datalyr SDK for React Native & Expo - Server-side attribution tracking for iOS and Android",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -21,7 +21,8 @@
     "CHANGELOG.md",
     "LICENSE",
     "*.podspec",
-    "expo-module.config.json"
+    "expo-module.config.json",
+    "app.plugin.js"
   ],
   "keywords": [
     "react-native",
@@ -99,6 +100,9 @@
       "optional": false
     },
     "expo": {
+      "optional": true
+    },
+    "@expo/config-plugins": {
       "optional": true
     },
     "expo-device": {

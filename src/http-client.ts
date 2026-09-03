@@ -20,7 +20,27 @@ interface HttpResponse {
   // true when the send was SKIPPED because no API key is configured yet. The queue must
   // treat this as "not ready" — keep the event, don't burn a retry, don't dead-letter.
   authPending?: boolean;
+  // true when the server answered 413 (payload too large). Retrying can never succeed;
+  // the queue dead-letters the event immediately and marks it non-replayable.
+  payloadTooLarge?: boolean;
+  // Serialized request body size in bytes (set alongside payloadTooLarge for the log line).
+  bodyBytes?: number;
 }
+
+/**
+ * UTF-8 byte length of a string without TextEncoder/Buffer (neither is guaranteed in RN).
+ */
+export const utf8ByteLength = (s: string): number => {
+  let bytes = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) bytes += 1;
+    else if (c < 0x800) bytes += 2;
+    else if (c >= 0xd800 && c <= 0xdbff) { bytes += 4; i++; } // surrogate pair
+    else bytes += 3;
+  }
+  return bytes;
+};
 
 export class HttpClient {
   private config: HttpClientConfig;
@@ -100,16 +120,30 @@ export class HttpClient {
         ? this.transformForServerAPI(payload)
         : payload;
 
+      const body = JSON.stringify(requestBody);
       const response = await fetch(this.endpoint, {
         method: 'POST',
         headers,
-        body: JSON.stringify(requestBody),
+        body,
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
       if (!response.ok) {
+        if (response.status === 413) {
+          // Payload too large: no retry can fix it. Return (don't throw) so the queue can
+          // dead-letter immediately without burning its retry budget on a hopeless send.
+          const bodyBytes = utf8ByteLength(body);
+          errorLog(`Server rejected event '${payload.eventName}' as too large (HTTP 413, ${bodyBytes} bytes); it will not be retried`);
+          return {
+            success: false,
+            status: 413,
+            error: `HTTP 413: payload too large (${bodyBytes} bytes)`,
+            payloadTooLarge: true,
+            bodyBytes,
+          };
+        }
         if (response.status === 401) {
           throw new Error(`HTTP 401: Authentication failed. Check your API key and workspace ID.`);
         }

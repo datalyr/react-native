@@ -24,22 +24,27 @@ That's all you need. Only the API key is required -- `workspaceId` is no longer 
 
 > **WARNING: `expo-modules-core` is a required peer dependency, in bare React Native too.** The SDK calls `requireNativeModule` at module load. A missing package throws before `initialize()` runs.
 
+**Bare React Native** (the package is built on Expo Modules):
 ```bash
 npm install @datalyr/react-native expo-modules-core
-```
-
-**iOS setup:**
-```bash
+npx install-expo-modules@latest   # adds use_expo_modules! to the Podfile and useExpoModules() to settings.gradle
 cd ios && pod install && cd ..
 ```
 
 Minimum iOS deployment target is 13.0.
 
 **Android setup:**
-No additional setup is required for events. Play Install Referrer attribution needs one Gradle line — see below.
+No additional setup is required. The library declares the Play Install Referrer dependency itself.
 
 **Expo:**
-Works with Expo Go and EAS builds. No extra plugin and no `eas.json` change.
+```bash
+npx expo install @datalyr/react-native expo-application expo-device expo-network
+```
+`expo-application`, `expo-device` and `expo-network` are required when importing from `@datalyr/react-native/expo`. Add the config plugin to `app.json` (see the README "Expo" install section) to write SKAdNetwork ids and the ATT prompt string into `Info.plist`:
+```json
+"plugins": [["@datalyr/react-native", { "networks": ["meta", "tiktok"], "trackingUsageDescription": "We use this to measure ad performance." }]]
+```
+Expo Go runs **events only**. SKAdNetwork, IDFA, Apple Search Ads and Play Install Referrer need a development build (`npx expo run:ios` or EAS Build).
 
 **Peer dependencies:**
 
@@ -167,14 +172,7 @@ There is no `app_open`, `app_foreground`, or `app_background` event. Moving to t
 
 ### Android: Play Install Referrer
 
-For deterministic web-to-app attribution on Android (~95% accuracy), add the Play Install Referrer library to `android/app/build.gradle`:
-
-```groovy
-dependencies {
-    // ... other dependencies
-    implementation 'com.android.installreferrer:installreferrer:2.2'
-}
-```
+Deterministic web-to-app attribution on Android (~95% accuracy) uses the Play Install Referrer API. The library declares the dependency itself; no Gradle change is needed. It requires a native build (not Expo Go).
 
 The SDK reads the install referrer automatically on first launch. No additional code required.
 
@@ -902,7 +900,7 @@ Privacy-compliant. No per-campaign adset cap. Unlimited optimization signals.
 3. After install, mobile SDK reads Play Store referrer via Play Install Referrer API
 4. Automatic match using referrer data
 
-Requires: `implementation 'com.android.installreferrer:installreferrer:2.2'` in `android/app/build.gradle`
+Requires a native build (not Expo Go). The library declares the Play Install Referrer dependency.
 
 **iOS (Probabilistic, ~90%+ for immediate installs):**
 1. Web SDK records visitor's IP, user agent, and all attribution when `trackAppDownloadClick()` fires
@@ -1081,7 +1079,7 @@ console.log(Datalyr.getAppleSearchAdsAttribution());
 | Wrong API key format | Auth errors | Must start with `dk_`, from **Settings → API** |
 | Not setting up conversion rules | Events tracked but never sent to ad platforms | Create a rule under **Conversions** |
 | Forgetting `reset()` on logout | Next user's events attributed to previous user | Always call `reset()` on logout |
-| Missing Play Install Referrer (Android) | Android web-to-app attribution fails | Add `installreferrer:2.2` to build.gradle |
+| Running in Expo Go | SKAN, IDFA, Apple Search Ads and Play Install Referrer silently unavailable | Use a development build (`npx expo run:ios` / EAS) |
 | Initializing SDK multiple times | Race conditions, double events | Initialize ONCE in App.tsx useEffect |
 | Calling `getAttributionData()` before SDK resolves | Returns empty | Wait for initialization, or check after identify() |
 
@@ -1110,7 +1108,7 @@ Yes, each gets its own webhook URL.
 Yes. Events queue locally (up to 100 by default) and send when connectivity returns.
 
 **Does it work with Expo?**
-Yes. Works with Expo Go, EAS builds, managed workflow, and bare workflow. Import from `@datalyr/react-native/expo` for Expo-specific helpers. `expo-modules-core` is required in bare React Native too.
+Yes. Managed and bare workflows are supported; import from `@datalyr/react-native/expo` (requires `expo-application`, `expo-device`, `expo-network`). Expo Go runs events only: SKAdNetwork, IDFA, Apple Search Ads and Play Install Referrer need a development build (`npx expo run:ios` or EAS). Bare React Native needs `expo-modules-core` plus `npx install-expo-modules@latest`.
 
 ### Attribution
 
@@ -1127,7 +1125,7 @@ Android ~95% (deterministic via Play referrer). iOS ~90%+ for same-session insta
 It's the iOS fallback. If IP matching fails (VPN, delayed install, network change), email matching connects the web visitor to the app user.
 
 **Do I need the Play Install Referrer library for Android?**
-Yes, for deterministic attribution. Add `implementation 'com.android.installreferrer:installreferrer:2.2'` to `android/app/build.gradle`.
+No Gradle change: the library declares the dependency. It needs a native build (not Expo Go).
 
 ### Revenue & Conversions
 

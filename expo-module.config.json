@@ -1,9 +1,7 @@
 {
-  "platforms": ["ios", "android"],
-  "ios": {
+  "platforms": ["apple"],
+  "apple": {
+    "podspecPath": "datalyr-react-native.podspec",
     "modules": ["DatalyrNativeModule", "DatalyrSKAdNetworkModule"]
-  },
-  "android": {
-    "modules": ["com.datalyr.reactnative.DatalyrPackage"]
   }
 }

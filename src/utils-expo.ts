@@ -50,10 +50,12 @@ export const debugLog = (message: string, ...args: any[]) => {
 };
 
 export const errorLog = (message: string, error?: Error) => {
-  // Gate on __DEV__ so the SDK never spams the host app's PRODUCTION console
-  // (matches the RN build's utils.ts errorLog). RN-22.
-  if (__DEV__) {
-    console.error(`[Datalyr Error] ${message}`, error);
+  // Unconditional (matches utils.ts): dropped events, dead-letter moves and bad keys
+  // must be visible in release builds, not only under __DEV__.
+  if (error !== undefined) {
+    console.warn(`[Datalyr Error] ${message}`, error);
+  } else {
+    console.warn(`[Datalyr Error] ${message}`);
   }
 };
 

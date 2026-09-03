@@ -43,7 +43,7 @@ import {
   leadProperties,
 } from './ecommerce-properties';
 import { SDK_VERSION } from './version';
-import { createHttpClient, HttpClient } from './http-client';
+import { createHttpClient, HttpClient, utf8ByteLength } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData } from './attribution';
 import { journeyManager } from './journey';
@@ -51,8 +51,25 @@ import { createAutoEventsManager, AutoEventsManager, SessionData } from './auto-
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 import { appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
-import { AppleSearchAdsAttribution, AdvertiserInfoBridge } from './native/DatalyrNativeBridge';
+import { AppleSearchAdsAttribution, AdvertiserInfoBridge, isNativeModuleAvailable } from './native/DatalyrNativeBridge';
 import { networkStatusManager } from './network-status';
+
+// Largest serialized `eventData` accepted by track(). Ingest answers 413 above its body
+// cap; dropping here (with a loud log) beats a queued event that can never deliver.
+const MAX_EVENT_DATA_BYTES = 200_000;
+
+// Provider namespaces the server's webhooks join on `external_ids`. MUST match
+// KNOWN_EXTERNAL_NAMESPACES in datalyr-v2/infra/cloudflare/lib/person-contract.js.
+const KNOWN_EXTERNAL_NAMESPACES: readonly string[] = [
+  'revenuecat', 'superwall', 'stripe', 'shopify', 'whop', 'checkoutchamp',
+  'clickfunnels', 'firebase',
+  'klaviyo',
+];
+
+// Once-per-process warning latches (unconditional console.warn, not debug-gated).
+let skadTemplateMissingWarned = false;
+let nativeModulesMissingWarned = false;
+const unknownNamespaceWarned = new Set<string>();
 
 // Once-per-install dedupe marker for the identify(email) web-attribution lookup. Module
 // const (not a local in fetchAndMergeWebAttribution) so reset() can drop it — 9.C.1.
@@ -318,6 +335,17 @@ export class DatalyrSDK {
         await attributionManager.markInstallTracked();
       }
       
+      // Loud, once: on iOS without the native pods every SKAN / IDFA / Apple Search Ads
+      // call is a silent no-op. Expo Go can't load them; a dev build with pod install can.
+      if (
+        Platform.OS === 'ios' &&
+        !nativeModulesMissingWarned &&
+        (!isNativeModuleAvailable() || !SKAdNetworkBridge.isAvailable())
+      ) {
+        nativeModulesMissingWarned = true;
+        console.warn('[Datalyr] Native modules not linked — SKAdNetwork, IDFA and Apple Search Ads are disabled. Expo Go does not support them; use a development build and re-run pod install.');
+      }
+
       debugLog('Datalyr SDK initialized successfully', {
         workspaceId: this.state.config.workspaceId,
         visitorId: this.state.visitorId,
@@ -363,6 +391,14 @@ export class DatalyrSDK {
       if (!validateEventData(eventData)) {
         errorLog('Invalid event data provided');
         return;
+      }
+
+      if (eventData) {
+        const bytes = utf8ByteLength(JSON.stringify(eventData));
+        if (bytes > MAX_EVENT_DATA_BYTES) {
+          errorLog(`Dropping event '${name}': eventData is ${bytes} bytes (max ${MAX_EVENT_DATA_BYTES}); the server would reject it with 413`);
+          return;
+        }
       }
 
       debugLog(`Tracking event: ${name}`, eventData);
@@ -918,7 +954,7 @@ export class DatalyrSDK {
         // ingest's $alias link builder reads camelCase `userId`/`previousId`; `newUserId`
         // alone wrote no link. Emit `userId` too. (Event name must be `$alias`, below.)
         userId: newUserId,
-        previousId: previousId || this.state.visitorId,
+        previousId: previousId || this.state.currentUserId || this.state.anonymousId,
         visitorId: this.state.visitorId,
         anonymousId: this.state.anonymousId,  // Include for identity resolution
       };
@@ -1140,8 +1176,9 @@ export class DatalyrSDK {
 
     // Automatic SKAdNetwork encoding with SKAN 4.0 support
     if (!DatalyrSDK.conversionEncoder) {
-      if (DatalyrSDK.debugEnabled) {
-        errorLog('SKAdNetwork encoder not initialized. Pass skadTemplate in initialize()');
+      if (!skadTemplateMissingWarned) {
+        skadTemplateMissingWarned = true;
+        console.warn("[Datalyr] skadTemplate not set — SKAdNetwork conversion values are disabled. Set config.skadTemplate ('ecommerce' | 'gaming' | 'subscription')");
       }
       return;
     }
@@ -1323,6 +1360,10 @@ export class DatalyrSDK {
         errorLog(`bindProviderIdentity requires a namespace and a provider user id (got '${namespace}', '${providerUserId}')`);
         return;
       }
+      if (!KNOWN_EXTERNAL_NAMESPACES.includes(ns) && !unknownNamespaceWarned.has(ns)) {
+        unknownNamespaceWarned.add(ns);
+        console.warn(`[Datalyr] bindProviderIdentity('${ns}'): unknown provider namespace — no Datalyr webhook joins on it, so this binding will not attribute webhook revenue. Known namespaces: ${KNOWN_EXTERNAL_NAMESPACES.join(', ')}. The event is still sent.`);
+      }
       await this.track('$provider_identity_bound', {
         external_ids: { [ns]: id },
         provider_namespace: ns,
@@ -1345,7 +1386,7 @@ export class DatalyrSDK {
       if (value != null && String(value) !== '') attrs[key] = String(value);
     };
 
-    set('datalyr_id', this.state.visitorId);
+    set('datalyr_id', this.state.anonymousId); // the wire/visitor_id id, NOT visitorId (never sent)
     set('media_source', attribution.utm_source);
     set('campaign', attribution.utm_campaign);
     set('adgroup', attribution.adset_id || attribution.utm_content);
@@ -1398,7 +1439,7 @@ export class DatalyrSDK {
     // unknown `$` keys, so the old `$datalyrId` never reached the webhook and
     // killed the deterministic visitor-id match. The server reads `datalyr_id`
     // (webhooks/platforms/revenuecat.js).
-    set('datalyr_id', this.state.visitorId);
+    set('datalyr_id', this.state.anonymousId); // the wire/visitor_id id, NOT visitorId (never sent)
 
     // Reserved attributes ($ prefix)
     set('$mediaSource', attribution.utm_source);
@@ -1639,8 +1680,8 @@ export class DatalyrSDK {
     // constructor default); the replayed $alias would ship empty previousId and the server
     // link builder requires it truthy (`if (previousId && userId ...)`). Resolve it at
     // payload-creation time (post-init, so visitorId is populated).
-    if (eventName === '$alias' && payload.eventData && !payload.eventData.previousId && this.state.visitorId) {
-      payload.eventData.previousId = this.state.visitorId;
+    if (eventName === '$alias' && payload.eventData && !payload.eventData.previousId && (this.state.currentUserId || this.state.anonymousId)) {
+      payload.eventData.previousId = this.state.currentUserId || this.state.anonymousId;
     }
 
     if (Object.keys(this.state.userProperties).length > 0) {

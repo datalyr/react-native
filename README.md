@@ -44,22 +44,44 @@ Full reference: [docs.datalyr.com/sdk-reference/react-native](https://docs.datal
 
 Minimum iOS deployment target is 13.0.
 
+> **Expo Go runs events only.** SKAdNetwork, IDFA, Apple Search Ads and Play Install Referrer need the SDK's native modules, which Expo Go cannot load. Use a development build (`npx expo run:ios` / `npx expo run:android`, or EAS Build).
+
 ---
 
 ## Installation
 
+### Bare React Native
+
+The package is built on Expo Modules, so a bare app must have them installed once:
+
 ```bash
 npm install @datalyr/react-native expo-modules-core
+npx install-expo-modules@latest   # adds use_expo_modules! to the Podfile and useExpoModules() to settings.gradle
 cd ios && pod install
 ```
 
-The package bundles `@react-native-async-storage/async-storage`, `react-native-get-random-values`, and `uuid`.
+The package bundles `@react-native-async-storage/async-storage`, `react-native-get-random-values`, and `uuid`. Android needs no extra Gradle setup: the library declares the Play Install Referrer dependency itself.
 
-Android needs no extra setup for events. For Play Install Referrer attribution, add this line to `android/app/build.gradle`:
+### Expo
 
-```groovy
-implementation 'com.android.installreferrer:installreferrer:2.2'
+```bash
+npx expo install @datalyr/react-native expo-application expo-device expo-network
 ```
+
+`expo-application`, `expo-device` and `expo-network` are required when you import from `@datalyr/react-native/expo`.
+
+Add the config plugin to `app.json` so prebuild writes the SKAdNetwork ids and the ATT prompt string into `Info.plist`:
+
+```json
+"plugins": [
+  ["@datalyr/react-native", {
+    "networks": ["meta", "tiktok"],
+    "trackingUsageDescription": "We use this to measure ad performance."
+  }]
+]
+```
+
+`networks` accepts `meta`, `tiktok`, `google`, `snapchat` and `apple` (Apple Search Ads needs no SKAdNetwork id). Add other ids with `skAdNetworkIds: string[]`. Existing `SKAdNetworkItems` are kept and deduplicated; an existing `NSUserTrackingUsageDescription` is not overwritten. Then build: `npx expo run:ios` or EAS. Expo Go ignores plugins and runs events only.
 
 ---
 
@@ -383,7 +405,7 @@ const status = Datalyr.getPlatformIntegrationStatus();
 // { appleSearchAds: boolean, playInstallReferrer: boolean }
 ```
 
-Play Install Referrer needs `implementation 'com.android.installreferrer:installreferrer:2.2'` in `android/app/build.gradle`.
+Play Install Referrer needs a native build (the library declares the `installreferrer` dependency); it is unavailable in Expo Go.
 
 ### Web-to-app attribution
 
@@ -854,7 +876,7 @@ Automatic screen tracking and manual `Datalyr.screen()` calls each send their ow
 
 1. Confirm `enableAttribution` is `true`.
 2. Read `Datalyr.getPlatformIntegrationStatus()`.
-3. On Android, confirm `installreferrer:2.2` is in `android/app/build.gradle`.
+3. Confirm the app is a native build, not Expo Go (SKAdNetwork, IDFA, Apple Search Ads and Play Install Referrer are unavailable there).
 4. On iOS, confirm the device runs 14.3 or later for Apple Search Ads.
 5. Call `identify()` with the user's email as the IP-match fallback.
 
@@ -895,7 +917,11 @@ npx react-native run-android
 
 ### The app throws before initialize() runs
 
-Install `expo-modules-core`. The SDK calls `requireNativeModule` at module load, in bare React Native too.
+Install `expo-modules-core` and run `npx install-expo-modules@latest` in a bare app. The SDK calls `requireNativeModule` at module load, in bare React Native too.
+
+### "[Datalyr] Native modules not linked" at startup
+
+The JS loaded but the iOS pods did not. On Expo Go this is expected (events only). On a development or bare build, re-run `pod install` and rebuild.
 
 ---
 

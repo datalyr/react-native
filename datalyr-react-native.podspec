@@ -17,6 +17,10 @@ Pod::Spec.new do |s|
   s.platform     = :ios, "13.0"
   s.source       = { :git => package['repository']['url'], :tag => "v#{s.version}" }
   s.source_files = "ios/**/*.{h,m,swift}"
+  # Ship the privacy manifest (tracking domains + accessed-API reasons).
+  s.resource_bundles = { "DatalyrReactNativePrivacy" => ["ios/PrivacyInfo.xcprivacy"] }
+  s.frameworks = ["AdSupport", "AppTrackingTransparency", "StoreKit"]
+  s.weak_frameworks = ["AdServices"]
   s.swift_version = "5.0"
 
   s.dependency "ExpoModulesCore"

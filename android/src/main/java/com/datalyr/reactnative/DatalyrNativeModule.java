@@ -64,8 +64,10 @@ public class DatalyrNativeModule extends ReactContextBaseJavaModule {
                     result.putBoolean("advertiser_tracking_enabled", !limitAdTracking);
                     result.putInt("att_status", limitAdTracking ? 2 : 3); // 2=denied, 3=authorized
 
-                    if (!limitAdTracking && adInfo.getId() != null) {
-                        result.putString("gaid", adInfo.getId());
+                    String gaid = adInfo.getId();
+                    // Android 13+ returns the zero id when AD_ID is not granted.
+                    if (!limitAdTracking && gaid != null && !gaid.equals("00000000-0000-0000-0000-000000000000")) {
+                        result.putString("gaid", gaid);
                     }
                 } catch (GooglePlayServicesNotAvailableException e) {
                     // Google Play Services not available (e.g., Huawei devices)
@@ -80,7 +82,9 @@ public class DatalyrNativeModule extends ReactContextBaseJavaModule {
                 }
 
                 promise.resolve(result);
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                // Throwable: a NoClassDefFoundError (ads-identifier excluded by the app)
+                // on this raw Thread would otherwise kill the process.
                 Log.e(TAG, "Failed to get advertiser info: " + e.getMessage());
                 promise.resolve(null);
             }

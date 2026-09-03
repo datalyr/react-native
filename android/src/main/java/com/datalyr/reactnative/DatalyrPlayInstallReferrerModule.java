@@ -73,6 +73,9 @@ public class DatalyrPlayInstallReferrerModule extends ReactContextBaseJavaModule
      */
     @ReactMethod
     public void getInstallReferrer(final Promise promise) {
+        // The listener can fire more than once (setupFinished, then disconnected);
+        // a Promise may only be settled once. Guard every resolve through `settled`.
+        final java.util.concurrent.atomic.AtomicBoolean settled = new java.util.concurrent.atomic.AtomicBoolean(false);
         try {
             referrerClient = InstallReferrerClient.newBuilder(reactContext.getApplicationContext()).build();
 
@@ -84,10 +87,10 @@ public class DatalyrPlayInstallReferrerModule extends ReactContextBaseJavaModule
                             try {
                                 ReferrerDetails details = referrerClient.getInstallReferrer();
                                 WritableMap result = parseReferrerDetails(details);
-                                promise.resolve(result);
+                                if (settled.compareAndSet(false, true)) promise.resolve(result);
                             } catch (RemoteException e) {
                                 Log.e(TAG, "Failed to get install referrer", e);
-                                promise.resolve(null);
+                                if (settled.compareAndSet(false, true)) promise.resolve(null);
                             } finally {
                                 referrerClient.endConnection();
                             }
@@ -95,19 +98,19 @@ public class DatalyrPlayInstallReferrerModule extends ReactContextBaseJavaModule
 
                         case InstallReferrerClient.InstallReferrerResponse.FEATURE_NOT_SUPPORTED:
                             Log.d(TAG, "Install referrer not supported on this device");
-                            promise.resolve(null);
+                            if (settled.compareAndSet(false, true)) promise.resolve(null);
                             referrerClient.endConnection();
                             break;
 
                         case InstallReferrerClient.InstallReferrerResponse.SERVICE_UNAVAILABLE:
                             Log.d(TAG, "Install referrer service unavailable");
-                            promise.resolve(null);
+                            if (settled.compareAndSet(false, true)) promise.resolve(null);
                             referrerClient.endConnection();
                             break;
 
                         default:
                             Log.d(TAG, "Install referrer unknown response: " + responseCode);
-                            promise.resolve(null);
+                            if (settled.compareAndSet(false, true)) promise.resolve(null);
                             referrerClient.endConnection();
                             break;
                     }
@@ -116,12 +119,13 @@ public class DatalyrPlayInstallReferrerModule extends ReactContextBaseJavaModule
                 @Override
                 public void onInstallReferrerServiceDisconnected() {
                     Log.d(TAG, "Install referrer service disconnected");
-                    // Connection lost - can try to reconnect if needed
+                    // Settle the promise so SDK init never hangs on a lost connection.
+                    if (settled.compareAndSet(false, true)) promise.resolve(null);
                 }
             });
-        } catch (Exception e) {
+        } catch (Throwable e) {
             Log.e(TAG, "Failed to start install referrer client", e);
-            promise.resolve(null);
+            if (settled.compareAndSet(false, true)) promise.resolve(null);
         }
     }
 
