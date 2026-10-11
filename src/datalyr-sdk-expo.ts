@@ -46,7 +46,7 @@ import {
 import { SDK_VERSION } from './version';
 import { createHttpClient, HttpClient, utf8ByteLength } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
-import { attributionManager, AttributionData } from './attribution';
+import { attributionManager, AttributionData, presentWebMatchClickIds, primaryClickIdType } from './attribution';
 import { journeyManager } from './journey';
 import { createAutoEventsManager, AutoEventsManager } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
@@ -204,7 +204,15 @@ export class DatalyrSDKExpo {
           fbclid: initialAttribution.fbclid,
           gclid: initialAttribution.gclid,
           ttclid: initialAttribution.ttclid,
-          clickIdType: initialAttribution.fbclid ? 'fbclid' : initialAttribution.gclid ? 'gclid' : initialAttribution.ttclid ? 'ttclid' : undefined,
+          gbraid: initialAttribution.gbraid,
+          wbraid: initialAttribution.wbraid,
+          twclid: initialAttribution.twclid,
+          li_fat_id: initialAttribution.li_fat_id,
+          sclid: initialAttribution.sclid,
+          aleid: initialAttribution.aleid,
+          // Every click id gets a type (was fbclid/gclid/ttclid only); those three keep
+          // their precedence. Order lives in CLICK_ID_PRIMARY_ORDER (attribution.ts).
+          clickIdType: primaryClickIdType(initialAttribution),
           lyr: initialAttribution.lyr,
         });
       }
@@ -628,6 +636,8 @@ export class DatalyrSDKExpo {
         ttclid: webAttribution.ttclid,
         gbraid: webAttribution.gbraid,
         wbraid: webAttribution.wbraid,
+        // twclid / li_fat_id / sclid / aleid, only when present (see presentWebMatchClickIds).
+        ...presentWebMatchClickIds(webAttribution),
         // Emit `_fbp`/`_fbc` (the keys the attribution MV + Meta postback extract) as well
         // as the bare keys — bare fbp/fbc alone have no reader. See datalyr-sdk.ts.
         fbp: webAttribution.fbp,
@@ -804,6 +814,8 @@ export class DatalyrSDKExpo {
         ttclid: webAttribution.ttclid,
         gbraid: webAttribution.gbraid,
         wbraid: webAttribution.wbraid,
+        // twclid / li_fat_id / sclid / aleid, only when present (see presentWebMatchClickIds).
+        ...presentWebMatchClickIds(webAttribution),
         // Emit `_fbp`/`_fbc` (the keys the attribution MV + Meta postback extract) as well
         // as the bare keys — bare fbp/fbc alone have no reader. See datalyr-sdk.ts.
         fbp: webAttribution.fbp,

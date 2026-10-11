@@ -44,6 +44,10 @@ export interface TouchAttribution {
   ttclid?: string;
   gbraid?: string;
   wbraid?: string;
+  twclid?: string;
+  li_fat_id?: string;
+  sclid?: string;
+  aleid?: string;
 
   // LYR tag
   lyr?: string;

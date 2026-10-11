@@ -30,6 +30,15 @@ const ATTRIBUTION_PARAMS = [
   // sent by LinkedIn — it captured nothing), and irclid is the canonical Impact name. Keep
   // the legacy li_click_id/irclickid whitelisted for one release so nothing in flight is lost.
   'twclid', 'li_click_id', 'li_fat_id', 'msclkid', 'irclickid', 'irclid',
+
+  // Snapchat: the ad appends `ScCid` (mixed case; also seen as `sccid`). Both store as the
+  // canonical `sclid`, the name ingest and the web SDK use. `sccid` is listed after `sclid`
+  // so the real Snap param wins when a URL carries both. `ScCid` itself is folded into
+  // `sccid` before lookup (see processAttributionParameters).
+  'sclid', 'sccid',
+
+  // AppLovin: `aleid` (click id) and `alart` (app-user id). Opaque, kept verbatim.
+  'aleid', 'alart',
   
   // Custom attribution parameters
   'click_id', 'campaign_id', 'ad_id', 'adset_id', 'creative_id',
@@ -40,6 +49,44 @@ const ATTRIBUTION_PARAMS = [
   // same field as `placement_id` above (Feed/Reels/Story vs an id).
   'placement', 'site_source_name',
 ];
+
+/**
+ * Click ids from the web-attribution match response (deferred IP lookup and email lookup),
+ * beyond the original fbclid/gclid/ttclid/gbraid/wbraid, that are gap-filled into
+ * AttributionData and copied onto `$web_attribution_matched`.
+ */
+export const WEB_MATCH_PLATFORM_CLICK_IDS = ['twclid', 'li_fat_id', 'sclid', 'aleid'] as const;
+
+/**
+ * The web-match click ids that are present (non-empty strings) in a lookup response. Absent
+ * ones are left out entirely: the API answers `null`, and an explicit null/undefined key in
+ * track() properties would override the same id already persisted in AttributionData.
+ */
+export function presentWebMatchClickIds(webAttribution: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of WEB_MATCH_PLATFORM_CLICK_IDS) {
+    const v = webAttribution?.[key];
+    if (typeof v === 'string' && v !== '') out[key] = v;
+  }
+  return out;
+}
+
+/**
+ * Click ids in primary order. The first present one is a touch's `clickIdType`. fbclid >
+ * gclid > ttclid is the order the SDK always used; the rest follow the web SDK's CLICK_IDS
+ * order, with AppLovin last. `alart` is an app-user id, not a click, so it is not here.
+ */
+export const CLICK_ID_PRIMARY_ORDER = [
+  'fbclid', 'gclid', 'ttclid',
+  'gbraid', 'wbraid', 'oppref', 'msclkid', 'twclid', 'li_fat_id', 'sclid', 'dclid',
+  'aleid',
+] as const;
+
+/** Wire name of the primary click id in `attribution`, or undefined when none is present. */
+export function primaryClickIdType(attribution: Record<string, any>): string | undefined {
+  // Truthiness, exactly as the original fbclid/gclid/ttclid ternary tested it.
+  return CLICK_ID_PRIMARY_ORDER.find((k) => !!attribution[k]);
+}
 
 export interface AttributionData {
   // Install Attribution
@@ -74,6 +121,9 @@ export interface AttributionData {
   irclickid?: string;             // Impact click id (raw URL param; TR-24 legacy)
   irclid?: string;                // Impact click id (canonical)
   msclkid?: string;               // Microsoft Click ID
+  sclid?: string;                 // Snapchat click id (canonical; captured from ScCid/sccid/sclid)
+  aleid?: string;                 // AppLovin click id (opaque)
+  alart?: string;                 // AppLovin app-user id (opaque; not a click id)
   
   // Partner & Affiliate Tracking
   partner_id?: string;            // Partner identifier
@@ -274,6 +324,11 @@ export class AttributionManager {
       const savedData = await Storage.getItem<AttributionData>(STORAGE_KEYS.ATTRIBUTION_DATA);
       if (savedData) {
         this.attributionData = { ...this.attributionData, ...savedData };
+        // Installs from before TR-24 persisted only `li_click_id`. Keep reading it and fill
+        // the canonical `li_fat_id` (the only LinkedIn key ingest reads) when that is empty.
+        if (this.attributionData.li_click_id && !this.attributionData.li_fat_id) {
+          this.attributionData.li_fat_id = this.attributionData.li_click_id;
+        }
         debugLog('Loaded attribution data:', this.attributionData);
       }
     } catch (error) {
@@ -360,7 +415,7 @@ export class AttributionManager {
       await this.saveAttributionData();
 
       const attributable = Object.keys(urlParams).some((k) =>
-        /^(lyr|utm_|fbclid|gclid|ttclid|gbraid|wbraid|msclkid|dclid|sccid|oppref)/.test(k)
+        /^(lyr|utm_|fbclid|gclid|ttclid|gbraid|wbraid|msclkid|dclid|sccid|ScCid|sclid|oppref|twclid|li_fat_id|aleid|alart)/.test(k)
       );
       if (attributable && this.deepLinkHandler) {
         try { this.deepLinkHandler(urlParams, url); } catch (e) { errorLog('deep link handler failed', e as Error); }
@@ -395,6 +450,12 @@ export class AttributionManager {
   private async processAttributionParameters(params: Record<string, string>): Promise<void> {
     try {
       let hasNewAttribution = false;
+
+      // Lookup below is by lower-cased name and the parser keeps case, so Snapchat's real
+      // `ScCid` would never match. Fold it into `sccid` (an explicit `sccid` wins).
+      if (params.ScCid && !params.sccid) {
+        params = { ...params, sccid: params.ScCid };
+      }
       
       // Process each attribution parameter
       ATTRIBUTION_PARAMS.forEach(paramName => {
@@ -485,6 +546,17 @@ export class AttributionManager {
               break;
             case 'msclkid':
               this.attributionData.msclkid = value;
+              break;
+            // Snapchat: ScCid/sccid are the real params, sclid the canonical stored name.
+            case 'sclid':
+            case 'sccid':
+              this.attributionData.sclid = value;
+              break;
+            case 'aleid':
+              this.attributionData.aleid = value;
+              break;
+            case 'alart':
+              this.attributionData.alart = value;
               break;
               
             // Partner & Affiliate
@@ -718,6 +790,13 @@ export class AttributionManager {
     // reached subsequent events / getRevenueCatAttributes / survived an app restart.
     gapFill('gbraid', webAttribution.gbraid);
     gapFill('wbraid', webAttribution.wbraid);
+
+    // X, LinkedIn, Snapchat and AppLovin click ids. The lookup response already carried
+    // twclid / li_fat_id / sclid and they were dropped here, so a matched install from those
+    // platforms reached later events with no click id.
+    for (const key of WEB_MATCH_PLATFORM_CLICK_IDS) {
+      gapFill(key, webAttribution[key]);
+    }
 
     // Meta cookies — emit BOTH the bare and underscore-prefixed keys (the attribution MV +
     // postback extract `_fbp`/`_fbc`; the bare keys have no server reader on their own).

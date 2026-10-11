@@ -612,7 +612,7 @@ Get your Workspace ID from **Settings > General** in the Datalyr dashboard.
 
 - Page views
 - UTM parameters (`utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`)
-- Ad click IDs (`fbclid`, `gclid`, `ttclid`, `twclid`, `li_click_id`, `msclkid`)
+- Ad click IDs (`fbclid`, `gclid`, `ttclid`, `twclid`, `li_fat_id`, `msclkid`)
 - Referrer data
 - Visitor ID (stored in cookie)
 - IP address and user agent
