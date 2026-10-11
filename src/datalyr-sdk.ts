@@ -212,7 +212,9 @@ export class DatalyrSDK {
 
       // Record initial attribution to journey if this is a new session with attribution
       const initialAttribution = attributionManager.getAttributionData();
-      if (initialAttribution.utm_source || initialAttribution.fbclid || initialAttribution.gclid || initialAttribution.lyr) {
+      // Any click id counts (was fbclid/gclid only), so a bare ?li_fat_id= / ?ttclid= /
+      // ?aleid= link records a touch. alart is an app-user id, not a click.
+      if (initialAttribution.utm_source || primaryClickIdType(initialAttribution) || initialAttribution.lyr) {
         await journeyManager.recordAttribution(this.state.sessionId, {
           source: initialAttribution.utm_source || initialAttribution.campaign_source,
           medium: initialAttribution.utm_medium || initialAttribution.campaign_medium,

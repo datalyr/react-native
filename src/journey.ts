@@ -249,7 +249,14 @@ export class JourneyManager {
       attribution.gclid ||
       attribution.ttclid ||
       attribution.gbraid ||
-      attribution.wbraid;
+      attribution.wbraid ||
+      attribution.twclid ||
+      attribution.li_fat_id ||
+      attribution.sclid ||
+      attribution.aleid ||
+      // Set by the SDK whenever any click id is present (incl. oppref/msclkid/dclid, which
+      // have no touch field).
+      attribution.clickIdType;
 
     if (!hasAttribution) {
       debugLog('No attribution data to record');

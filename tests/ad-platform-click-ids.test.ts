@@ -266,5 +266,57 @@ for (const [variant, createSDK] of variants) {
       expect(touch.li_fat_id).toBe('LI_TOUCH');
       expect(touch.aleid).toBe('AL_TOUCH');
     });
+
+    // No utm_source / lyr seeded: a bare click-id link must still record the touch.
+    it.each([
+      ['li_fat_id'], ['sclid'], ['twclid'], ['aleid'], ['fbclid'], ['ttclid'], ['oppref'], ['msclkid'],
+    ])('records a touch for a bare %s link (no utm_source)', async (key) => {
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, { [key]: `${key}_BARE` });
+      const sdk = createSDK();
+      try {
+        await sdk.initialize({
+          apiKey: 'dk_test', flushInterval: 999999, enableAutoEvents: false,
+          enableWebToAppAttribution: false,
+        });
+      } finally {
+        sdk.destroy();
+      }
+      const first = journeyManager.getFirstTouch() as any;
+      const last = journeyManager.getLastTouch() as any;
+      expect(first?.clickIdType).toBe(key);
+      expect(last?.clickIdType).toBe(key);
+      expect(first?.source).toBeUndefined();
+    });
+
+    it('records no touch for an alart-only link (app-user id, not a click)', async () => {
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, { alart: 'APP_USER' });
+      const sdk = createSDK();
+      try {
+        await sdk.initialize({
+          apiKey: 'dk_test', flushInterval: 999999, enableAutoEvents: false,
+          enableWebToAppAttribution: false,
+        });
+      } finally {
+        sdk.destroy();
+      }
+      expect(journeyManager.getFirstTouch()).toBeNull();
+    });
   });
 }
+
+describe('journey gate accepts the new click ids', () => {
+  test.each([['twclid'], ['li_fat_id'], ['sclid'], ['aleid']])(
+    'recordAttribution stores a %s-only touch',
+    async (key) => {
+      await journeyManager.clearJourney();
+      await journeyManager.recordAttribution('sess_1', { [key]: 'v', clickIdType: key } as any);
+      expect((journeyManager.getFirstTouch() as any)?.[key]).toBe('v');
+    },
+  );
+
+  test('a touch with only an untyped-field click id (oppref) passes via clickIdType', async () => {
+    await journeyManager.clearJourney();
+    await journeyManager.recordAttribution('sess_1', { clickIdType: 'oppref' } as any);
+    expect(journeyManager.getFirstTouch()?.clickIdType).toBe('oppref');
+  });
+});

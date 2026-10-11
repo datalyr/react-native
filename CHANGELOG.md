@@ -8,11 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.7.22] - 2026-10-11
 
 ### Added
-- Snapchat click ids are kept. `ScCid` (the param Snap appends; the lookup is case-sensitive, so it was never matched) and `sccid` / `sclid` are stored as `sclid`, persisted, and sent on every event. Before, `sccid` only triggered `$deep_link` and was then dropped.
+- Snapchat click ids are kept. `ScCid` (the param Snap appends, lower-cased to `sccid` by the parser) and `sclid` are stored as `sclid`, persisted, and sent on every event. Before, `sccid` was missing from the capture list, so it only triggered `$deep_link` and was then dropped.
 - AppLovin `aleid` (click id) and `alart` (app-user id) are captured from deep links, stored verbatim, persisted, and sent on every event.
 - The web-attribution match response (deferred IP lookup and `identify()` email lookup) now gap-fills `twclid`, `li_fat_id`, `sclid` and `aleid` into the persisted attribution and sends them on `$web_attribution_matched` (only when present; a `null` from the API adds no key). The API already returned the first three; they were dropped.
 - The first/last touch carries a `clickIdType` for every click id, not only `fbclid` / `gclid` / `ttclid`. Those three keep their precedence; the rest follow the web SDK's order (`gbraid`, `wbraid`, `oppref`, `msclkid`, `twclid`, `li_fat_id`, `sclid`, `dclid`), then `aleid`. Touches also store `gbraid`, `wbraid`, `twclid`, `li_fat_id`, `sclid`, `aleid`.
-- `twclid`, `li_fat_id`, `ScCid` / `sclid`, `aleid` and `alart` deep links now fire `$deep_link`.
+- `twclid`, `li_fat_id`, `sclid`, `aleid` and `alart` deep links now fire `$deep_link`.
+- A link with only a click id (any of the above, no `utm_source` / `lyr`) now records the first/last touch at startup. The gate checked only `utm_source`, `fbclid`, `gclid` and `lyr`, so e.g. a bare `?ttclid=` or `?li_fat_id=` link recorded no touch. `alart` alone still records none.
 
 ### Fixed
 - Attribution persisted before TR-24 (only `li_click_id`) now fills `li_fat_id` on load, so LinkedIn clicks from those installs reach ingest under the key it reads. `li_click_id` is still read and still stored.

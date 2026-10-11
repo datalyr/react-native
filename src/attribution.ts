@@ -31,10 +31,10 @@ const ATTRIBUTION_PARAMS = [
   // the legacy li_click_id/irclickid whitelisted for one release so nothing in flight is lost.
   'twclid', 'li_click_id', 'li_fat_id', 'msclkid', 'irclickid', 'irclid',
 
-  // Snapchat: the ad appends `ScCid` (mixed case; also seen as `sccid`). Both store as the
-  // canonical `sclid`, the name ingest and the web SDK use. `sccid` is listed after `sclid`
-  // so the real Snap param wins when a URL carries both. `ScCid` itself is folded into
-  // `sccid` before lookup (see processAttributionParameters).
+  // Snapchat: the ad appends `ScCid`, which parseQueryString lower-cases to `sccid`. It was
+  // never in this list, so it was dropped. Stored as the canonical `sclid` (the name ingest
+  // and the web SDK use). `sccid` is listed after `sclid` so the real Snap param wins when a
+  // URL carries both.
   'sclid', 'sccid',
 
   // AppLovin: `aleid` (click id) and `alart` (app-user id). Opaque, kept verbatim.
@@ -415,7 +415,7 @@ export class AttributionManager {
       await this.saveAttributionData();
 
       const attributable = Object.keys(urlParams).some((k) =>
-        /^(lyr|utm_|fbclid|gclid|ttclid|gbraid|wbraid|msclkid|dclid|sccid|ScCid|sclid|oppref|twclid|li_fat_id|aleid|alart)/.test(k)
+        /^(lyr|utm_|fbclid|gclid|ttclid|gbraid|wbraid|msclkid|dclid|sccid|sclid|oppref|twclid|li_fat_id|aleid|alart)/.test(k)
       );
       if (attributable && this.deepLinkHandler) {
         try { this.deepLinkHandler(urlParams, url); } catch (e) { errorLog('deep link handler failed', e as Error); }
@@ -450,12 +450,6 @@ export class AttributionManager {
   private async processAttributionParameters(params: Record<string, string>): Promise<void> {
     try {
       let hasNewAttribution = false;
-
-      // Lookup below is by lower-cased name and the parser keeps case, so Snapchat's real
-      // `ScCid` would never match. Fold it into `sccid` (an explicit `sccid` wins).
-      if (params.ScCid && !params.sccid) {
-        params = { ...params, sccid: params.ScCid };
-      }
       
       // Process each attribution parameter
       ATTRIBUTION_PARAMS.forEach(paramName => {
@@ -547,7 +541,7 @@ export class AttributionManager {
             case 'msclkid':
               this.attributionData.msclkid = value;
               break;
-            // Snapchat: ScCid/sccid are the real params, sclid the canonical stored name.
+            // Snapchat: ScCid (lower-cased to sccid by the parser) is the real param, sclid the canonical stored name.
             case 'sclid':
             case 'sccid':
               this.attributionData.sclid = value;

@@ -368,7 +368,7 @@ A session starts on app launch and ends after 30 minutes of inactivity. `autoEve
 
 ## Attribution
 
-The SDK subscribes to `Linking` and reads the initial URL. It reads these 51 parameters (plus Snapchat's mixed-case `ScCid`) from both the query string and the URL fragment. Keys are lowercased before matching.
+The SDK subscribes to `Linking` and reads the initial URL. It reads these 51 parameters from both the query string and the URL fragment. Keys are lowercased before matching.
 
 | Group | Parameters |
 |---|---|
