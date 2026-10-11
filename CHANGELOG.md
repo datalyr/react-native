@@ -9,14 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Snapchat click ids are kept. `ScCid` (the param Snap appends, lower-cased to `sccid` by the parser) and `sclid` are stored as `sclid`, persisted, and sent on every event. Before, `sccid` was missing from the capture list, so it only triggered `$deep_link` and was then dropped.
-- AppLovin `aleid` (click id) and `alart` (app-user id) are captured from deep links, stored verbatim, persisted, and sent on every event.
+- AppLovin `aleid` (click id) and `alart` (app-user id) are captured from deep links, stored verbatim and persisted. `aleid` is sent on every event like the other click ids. `alart` is a persistent per-user id, so it is sent only on `app_install` and `$deep_link` (and on `$web_attribution_matched` when the lookup response itself carries one), never on general events.
 - The web-attribution match response (deferred IP lookup and `identify()` email lookup) now gap-fills `twclid`, `li_fat_id`, `sclid` and `aleid` into the persisted attribution and sends them on `$web_attribution_matched` (only when present; a `null` from the API adds no key). The API already returned the first three; they were dropped.
 - The first/last touch carries a `clickIdType` for every click id, not only `fbclid` / `gclid` / `ttclid`. Those three keep their precedence; the rest follow the web SDK's order (`gbraid`, `wbraid`, `oppref`, `msclkid`, `twclid`, `li_fat_id`, `sclid`, `dclid`), then `aleid`. Touches also store `gbraid`, `wbraid`, `twclid`, `li_fat_id`, `sclid`, `aleid`.
 - `twclid`, `li_fat_id`, `sclid`, `aleid` and `alart` deep links now fire `$deep_link`.
 - A link with only a click id (any of the above, no `utm_source` / `lyr`) now records the first/last touch at startup. The gate checked only `utm_source`, `fbclid`, `gclid` and `lyr`, so e.g. a bare `?ttclid=` or `?li_fat_id=` link recorded no touch. `alart` alone still records none.
 
 ### Fixed
+- The first/last touch is recorded at startup only when the attribution is newer than the last recorded touch (port of iOS FSR-34). It used to be recorded on every cold start, appending a duplicate touchpoint and rolling the 90-day last-touch expiry forward each launch; with every click id now counting, any stored click id would have done this. Deep-link capture and the web→app merge stamp `attribution_captured_at` (SDK bookkeeping, never sent). Attribution persisted before this release has no stamp and records no new touch until the next deep link or web match.
 - Attribution persisted before TR-24 (only `li_click_id`) now fills `li_fat_id` on load, so LinkedIn clicks from those installs reach ingest under the key it reads. `li_click_id` is still read and still stored.
+
+### Notes
+- Raw `sccid` / `ScCid` / `li_click_id` keys (from older SDK builds or `$deep_link` params) are normalised to `sclid` / `li_fat_id` server-side by ingest. No SDK change is needed for them.
 
 ## [1.7.21] - 2026-09-03
 

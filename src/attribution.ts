@@ -58,13 +58,43 @@ const ATTRIBUTION_PARAMS = [
 export const WEB_MATCH_PLATFORM_CLICK_IDS = ['twclid', 'li_fat_id', 'sclid', 'aleid'] as const;
 
 /**
- * The web-match click ids that are present (non-empty strings) in a lookup response. Absent
- * ones are left out entirely: the API answers `null`, and an explicit null/undefined key in
- * track() properties would override the same id already persisted in AttributionData.
+ * App-user ids (not click ids). AppLovin's `alart` is a persistent per-user id, so it is
+ * captured and persisted but sent only on the events in APP_USER_ID_EVENTS, never spread
+ * onto every event (it would ride every event regardless of ATT / opt-out).
  */
-export function presentWebMatchClickIds(webAttribution: any): Record<string, string> {
+export const APP_USER_ID_KEYS = ['alart'] as const;
+
+/**
+ * Events that carry the persisted app-user ids. `$web_attribution_matched` is not here: it
+ * carries `alart` only when the lookup response itself returned one (presentWebMatchIds).
+ */
+export const APP_USER_ID_EVENTS: readonly string[] = ['app_install', '$deep_link'];
+
+/** SDK bookkeeping fields kept in AttributionData that never go on the wire. */
+const INTERNAL_ATTRIBUTION_KEYS = ['attribution_captured_at'] as const;
+
+/**
+ * The persisted attribution to spread onto `eventName`: everything except SDK bookkeeping,
+ * and except the app-user ids unless the event is one of APP_USER_ID_EVENTS.
+ */
+export function attributionForEvent(eventName: string, attribution: AttributionData): AttributionData {
+  const out: AttributionData = { ...attribution };
+  for (const key of INTERNAL_ATTRIBUTION_KEYS) delete out[key];
+  if (!APP_USER_ID_EVENTS.includes(eventName)) {
+    for (const key of APP_USER_ID_KEYS) delete out[key];
+  }
+  return out;
+}
+
+/**
+ * The ids to copy from a lookup response onto `$web_attribution_matched`: the web-match click
+ * ids plus `alart` if the response carries one, as non-empty strings only. Absent ones are
+ * left out entirely: the API answers `null`, and an explicit null/undefined key in track()
+ * properties would override the same id already persisted in AttributionData.
+ */
+export function presentWebMatchIds(webAttribution: any): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const key of WEB_MATCH_PLATFORM_CLICK_IDS) {
+  for (const key of [...WEB_MATCH_PLATFORM_CLICK_IDS, ...APP_USER_ID_KEYS]) {
     const v = webAttribution?.[key];
     if (typeof v === 'string' && v !== '') out[key] = v;
   }
@@ -123,7 +153,7 @@ export interface AttributionData {
   msclkid?: string;               // Microsoft Click ID
   sclid?: string;                 // Snapchat click id (canonical; captured from ScCid/sccid/sclid)
   aleid?: string;                 // AppLovin click id (opaque)
-  alart?: string;                 // AppLovin app-user id (opaque; not a click id)
+  alart?: string;                 // AppLovin app-user id (opaque; not a click id). Sent only on APP_USER_ID_EVENTS
   
   // Partner & Affiliate Tracking
   partner_id?: string;            // Partner identifier
@@ -156,6 +186,8 @@ export interface AttributionData {
   deep_link_url?: string;         // Full deep link URL
   install_referrer?: string;      // Install referrer (Android)
   attribution_timestamp?: string; // When attribution was captured
+  attribution_captured_at?: number; // Epoch ms of the last deep-link capture / web merge. SDK
+                                    // bookkeeping for the journey freshness check; never sent.
   
   // Custom parameters
   [key: string]: any;
@@ -615,6 +647,9 @@ export class AttributionManager {
       if (hasNewAttribution) {
         // Store timestamp of when attribution was captured
         this.attributionData.attribution_timestamp = new Date().toISOString();
+        // Numeric capture time so the init-time journey recorder can tell a fresh touch from
+        // a relaunch over stale persisted attribution (iOS FSR-34).
+        this.attributionData.attribution_captured_at = Date.now();
         
         debugLog('Updated attribution data:', this.attributionData);
       }
@@ -824,6 +859,10 @@ export class AttributionManager {
     if (webAttribution.visitor_id) {
       this.attributionData.web_visitor_id = webAttribution.visitor_id;
     }
+
+    // A web→app merge is a fresh attribution event (iOS FSR-34): stamp the capture time so
+    // the next journey record treats it as new rather than a relaunch over stale data.
+    this.attributionData.attribution_captured_at = Date.now();
 
     // Persist merged data. AWAIT it — the one-shot web match may fire right before the app
     // is killed, and a fire-and-forget save could lose the recovered IDs entirely.

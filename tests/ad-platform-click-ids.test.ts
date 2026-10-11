@@ -21,8 +21,9 @@ import {
   attributionManager,
   CLICK_ID_PRIMARY_ORDER,
   WEB_MATCH_PLATFORM_CLICK_IDS,
-  presentWebMatchClickIds,
+  presentWebMatchIds,
   primaryClickIdType,
+  attributionForEvent,
 } from '../src/attribution';
 import { journeyManager } from '../src/journey';
 import { DatalyrSDK } from '../src/datalyr-sdk';
@@ -177,12 +178,13 @@ describe('web-attribution match response', () => {
     expect(d.sclid).toBe('SC_WEB');
   });
 
-  test('presentWebMatchClickIds keeps only non-empty strings', () => {
+  test('presentWebMatchIds keeps only non-empty strings, and alart only when the response has it', () => {
     expect([...WEB_MATCH_PLATFORM_CLICK_IDS]).toEqual(['twclid', 'li_fat_id', 'sclid', 'aleid']);
-    expect(presentWebMatchClickIds(lookup({ twclid: 'TW', sclid: '', aleid: 'AL' })))
+    expect(presentWebMatchIds(lookup({ alart: 'APP_U' }))).toEqual({ alart: 'APP_U' });
+    expect(presentWebMatchIds(lookup({ twclid: 'TW', sclid: '', aleid: 'AL' })))
       .toEqual({ twclid: 'TW', aleid: 'AL' });
-    expect(presentWebMatchClickIds(lookup({}))).toEqual({});
-    expect(presentWebMatchClickIds(undefined)).toEqual({});
+    expect(presentWebMatchIds(lookup({}))).toEqual({});
+    expect(presentWebMatchIds(undefined)).toEqual({});
   });
 });
 
@@ -250,7 +252,7 @@ for (const [variant, createSDK] of variants) {
 
     it('records the touch with clickIdType for a new-platform click id', async () => {
       await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, {
-        utm_source: 'linkedin', li_fat_id: 'LI_TOUCH', aleid: 'AL_TOUCH',
+        utm_source: 'linkedin', li_fat_id: 'LI_TOUCH', aleid: 'AL_TOUCH', attribution_captured_at: Date.now(),
       });
       const sdk = createSDK();
       try {
@@ -271,7 +273,7 @@ for (const [variant, createSDK] of variants) {
     it.each([
       ['li_fat_id'], ['sclid'], ['twclid'], ['aleid'], ['fbclid'], ['ttclid'], ['oppref'], ['msclkid'],
     ])('records a touch for a bare %s link (no utm_source)', async (key) => {
-      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, { [key]: `${key}_BARE` });
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, { [key]: `${key}_BARE`, attribution_captured_at: Date.now() });
       const sdk = createSDK();
       try {
         await sdk.initialize({
@@ -289,7 +291,7 @@ for (const [variant, createSDK] of variants) {
     });
 
     it('records no touch for an alart-only link (app-user id, not a click)', async () => {
-      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, { alart: 'APP_USER' });
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, { alart: 'APP_USER', attribution_captured_at: Date.now() });
       const sdk = createSDK();
       try {
         await sdk.initialize({
@@ -320,3 +322,147 @@ describe('journey gate accepts the new click ids', () => {
     expect(journeyManager.getFirstTouch()?.clickIdType).toBe('oppref');
   });
 });
+
+// ---------------------------------------------------------------------------
+// alart (AppLovin app-user id) is sent only on app_install / $deep_link
+// ---------------------------------------------------------------------------
+describe('alart is not spread onto every event', () => {
+  const stored = { utm_source: 'applovin', aleid: 'AL', alart: 'APP_USER', attribution_captured_at: 123 };
+
+  test('attributionForEvent keeps alart only for app_install and $deep_link', () => {
+    for (const name of ['app_install', '$deep_link']) {
+      expect(attributionForEvent(name, stored).alart).toBe('APP_USER');
+    }
+    for (const name of ['purchase', 'session_start', '$identify', '$web_attribution_matched', 'screen_view']) {
+      const out = attributionForEvent(name, stored);
+      expect(out.alart).toBeUndefined();
+      expect(out.aleid).toBe('AL'); // click ids still ride every event
+      expect(out.utm_source).toBe('applovin');
+    }
+  });
+
+  test('SDK bookkeeping (attribution_captured_at) never goes on the wire', () => {
+    expect(attributionForEvent('app_install', stored).attribution_captured_at).toBeUndefined();
+    expect(attributionForEvent('purchase', stored).attribution_captured_at).toBeUndefined();
+    expect(stored.attribution_captured_at).toBe(123); // input untouched
+  });
+
+  for (const [variant, createSDK] of variants) {
+    test(`${variant}: event payloads carry alart only where allowed`, async () => {
+      const { networkStatusManager } = require('../src/network-status');
+      networkStatusManager.destroy();
+      await attributionManager.clearAttributionData();
+      (attributionManager as any).initialized = false;
+      await journeyManager.clearJourney();
+      (globalThis as any).fetch = async () => ({ ok: true, status: 200, json: async () => ({ found: false }) });
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, stored);
+      const sdk = createSDK();
+      try {
+        await sdk.initialize({
+          apiKey: 'dk_test', flushInterval: 999999, enableAutoEvents: false,
+          enableWebToAppAttribution: false,
+        });
+        const payload = async (name: string, data: any = {}) =>
+          (await (sdk as any).createEventPayload(name, data)).eventData;
+        expect((await payload('purchase', { value: 1 })).alart).toBeUndefined();
+        expect((await payload('purchase', { value: 1 })).aleid).toBe('AL');
+        expect((await payload('session_start')).alart).toBeUndefined();
+        expect((await payload('app_install')).alart).toBe('APP_USER');
+        expect((await payload('$deep_link')).alart).toBe('APP_USER');
+        // The match event carries alart only from the response, not from storage.
+        expect((await payload('$web_attribution_matched')).alart).toBeUndefined();
+        expect((await payload('$web_attribution_matched', { alart: 'FROM_RESPONSE' })).alart).toBe('FROM_RESPONSE');
+        expect((await payload('purchase')).attribution_captured_at).toBeUndefined();
+      } finally {
+        sdk.destroy();
+      }
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Journey touch is recorded only for FRESH attribution (port of iOS FSR-34)
+// ---------------------------------------------------------------------------
+describe('capture-time stamp', () => {
+  test('a deep link and a web merge stamp attribution_captured_at', async () => {
+    const mgr = new AttributionManager();
+    const before = Date.now();
+    const d = await deepLink(mgr, 'myapp://open?li_fat_id=LI');
+    expect(d.attribution_captured_at).toBeGreaterThanOrEqual(before);
+
+    const mgr2 = new AttributionManager();
+    await mgr2.mergeWebAttribution({ twclid: 'TW' });
+    expect(mgr2.getAttributionData().attribution_captured_at).toBeGreaterThanOrEqual(before);
+  });
+});
+
+for (const [variant, createSDK] of variants) {
+  describe(`${variant} — journey touch only for fresh attribution`, () => {
+    const relaunch = () => {
+      (attributionManager as any).initialized = false;
+      (attributionManager as any).isFirstLaunch = false;
+      (attributionManager as any).installTimeMs = null;
+      (journeyManager as any).initialized = false;
+      const { networkStatusManager } = require('../src/network-status');
+      networkStatusManager.destroy();
+    };
+    const launch = async () => {
+      const sdk = createSDK();
+      try {
+        await sdk.initialize({
+          apiKey: 'dk_test', flushInterval: 999999, enableAutoEvents: false,
+          enableWebToAppAttribution: false,
+        });
+      } finally {
+        sdk.destroy();
+      }
+    };
+
+    beforeEach(async () => {
+      relaunch();
+      await attributionManager.clearAttributionData();
+      await journeyManager.clearJourney();
+      (globalThis as any).fetch = async () => ({ ok: true, status: 200, json: async () => ({ found: false }) });
+    });
+
+    it('a relaunch with unchanged stored attribution records no new touch', async () => {
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, {
+        li_fat_id: 'LI_1', attribution_captured_at: Date.now() - 1000,
+      });
+      await launch();
+      const firstLast = journeyManager.getLastTouch();
+      expect(firstLast?.clickIdType).toBe('li_fat_id');
+      expect(journeyManager.getJourney()).toHaveLength(1);
+
+      await new Promise((r) => setTimeout(r, 5));
+      relaunch();
+      await launch();
+      expect(journeyManager.getJourney()).toHaveLength(1);
+      expect(journeyManager.getLastTouch()?.captured_at).toBe(firstLast?.captured_at);
+      expect(journeyManager.getLastTouch()?.expires_at).toBe(firstLast?.expires_at);
+    });
+
+    it('newer attribution after the last touch is recorded', async () => {
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, {
+        li_fat_id: 'LI_1', attribution_captured_at: Date.now() - 1000,
+      });
+      await launch();
+      expect(journeyManager.getJourney()).toHaveLength(1);
+
+      await new Promise((r) => setTimeout(r, 5));
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, {
+        li_fat_id: 'LI_1', twclid: 'TW_2', attribution_captured_at: Date.now(),
+      });
+      relaunch();
+      await launch();
+      expect(journeyManager.getJourney()).toHaveLength(2);
+    });
+
+    it('attribution persisted before the stamp existed records no touch', async () => {
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, { utm_source: 'old', fbclid: 'FB_OLD' });
+      await launch();
+      expect(journeyManager.getLastTouch()).toBeNull();
+      expect(journeyManager.getJourney()).toHaveLength(0);
+    });
+  });
+}
