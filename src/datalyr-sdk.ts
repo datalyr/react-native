@@ -45,7 +45,7 @@ import {
 import { SDK_VERSION } from './version';
 import { createHttpClient, HttpClient, utf8ByteLength } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
-import { attributionManager, AttributionData, presentWebMatchIds, primaryClickIdType, attributionForEvent } from './attribution';
+import { attributionManager, AttributionData, presentWebMatchIds, primaryClickIdType, attributionForEvent, removeAppUserIdsUnlessAuthorized } from './attribution';
 import { journeyManager } from './journey';
 import { createAutoEventsManager, AutoEventsManager, SessionData } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
@@ -1669,8 +1669,9 @@ export class DatalyrSDK {
           advertiser_tracking_enabled: advertiserInfo.advertiser_tracking_enabled,
         } : {}),
         // Attribution data
-        // alart only on app_install / $deep_link; SDK bookkeeping never (attributionForEvent).
-        ...attributionForEvent(eventName, attributionData),
+        // alart only on app_install / $deep_link with tracking authorized; SDK bookkeeping
+        // never (attributionForEvent).
+        ...attributionForEvent(eventName, attributionData, advertiserInfo?.att_status),
         // Apple Search Ads attribution (iOS)
         ...asaData,
         // Google Play Install Referrer (Android) — gclid/gbraid/wbraid/utm_*. Fill it
@@ -1714,6 +1715,10 @@ export class DatalyrSDK {
     if (Object.keys(this.state.userProperties).length > 0) {
       payload.userProperties = this.state.userProperties;
     }
+
+    // Final tracking gate for app-user ids (AppLovin `alart`) from any source: same cached
+    // status that gates the IDFA/GAID. They stay persisted on the device.
+    removeAppUserIdsUnlessAuthorized(payload.eventData, advertiserInfo?.att_status);
 
     return payload;
   }

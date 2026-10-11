@@ -24,6 +24,8 @@ import {
   presentWebMatchIds,
   primaryClickIdType,
   attributionForEvent,
+  isTrackingAuthorized,
+  removeAppUserIdsUnlessAuthorized,
 } from '../src/attribution';
 import { journeyManager } from '../src/journey';
 import { DatalyrSDK } from '../src/datalyr-sdk';
@@ -331,10 +333,10 @@ describe('alart is not spread onto every event', () => {
 
   test('attributionForEvent keeps alart only for app_install and $deep_link', () => {
     for (const name of ['app_install', '$deep_link']) {
-      expect(attributionForEvent(name, stored).alart).toBe('APP_USER');
+      expect(attributionForEvent(name, stored, 3).alart).toBe('APP_USER');
     }
     for (const name of ['purchase', 'session_start', '$identify', '$web_attribution_matched', 'screen_view']) {
-      const out = attributionForEvent(name, stored);
+      const out = attributionForEvent(name, stored, 3);
       expect(out.alart).toBeUndefined();
       expect(out.aleid).toBe('AL'); // click ids still ride every event
       expect(out.utm_source).toBe('applovin');
@@ -362,6 +364,8 @@ describe('alart is not spread onto every event', () => {
           apiKey: 'dk_test', flushInterval: 999999, enableAutoEvents: false,
           enableWebToAppAttribution: false,
         });
+        // Tracking authorized (ATT 3 on iOS; advertising id available, no LAT on Android).
+        (sdk as any).cachedAdvertiserInfo = { att_status: 3, advertiser_tracking_enabled: true };
         const payload = async (name: string, data: any = {}) =>
           (await (sdk as any).createEventPayload(name, data)).eventData;
         expect((await payload('purchase', { value: 1 })).alart).toBeUndefined();
@@ -466,3 +470,70 @@ for (const [variant, createSDK] of variants) {
     });
   });
 }
+
+// ---------------------------------------------------------------------------
+// alart needs tracking authorized (ATT on iOS, advertising id / no LAT on Android)
+// ---------------------------------------------------------------------------
+describe('alart tracking gate', () => {
+  const stored = { aleid: 'AL', alart: 'APP_USER' };
+
+  test('only status 3 counts as authorized', () => {
+    expect(isTrackingAuthorized(3)).toBe(true);
+    for (const s of [0, 1, 2, undefined, null, '3']) expect(isTrackingAuthorized(s)).toBe(false);
+  });
+
+  test('attributionForEvent drops alart on app_install / $deep_link unless authorized', () => {
+    for (const name of ['app_install', '$deep_link']) {
+      for (const status of [0, 2, undefined]) {
+        const out = attributionForEvent(name, stored, status);
+        expect(out.alart).toBeUndefined();
+        expect(out.aleid).toBe('AL');
+      }
+      expect(attributionForEvent(name, stored, 3).alart).toBe('APP_USER');
+    }
+  });
+
+  test('final gate removes alart from any source unless authorized', () => {
+    for (const status of [0, 2, undefined]) {
+      const props: Record<string, any> = { alart: 'FROM_URL', aleid: 'AL' };
+      removeAppUserIdsUnlessAuthorized(props, status);
+      expect(props.alart).toBeUndefined();
+      expect(props.aleid).toBe('AL');
+    }
+    const ok: Record<string, any> = { alart: 'FROM_URL' };
+    removeAppUserIdsUnlessAuthorized(ok, 3);
+    expect(ok.alart).toBe('FROM_URL');
+  });
+
+  for (const [variant, createSDK] of variants) {
+    test.each([
+      ['not determined', 0], ['denied', 2], ['no native module', null],
+    ])(`${variant}: %s → no alart on app_install / $deep_link / match event`, async (_label, status) => {
+      const { networkStatusManager } = require('../src/network-status');
+      networkStatusManager.destroy();
+      await attributionManager.clearAttributionData();
+      (attributionManager as any).initialized = false;
+      await journeyManager.clearJourney();
+      (globalThis as any).fetch = async () => ({ ok: true, status: 200, json: async () => ({ found: false }) });
+      await Storage.setItem(STORAGE_KEYS.ATTRIBUTION_DATA, stored);
+      const sdk = createSDK();
+      try {
+        await sdk.initialize({
+          apiKey: 'dk_test', flushInterval: 999999, enableAutoEvents: false,
+          enableWebToAppAttribution: false,
+        });
+        (sdk as any).cachedAdvertiserInfo = status === null ? null : { att_status: status, advertiser_tracking_enabled: false };
+        const payload = async (name: string, data: any = {}) =>
+          (await (sdk as any).createEventPayload(name, data)).eventData;
+        expect((await payload('app_install')).alart).toBeUndefined();
+        expect((await payload('$deep_link', { alart: 'FROM_URL' })).alart).toBeUndefined();
+        expect((await payload('$web_attribution_matched', { alart: 'FROM_RESPONSE' })).alart).toBeUndefined();
+        expect((await payload('app_install')).aleid).toBe('AL');
+        // Still persisted on the device.
+        expect(attributionManager.getAttributionData().alart).toBe('APP_USER');
+      } finally {
+        sdk.destroy();
+      }
+    });
+  }
+});

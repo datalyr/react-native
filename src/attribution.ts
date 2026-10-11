@@ -74,16 +74,37 @@ export const APP_USER_ID_EVENTS: readonly string[] = ['app_install', '$deep_link
 const INTERNAL_ATTRIBUTION_KEYS = ['attribution_captured_at'] as const;
 
 /**
- * The persisted attribution to spread onto `eventName`: everything except SDK bookkeeping,
- * and except the app-user ids unless the event is one of APP_USER_ID_EVENTS.
+ * True only for an authorized tracking status (3). The cached advertiser info's `att_status`
+ * is the ATT status on iOS (0 notDetermined, 1 restricted, 2 denied, 3 authorized) and, on
+ * Android, 3 when the advertising id is available and Limit Ad Tracking is off, 2 when it is
+ * on, 0 when unavailable. Missing native modules (Expo Go) → unknown → not authorized.
  */
-export function attributionForEvent(eventName: string, attribution: AttributionData): AttributionData {
+export function isTrackingAuthorized(attStatus: unknown): boolean {
+  return attStatus === 3;
+}
+
+/**
+ * The persisted attribution to spread onto `eventName`: everything except SDK bookkeeping,
+ * and except the app-user ids unless the event is one of APP_USER_ID_EVENTS and tracking is
+ * authorized (`attStatus`).
+ */
+export function attributionForEvent(eventName: string, attribution: AttributionData, attStatus?: unknown): AttributionData {
   const out: AttributionData = { ...attribution };
   for (const key of INTERNAL_ATTRIBUTION_KEYS) delete out[key];
-  if (!APP_USER_ID_EVENTS.includes(eventName)) {
+  if (!APP_USER_ID_EVENTS.includes(eventName) || !isTrackingAuthorized(attStatus)) {
     for (const key of APP_USER_ID_KEYS) delete out[key];
   }
   return out;
+}
+
+/**
+ * Final gate on an outgoing event's properties: remove the app-user ids from ANY source
+ * (install data, $deep_link URL params, the web-match response, caller properties) unless
+ * tracking is authorized. They stay persisted on the device.
+ */
+export function removeAppUserIdsUnlessAuthorized(eventData: Record<string, any> | undefined, attStatus: unknown): void {
+  if (!eventData || isTrackingAuthorized(attStatus)) return;
+  for (const key of APP_USER_ID_KEYS) delete eventData[key];
 }
 
 /**
