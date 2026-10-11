@@ -45,7 +45,7 @@ import {
 import { SDK_VERSION } from './version';
 import { createHttpClient, HttpClient, utf8ByteLength } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
-import { attributionManager, AttributionData } from './attribution';
+import { attributionManager, AttributionData, presentWebMatchIds, primaryClickIdType, attributionForEvent, removeAppUserIdsUnlessAuthorized } from './attribution';
 import { journeyManager } from './journey';
 import { createAutoEventsManager, AutoEventsManager, SessionData } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
@@ -212,7 +212,16 @@ export class DatalyrSDK {
 
       // Record initial attribution to journey if this is a new session with attribution
       const initialAttribution = attributionManager.getAttributionData();
-      if (initialAttribution.utm_source || initialAttribution.fbclid || initialAttribution.gclid || initialAttribution.lyr) {
+      // Any click id counts (was fbclid/gclid only), so a bare ?li_fat_id= / ?ttclid= /
+      // ?aleid= link records a touch. alart is an app-user id, not a click.
+      // Fresh only (port of iOS FSR-34): attribution persists forever, so recording it on
+      // every cold start appended a duplicate touchpoint and rolled the 90-day last-touch
+      // expiry forward each launch. Record only when the capture time is newer than the last
+      // recorded touch; 0 (persisted before this field existed) counts as not new.
+      const capturedAt = initialAttribution.attribution_captured_at || 0;
+      const lastTouchCapturedAt = journeyManager.getLastTouch()?.captured_at || 0;
+      const isNewAttribution = capturedAt > 0 && capturedAt > lastTouchCapturedAt;
+      if (isNewAttribution && (initialAttribution.utm_source || primaryClickIdType(initialAttribution) || initialAttribution.lyr)) {
         await journeyManager.recordAttribution(this.state.sessionId, {
           source: initialAttribution.utm_source || initialAttribution.campaign_source,
           medium: initialAttribution.utm_medium || initialAttribution.campaign_medium,
@@ -220,7 +229,15 @@ export class DatalyrSDK {
           fbclid: initialAttribution.fbclid,
           gclid: initialAttribution.gclid,
           ttclid: initialAttribution.ttclid,
-          clickIdType: initialAttribution.fbclid ? 'fbclid' : initialAttribution.gclid ? 'gclid' : initialAttribution.ttclid ? 'ttclid' : undefined,
+          gbraid: initialAttribution.gbraid,
+          wbraid: initialAttribution.wbraid,
+          twclid: initialAttribution.twclid,
+          li_fat_id: initialAttribution.li_fat_id,
+          sclid: initialAttribution.sclid,
+          aleid: initialAttribution.aleid,
+          // Every click id gets a type (was fbclid/gclid/ttclid only); those three keep
+          // their precedence. Order lives in CLICK_ID_PRIMARY_ORDER (attribution.ts).
+          clickIdType: primaryClickIdType(initialAttribution),
           lyr: initialAttribution.lyr,
         });
       }
@@ -690,6 +707,8 @@ export class DatalyrSDK {
         ttclid: webAttribution.ttclid,
         gbraid: webAttribution.gbraid,
         wbraid: webAttribution.wbraid,
+        // twclid / li_fat_id / sclid / aleid (+ alart), only when present (see presentWebMatchIds).
+        ...presentWebMatchIds(webAttribution),
         // Emit `_fbp`/`_fbc` (the Meta cookie names the attribution MV + postback extract
         // via JSONExtractString(event_data,'_fbp')) as well as the bare keys — the bare
         // `fbp`/`fbc` alone have no reader, so recovered web fbp/fbc never reached Meta CAPI.
@@ -868,6 +887,8 @@ export class DatalyrSDK {
         ttclid: webAttribution.ttclid,
         gbraid: webAttribution.gbraid,
         wbraid: webAttribution.wbraid,
+        // twclid / li_fat_id / sclid / aleid (+ alart), only when present (see presentWebMatchIds).
+        ...presentWebMatchIds(webAttribution),
         // Emit `_fbp`/`_fbc` (the Meta cookie names the attribution MV + postback extract
         // via JSONExtractString(event_data,'_fbp')) as well as the bare keys — the bare
         // `fbp`/`fbc` alone have no reader, so recovered web fbp/fbc never reached Meta CAPI.
@@ -1648,7 +1669,9 @@ export class DatalyrSDK {
           advertiser_tracking_enabled: advertiserInfo.advertiser_tracking_enabled,
         } : {}),
         // Attribution data
-        ...attributionData,
+        // alart only on app_install / $deep_link with tracking authorized; SDK bookkeeping
+        // never (attributionForEvent).
+        ...attributionForEvent(eventName, attributionData, advertiserInfo?.att_status),
         // Apple Search Ads attribution (iOS)
         ...asaData,
         // Google Play Install Referrer (Android) — gclid/gbraid/wbraid/utm_*. Fill it
@@ -1692,6 +1715,10 @@ export class DatalyrSDK {
     if (Object.keys(this.state.userProperties).length > 0) {
       payload.userProperties = this.state.userProperties;
     }
+
+    // Final tracking gate for app-user ids (AppLovin `alart`) from any source: same cached
+    // status that gates the IDFA/GAID. They stay persisted on the device.
+    removeAppUserIdsUnlessAuthorized(payload.eventData, advertiserInfo?.att_status);
 
     return payload;
   }

@@ -2,7 +2,7 @@
 
 Mobile analytics and attribution for React Native and Expo. Track events, identify users, and capture ad attribution.
 
-Current release: **1.7.21**. Every event posts to `https://ingest.datalyr.com/track`.
+Current release: **1.7.22**. Every event posts to `https://ingest.datalyr.com/track`.
 
 Full reference: [docs.datalyr.com/sdk-reference/react-native](https://docs.datalyr.com/sdk-reference/react-native).
 
@@ -368,13 +368,14 @@ A session starts on app launch and ends after 30 minutes of inactivity. `autoEve
 
 ## Attribution
 
-The SDK subscribes to `Linking` and reads the initial URL. It reads these 44 parameters from both the query string and the URL fragment. Keys are lowercased before matching.
+The SDK subscribes to `Linking` and reads the initial URL. It reads these 51 parameters from both the query string and the URL fragment. Keys are lowercased before matching.
 
 | Group | Parameters |
 |---|---|
 | Datalyr | `lyr`, `datalyr`, `dl_tag`, `dl_campaign` |
-| Click IDs | `fbclid`, `ttclid`, `gclid`, `wbraid`, `gbraid`, `dclid`, `twclid`, `li_fat_id`, `msclkid`, `irclid`, `click_id`, `oppref` |
-| Click ID aliases | `fb_click_id` stores as `fbclid`. `tt_click_id` and `tiktok_click_id` store as `ttclid`. `li_click_id` also sets `li_fat_id`. `irclickid` also sets `irclid`. |
+| Click IDs | `fbclid`, `ttclid`, `gclid`, `wbraid`, `gbraid`, `dclid`, `twclid`, `li_fat_id`, `sclid`, `aleid`, `msclkid`, `irclid`, `click_id`, `oppref` |
+| Click ID aliases | `fb_click_id` stores as `fbclid`. `tt_click_id` and `tiktok_click_id` store as `ttclid`. `li_click_id` also sets `li_fat_id` (also when read from storage written by an older version). `ScCid` and `sccid` store as `sclid`. `irclickid` also sets `irclid`. |
+| AppLovin app user | `alart` (stored verbatim; not a click ID) |
 | Meta extras | `fb_action_ids`, `fb_action_types` |
 | UTM | `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content`, `utm_id`, `utm_source_platform`, `utm_creative_format`, `utm_marketing_tactic` |
 | Partner | `partner_id`, `affiliate_id`, `referrer_id`, `source_id` |
@@ -416,7 +417,7 @@ On Android the Web SDK's `trackAppDownloadClick()` writes attribution into the P
 
 Both run inside `initialize()`, before `app_install` fires. Your app needs no extra code.
 
-After a match the SDK merges the web click IDs, UTM parameters, and cookies into the mobile session, sends `$web_attribution_matched`, and stamps the merged attribution on every later event.
+After a match the SDK merges the web click IDs (`fbclid`, `gclid`, `ttclid`, `gbraid`, `wbraid`, `twclid`, `li_fat_id`, `sclid`, `aleid`), UTM parameters, and cookies into the mobile session, sends `$web_attribution_matched`, and stamps the merged attribution on every later event.
 
 When IP matching misses — a VPN toggle during install, for example — call `identify()` with the user's email. The SDK then recovers attribution by email.
 

@@ -30,6 +30,15 @@ const ATTRIBUTION_PARAMS = [
   // sent by LinkedIn — it captured nothing), and irclid is the canonical Impact name. Keep
   // the legacy li_click_id/irclickid whitelisted for one release so nothing in flight is lost.
   'twclid', 'li_click_id', 'li_fat_id', 'msclkid', 'irclickid', 'irclid',
+
+  // Snapchat: the ad appends `ScCid`, which parseQueryString lower-cases to `sccid`. It was
+  // never in this list, so it was dropped. Stored as the canonical `sclid` (the name ingest
+  // and the web SDK use). `sccid` is listed after `sclid` so the real Snap param wins when a
+  // URL carries both.
+  'sclid', 'sccid',
+
+  // AppLovin: `aleid` (click id) and `alart` (app-user id). Opaque, kept verbatim.
+  'aleid', 'alart',
   
   // Custom attribution parameters
   'click_id', 'campaign_id', 'ad_id', 'adset_id', 'creative_id',
@@ -40,6 +49,95 @@ const ATTRIBUTION_PARAMS = [
   // same field as `placement_id` above (Feed/Reels/Story vs an id).
   'placement', 'site_source_name',
 ];
+
+/**
+ * Click ids from the web-attribution match response (deferred IP lookup and email lookup),
+ * beyond the original fbclid/gclid/ttclid/gbraid/wbraid, that are gap-filled into
+ * AttributionData and copied onto `$web_attribution_matched`.
+ */
+export const WEB_MATCH_PLATFORM_CLICK_IDS = ['twclid', 'li_fat_id', 'sclid', 'aleid'] as const;
+
+/**
+ * App-user ids (not click ids). AppLovin's `alart` is a persistent per-user id, so it is
+ * captured and persisted but sent only on the events in APP_USER_ID_EVENTS, never spread
+ * onto every event (it would ride every event regardless of ATT / opt-out).
+ */
+export const APP_USER_ID_KEYS = ['alart'] as const;
+
+/**
+ * Events that carry the persisted app-user ids. `$web_attribution_matched` is not here: it
+ * carries `alart` only when the lookup response itself returned one (presentWebMatchIds).
+ */
+export const APP_USER_ID_EVENTS: readonly string[] = ['app_install', '$deep_link'];
+
+/** SDK bookkeeping fields kept in AttributionData that never go on the wire. */
+const INTERNAL_ATTRIBUTION_KEYS = ['attribution_captured_at'] as const;
+
+/**
+ * True only for an authorized tracking status (3). The cached advertiser info's `att_status`
+ * is the ATT status on iOS (0 notDetermined, 1 restricted, 2 denied, 3 authorized) and, on
+ * Android, 3 when the advertising id is available and Limit Ad Tracking is off, 2 when it is
+ * on, 0 when unavailable. Missing native modules (Expo Go) → unknown → not authorized.
+ */
+export function isTrackingAuthorized(attStatus: unknown): boolean {
+  return attStatus === 3;
+}
+
+/**
+ * The persisted attribution to spread onto `eventName`: everything except SDK bookkeeping,
+ * and except the app-user ids unless the event is one of APP_USER_ID_EVENTS and tracking is
+ * authorized (`attStatus`).
+ */
+export function attributionForEvent(eventName: string, attribution: AttributionData, attStatus?: unknown): AttributionData {
+  const out: AttributionData = { ...attribution };
+  for (const key of INTERNAL_ATTRIBUTION_KEYS) delete out[key];
+  if (!APP_USER_ID_EVENTS.includes(eventName) || !isTrackingAuthorized(attStatus)) {
+    for (const key of APP_USER_ID_KEYS) delete out[key];
+  }
+  return out;
+}
+
+/**
+ * Final gate on an outgoing event's properties: remove the app-user ids from ANY source
+ * (install data, $deep_link URL params, the web-match response, caller properties) unless
+ * tracking is authorized. They stay persisted on the device.
+ */
+export function removeAppUserIdsUnlessAuthorized(eventData: Record<string, any> | undefined, attStatus: unknown): void {
+  if (!eventData || isTrackingAuthorized(attStatus)) return;
+  for (const key of APP_USER_ID_KEYS) delete eventData[key];
+}
+
+/**
+ * The ids to copy from a lookup response onto `$web_attribution_matched`: the web-match click
+ * ids plus `alart` if the response carries one, as non-empty strings only. Absent ones are
+ * left out entirely: the API answers `null`, and an explicit null/undefined key in track()
+ * properties would override the same id already persisted in AttributionData.
+ */
+export function presentWebMatchIds(webAttribution: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of [...WEB_MATCH_PLATFORM_CLICK_IDS, ...APP_USER_ID_KEYS]) {
+    const v = webAttribution?.[key];
+    if (typeof v === 'string' && v !== '') out[key] = v;
+  }
+  return out;
+}
+
+/**
+ * Click ids in primary order. The first present one is a touch's `clickIdType`. fbclid >
+ * gclid > ttclid is the order the SDK always used; the rest follow the web SDK's CLICK_IDS
+ * order, with AppLovin last. `alart` is an app-user id, not a click, so it is not here.
+ */
+export const CLICK_ID_PRIMARY_ORDER = [
+  'fbclid', 'gclid', 'ttclid',
+  'gbraid', 'wbraid', 'oppref', 'msclkid', 'twclid', 'li_fat_id', 'sclid', 'dclid',
+  'aleid',
+] as const;
+
+/** Wire name of the primary click id in `attribution`, or undefined when none is present. */
+export function primaryClickIdType(attribution: Record<string, any>): string | undefined {
+  // Truthiness, exactly as the original fbclid/gclid/ttclid ternary tested it.
+  return CLICK_ID_PRIMARY_ORDER.find((k) => !!attribution[k]);
+}
 
 export interface AttributionData {
   // Install Attribution
@@ -74,6 +172,9 @@ export interface AttributionData {
   irclickid?: string;             // Impact click id (raw URL param; TR-24 legacy)
   irclid?: string;                // Impact click id (canonical)
   msclkid?: string;               // Microsoft Click ID
+  sclid?: string;                 // Snapchat click id (canonical; captured from ScCid/sccid/sclid)
+  aleid?: string;                 // AppLovin click id (opaque)
+  alart?: string;                 // AppLovin app-user id (opaque; not a click id). Sent only on APP_USER_ID_EVENTS
   
   // Partner & Affiliate Tracking
   partner_id?: string;            // Partner identifier
@@ -106,6 +207,8 @@ export interface AttributionData {
   deep_link_url?: string;         // Full deep link URL
   install_referrer?: string;      // Install referrer (Android)
   attribution_timestamp?: string; // When attribution was captured
+  attribution_captured_at?: number; // Epoch ms of the last deep-link capture / web merge. SDK
+                                    // bookkeeping for the journey freshness check; never sent.
   
   // Custom parameters
   [key: string]: any;
@@ -274,6 +377,11 @@ export class AttributionManager {
       const savedData = await Storage.getItem<AttributionData>(STORAGE_KEYS.ATTRIBUTION_DATA);
       if (savedData) {
         this.attributionData = { ...this.attributionData, ...savedData };
+        // Installs from before TR-24 persisted only `li_click_id`. Keep reading it and fill
+        // the canonical `li_fat_id` (the only LinkedIn key ingest reads) when that is empty.
+        if (this.attributionData.li_click_id && !this.attributionData.li_fat_id) {
+          this.attributionData.li_fat_id = this.attributionData.li_click_id;
+        }
         debugLog('Loaded attribution data:', this.attributionData);
       }
     } catch (error) {
@@ -360,7 +468,7 @@ export class AttributionManager {
       await this.saveAttributionData();
 
       const attributable = Object.keys(urlParams).some((k) =>
-        /^(lyr|utm_|fbclid|gclid|ttclid|gbraid|wbraid|msclkid|dclid|sccid|oppref)/.test(k)
+        /^(lyr|utm_|fbclid|gclid|ttclid|gbraid|wbraid|msclkid|dclid|sccid|sclid|oppref|twclid|li_fat_id|aleid|alart)/.test(k)
       );
       if (attributable && this.deepLinkHandler) {
         try { this.deepLinkHandler(urlParams, url); } catch (e) { errorLog('deep link handler failed', e as Error); }
@@ -486,6 +594,17 @@ export class AttributionManager {
             case 'msclkid':
               this.attributionData.msclkid = value;
               break;
+            // Snapchat: ScCid (lower-cased to sccid by the parser) is the real param, sclid the canonical stored name.
+            case 'sclid':
+            case 'sccid':
+              this.attributionData.sclid = value;
+              break;
+            case 'aleid':
+              this.attributionData.aleid = value;
+              break;
+            case 'alart':
+              this.attributionData.alart = value;
+              break;
               
             // Partner & Affiliate
             case 'partner_id':
@@ -549,6 +668,9 @@ export class AttributionManager {
       if (hasNewAttribution) {
         // Store timestamp of when attribution was captured
         this.attributionData.attribution_timestamp = new Date().toISOString();
+        // Numeric capture time so the init-time journey recorder can tell a fresh touch from
+        // a relaunch over stale persisted attribution (iOS FSR-34).
+        this.attributionData.attribution_captured_at = Date.now();
         
         debugLog('Updated attribution data:', this.attributionData);
       }
@@ -719,6 +841,13 @@ export class AttributionManager {
     gapFill('gbraid', webAttribution.gbraid);
     gapFill('wbraid', webAttribution.wbraid);
 
+    // X, LinkedIn, Snapchat and AppLovin click ids. The lookup response already carried
+    // twclid / li_fat_id / sclid and they were dropped here, so a matched install from those
+    // platforms reached later events with no click id.
+    for (const key of WEB_MATCH_PLATFORM_CLICK_IDS) {
+      gapFill(key, webAttribution[key]);
+    }
+
     // Meta cookies — emit BOTH the bare and underscore-prefixed keys (the attribution MV +
     // postback extract `_fbp`/`_fbc`; the bare keys have no server reader on their own).
     gapFill('fbp', webAttribution.fbp);
@@ -751,6 +880,10 @@ export class AttributionManager {
     if (webAttribution.visitor_id) {
       this.attributionData.web_visitor_id = webAttribution.visitor_id;
     }
+
+    // A web→app merge is a fresh attribution event (iOS FSR-34): stamp the capture time so
+    // the next journey record treats it as new rather than a relaunch over stale data.
+    this.attributionData.attribution_captured_at = Date.now();
 
     // Persist merged data. AWAIT it — the one-shot web match may fire right before the app
     // is killed, and a fire-and-forget save could lose the recovered IDs entirely.
