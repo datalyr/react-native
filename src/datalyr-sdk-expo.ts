@@ -33,7 +33,7 @@ import {
   Storage,
   STORAGE_KEYS,
 } from './utils-expo';  // <-- KEY DIFFERENCE: uses Expo utilities
-import { warnAboutIgnoredOptions, fingerprintOsVersion, fingerprintDeviceModel } from './utils';
+import { warnAboutIgnoredOptions, deviceOsVersion, deviceModelName } from './utils';
 import {
   purchaseProperties,
   addToCartProperties,
@@ -46,7 +46,7 @@ import {
 import { SDK_VERSION } from './version';
 import { createHttpClient, HttpClient, utf8ByteLength } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
-import { attributionManager, AttributionData, presentWebMatchIds, primaryClickIdType, attributionForEvent, removeAppUserIdsUnlessAuthorized } from './attribution';
+import { attributionManager, AttributionData, presentWebMatchIds, primaryClickIdType, attributionForEvent, removeAppUserIdsUnlessAuthorized, attStatusFrom, ATT_STATUS_NAMES, ATT_NOT_AUTHORIZED_REASON } from './attribution';
 import { journeyManager } from './journey';
 import { createAutoEventsManager, AutoEventsManager } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
@@ -83,6 +83,14 @@ export class DatalyrSDKExpo {
   private eventQueue: EventQueue;
   private autoEventsManager: AutoEventsManager | null = null;
   private appStateSubscription: any = null;
+  // The deferred lookup currently running, so the launch run, an ATT grant and a
+  // foreground never issue overlapping requests.
+  private deferredLookupInFlight: Promise<void> | null = null;
+  // The last lookup this launch was declined with att_not_authorized: re-run it when
+  // ATT becomes authorized.
+  private deferredLookupAwaitingAtt = false;
+  // `$attribution_match` with reason att_not_authorized is reported once per launch.
+  private attNotAuthorizedReported = false;
   private networkStatusUnsubscribe: (() => void) | null = null;
   private cachedAdvertiserInfo: any = null;
   private initializing: boolean = false;
@@ -313,9 +321,7 @@ export class DatalyrSDKExpo {
       // right after a store install — permanently forfeited the only web→app bridge.
       // shouldAttemptDeferredLookup() bounds the retries by the server's match window and
       // an attempt cap.
-      if (Platform.OS === 'ios' && (await attributionManager.shouldAttemptDeferredLookup())) {
-        await this.fetchDeferredWebAttribution();
-      }
+      await this.runDeferredLookupIfEligible();
 
       if (attributionManager.isInstall()) {
         const installData = await attributionManager.trackInstall();
@@ -472,9 +478,9 @@ export class DatalyrSDKExpo {
       // commonly call it every launch/screen. Re-emitting $identify and re-running
       // the web-attribution lookup for an UNCHANGED identity teaches the server
       // nothing. Measured 2026-07-25: 6.8 identifies/visitor/day on shipped
-      // builds, worst single user 129 in 24h. Fingerprint includes the visitor id
+      // builds, worst single user 129 in 24h. The identity hash includes the visitor id
       // so a rotation (reset/new install) always re-emits and links are never lost.
-      // RN-23: HASH the fingerprint — never persist the raw identity.
+      // RN-23: HASH the identity — never persist the raw identity.
       //
       // The 1.7.15 version stored this string verbatim in plaintext AsyncStorage,
       // which meant the suppression feature itself wrote PII at rest:
@@ -483,13 +489,13 @@ export class DatalyrSDKExpo {
       // this reason; RN was the outlier. The value is only ever compared for
       // equality, so a non-cryptographic digest is sufficient — and `identify()`
       // is synchronous here, so an async WebCrypto-style digest is not an option.
-      const identityFingerprint = this.stableEmailHash(
+      const identityHash = this.stableEmailHash(
         `${this.state.visitorId}|${userId}|${
           properties ? Object.keys(properties).sort().map((k) => `${k}=${String((properties as Record<string, unknown>)[k])}`).join('&') : ''
         }`,
       );
-      const previousFingerprint = await Storage.getItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT);
-      const isRedundantIdentify = previousFingerprint === identityFingerprint;
+      const previousIdentityHash = await Storage.getItem(STORAGE_KEYS.LAST_IDENTITY_HASH);
+      const isRedundantIdentify = previousIdentityHash === identityHash;
 
       await this.persistUserData();
 
@@ -508,7 +514,7 @@ export class DatalyrSDKExpo {
       if (isRedundantIdentify) {
         debugLog('Skipping redundant identify (unchanged identity):', userId);
       } else {
-        await Storage.setItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT, identityFingerprint);
+        await Storage.setItem(STORAGE_KEYS.LAST_IDENTITY_HASH, identityHash);
 
         await this.track('$identify', {
           userId,
@@ -693,9 +699,16 @@ export class DatalyrSDKExpo {
 
     // Fetched before the request so a device-info failure surfaces here, not as a
     // half-built body. getDeviceInfo() is cached after first resolution.
-    const deviceFp = await getDeviceInfo().catch(() => ({
+    const deviceSignals = await getDeviceInfo().catch(() => ({
       osVersion: undefined, model: undefined, locale: undefined, timezone: undefined,
     } as any));
+
+    // The server matches iOS installs only with ATT authorized when the workspace asks
+    // for that, so send the status as it is now: read from the native module, not the
+    // launch-time cache (the prompt may have been answered since). Omitted off iOS.
+    await this.refreshAdvertiserInfo();
+    const attStatus = Platform.OS === 'ios' ? attStatusFrom(this.cachedAdvertiserInfo) : undefined;
+    this.deferredLookupAwaitingAtt = false;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -708,16 +721,17 @@ export class DatalyrSDKExpo {
           'Content-Type': 'application/json',
           'X-Datalyr-API-Key': this.state.config.apiKey!,
         },
-        // Device fingerprint — the exact values the click-side fp_* capture
+        // Device signals — the exact values the click-side fp_* capture
         // approximates from the redirect request's headers. This is what opens the
-        // server's tier-2 matcher (fingerprint-corroborated store clicks up to 7
+        // server's tier-2 matcher (device-signal-corroborated store clicks up to 7
         // days old); without it the server only runs the short exact-IP window.
         body: JSON.stringify({
           platform: Platform.OS,
-          os_version: fingerprintOsVersion(deviceFp.osVersion),
-          device_model: fingerprintDeviceModel(deviceFp.model),
-          language: deviceFp.locale,
-          timezone: deviceFp.timezone,
+          os_version: deviceOsVersion(deviceSignals.osVersion),
+          device_model: deviceModelName(deviceSignals.model),
+          language: deviceSignals.locale,
+          timezone: deviceSignals.timezone,
+          ...(attStatus !== undefined ? { att_status: attStatus } : {}),
         }),
         signal: controller.signal,
       });
@@ -760,7 +774,22 @@ export class DatalyrSDKExpo {
       return;
     }
 
-    // A parsed 200 is the server's definitive answer, matched or not — with ONE
+    // `att_not_authorized` is not an answer about the match: the workspace matches iOS
+    // installs only with ATT authorized, and it is not. Give the attempt back, stay
+    // eligible, and re-run when ATT is granted (updateTrackingAuthorization or the next
+    // foreground). Reported once per launch so a relaunch loop can't flood the event.
+    if (result.found === false && result.reason === ATT_NOT_AUTHORIZED_REASON) {
+      await attributionManager.refundDeferredLookupAttempt();
+      this.deferredLookupAwaitingAtt = true;
+      debugLog('Deferred lookup needs ATT authorization — retrying after it is granted');
+      if (!this.attNotAuthorizedReported) {
+        this.attNotAuthorizedReported = true;
+        await this.trackAttributionMatchOutcome(false, ATT_NOT_AUTHORIZED_REASON);
+      }
+      return;
+    }
+
+    // Any other parsed 200 is the server's definitive answer, matched or not — with ONE
     // exception: `no_candidates` inside the first hour after install may just be
     // ingest lag (click → queue → analytics store takes seconds to minutes), so it
     // stays eligible for one more launch. Every other reason is terminal — a genuine
@@ -866,6 +895,54 @@ export class DatalyrSDKExpo {
   }
 
   /**
+   * Run the deferred lookup if it is still eligible (iOS only; inside the match window,
+   * not answered, attempts left). Only one runs at a time: a call while one is in flight
+   * joins it instead of issuing a second request.
+   */
+  private runDeferredLookupIfEligible(): Promise<void> {
+    if (Platform.OS !== 'ios') return Promise.resolve();
+    if (this.deferredLookupInFlight) return this.deferredLookupInFlight;
+    const run = (async () => {
+      try {
+        if (await attributionManager.shouldAttemptDeferredLookup()) {
+          await this.fetchDeferredWebAttribution();
+        }
+      } catch (error) {
+        errorLog('Deferred attribution lookup failed:', error as Error);
+      } finally {
+        this.deferredLookupInFlight = null;
+      }
+    })();
+    this.deferredLookupInFlight = run;
+    return run;
+  }
+
+  /**
+   * After a fresh ATT status read: if ATT is now authorized and either it was not before
+   * or this launch's lookup was declined for lack of it, run the lookup again (subject
+   * to the usual eligibility). A lookup already in flight may have been sent before the
+   * grant, so it is allowed to finish first.
+   */
+  private async rerunDeferredLookupIfAttGranted(previousStatus: number | undefined): Promise<void> {
+    if (Platform.OS !== 'ios' || !this.state.initialized) return;
+    if (attStatusFrom(this.cachedAdvertiserInfo) !== 3) return;
+    if (this.deferredLookupInFlight) {
+      await this.deferredLookupInFlight;
+    }
+    if (previousStatus === 3 && !this.deferredLookupAwaitingAtt) return;
+    await this.runDeferredLookupIfEligible();
+  }
+
+  /** Re-read IDFA/IDFV/ATT status from the native module into the cache. */
+  private async refreshAdvertiserInfo(): Promise<void> {
+    try {
+      this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
+    } catch (error) {
+      errorLog('Failed to refresh advertiser info:', error as Error);
+    }
+  }
+
+  /**
    * Emit the outcome of one deferred web→app match attempt, matched or not.
    *
    * `$attribution_match` is deliberately separate from `$web_attribution_matched`:
@@ -944,9 +1021,9 @@ export class DatalyrSDKExpo {
 
       await Storage.removeItem(STORAGE_KEYS.USER_ID);
       await Storage.removeItem(STORAGE_KEYS.USER_PROPERTIES);
-      // Clear the identify fingerprint so the NEXT identify after a logout /
+      // Clear the identify hash so the NEXT identify after a logout /
       // account switch always re-emits (the new identity must relink).
-      await Storage.removeItem(STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT);
+      await Storage.removeItem(STORAGE_KEYS.LAST_IDENTITY_HASH);
 
       // TR-28: wipe the previous user's attribution + journey BEFORE rotating ids, so a
       // track() that interleaves reset can never emit the NEW visitor id WITH the OLD
@@ -1322,21 +1399,25 @@ export class DatalyrSDKExpo {
     }
 
     // Refresh cached advertiser info after ATT status change
-    try {
-      this.cachedAdvertiserInfo = await AdvertiserInfoBridge.getAdvertiserInfo();
-    } catch (error) {
-      errorLog('Failed to refresh advertiser info:', error as Error);
-    }
+    const previousStatus = attStatusFrom(this.cachedAdvertiserInfo);
+    await this.refreshAdvertiserInfo();
 
-    // Track ATT status event (parity with the RN SDK — Expo was silently omitting it).
+    // Report the native status (0 notDetermined, 1 restricted, 2 denied, 3 authorized),
+    // not a yes/no folded to 3/2: "restricted" and "not yet asked" are different answers
+    // from "denied". The argument only stands in when the native module is unavailable.
+    const status = attStatusFrom(this.cachedAdvertiserInfo) ?? (authorized ? 3 : 2);
     await this.track('$att_status', {
-      authorized: authorized,
-      status: authorized ? 3 : 2,
-      status_name: authorized ? 'authorized' : 'denied',
-      att_status: authorized ? 3 : 2, // key the Meta/Snapchat postback mappers read
+      authorized: status === 3,
+      status,
+      status_name: ATT_STATUS_NAMES[status],
+      att_status: status, // key the Meta/Snapchat postback mappers read
     });
 
-    debugLog(`ATT status updated: ${authorized ? 'authorized' : 'denied'}`);
+    debugLog(`ATT status updated: ${ATT_STATUS_NAMES[status]}`);
+
+    // A grant re-opens the deferred lookup the server declined without it. Not awaited:
+    // the caller is usually mid-onboarding and must not wait on a network round trip.
+    void this.rerunDeferredLookupIfAttGranted(previousStatus);
   }
 
   private async handleDeferredDeepLink(data: DeferredDeepLinkResult): Promise<void> {
@@ -1567,6 +1648,13 @@ export class DatalyrSDKExpo {
           networkStatusManager.refresh();
           if (this.autoEventsManager) {
             this.autoEventsManager.handleAppForeground();
+          }
+          // iOS: the ATT answer can change while the app is away (the prompt itself, or
+          // Settings), so re-read it; a grant re-opens a declined deferred lookup.
+          if (Platform.OS === 'ios') {
+            const previousStatus = attStatusFrom(this.cachedAdvertiserInfo);
+            await this.refreshAdvertiserInfo();
+            void this.rerunDeferredLookupIfAttGranted(previousStatus);
           }
         }
       });

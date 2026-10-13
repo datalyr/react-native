@@ -84,6 +84,31 @@ export function isTrackingAuthorized(attStatus: unknown): boolean {
 }
 
 /**
+ * The native ATT status (0 notDetermined, 1 restricted, 2 denied, 3 authorized) from
+ * advertiser info, or undefined when it is missing or not one of those values (no
+ * native module, non-iOS).
+ */
+export function attStatusFrom(advertiserInfo: { att_status?: unknown } | null | undefined): 0 | 1 | 2 | 3 | undefined {
+  const status = advertiserInfo?.att_status;
+  return status === 0 || status === 1 || status === 2 || status === 3 ? status : undefined;
+}
+
+/** Display names for the ATT status values, matching Apple's enum case names. */
+export const ATT_STATUS_NAMES: Record<0 | 1 | 2 | 3, string> = {
+  0: 'notDetermined',
+  1: 'restricted',
+  2: 'denied',
+  3: 'authorized',
+};
+
+/**
+ * Server miss reason for a deferred lookup it declined to evaluate because the workspace
+ * matches iOS installs only with ATT authorized. Not an answer about the match: the
+ * lookup stays eligible and re-runs when ATT is granted.
+ */
+export const ATT_NOT_AUTHORIZED_REASON = 'att_not_authorized';
+
+/**
  * The persisted attribution to spread onto `eventName`: everything except SDK bookkeeping,
  * and except the app-user ids unless the event is one of APP_USER_ID_EVENTS and tracking is
  * authorized (`attStatus`).
@@ -727,7 +752,7 @@ export class AttributionManager {
    * This MUST NOT be tighter than the server's match reach, or the SDK stops asking
    * while the server would still have answered — the original 60-minute bound sat
    * against a server configured for 180 and forfeited two thirds of the window. Now
-   * 7 days, matching the server's tier-2 fingerprint matcher
+   * 7 days, matching the server's tier-2 device-signal matcher
    * (DEFERRED_FP_MATCH_MAX_DAYS): the click history is server-side, so a device that
    * was offline at install — or whose first attempts failed in transit — can still
    * recover its attribution days later. The attempt cap, not the window, bounds the
@@ -784,6 +809,16 @@ export class AttributionManager {
   async recordDeferredLookupAttempt(): Promise<void> {
     const attempts = (await Storage.getItem<number>(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS)) || 0;
     await Storage.setItem(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS, attempts + 1);
+  }
+
+  /**
+   * Give back the attempt spent by a request the server declined to evaluate because ATT
+   * is not authorized (`reason: 'att_not_authorized'`). That answer says nothing about
+   * the match, so it must not use up the budget the lookup needs once ATT is granted.
+   */
+  async refundDeferredLookupAttempt(): Promise<void> {
+    const attempts = (await Storage.getItem<number>(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS)) || 0;
+    await Storage.setItem(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS, Math.max(0, attempts - 1));
   }
 
   /**

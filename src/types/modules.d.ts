@@ -53,7 +53,7 @@ declare module 'react-native-get-random-values' {
 // here. Without these shims `tsc` cannot resolve them, and the response to that
 // used to be a `tsconfig.json` "exclude" list covering the whole Expo half of
 // the package — which meant no Expo source was ever type-checked OR emitted.
-// That hid a real TS2339 (`STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT` missing from
+// That hid a real TS2339 (`STORAGE_KEYS.LAST_IDENTITY_HASH` missing from
 // utils-expo.ts) which made the 1.7.15 identify dedupe dead code on Expo.
 //
 // These declare the ACTUAL surface the SDK consumes — not `any` — so a typo or

@@ -8,7 +8,7 @@
 // a WORKING feature under test.
 //
 // That is exactly how the 1.7.15 identify dedupe shipped broken on Expo:
-// `STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT` was missing from utils-expo.ts, the
+// `STORAGE_KEYS.LAST_IDENTITY_HASH` was missing from utils-expo.ts, the
 // Expo build read and wrote `undefined`, and every test still passed. Throwing
 // here turns that class of bug into a red test instead of a production no-op.
 const store = new Map();
