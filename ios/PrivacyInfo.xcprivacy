@@ -5,8 +5,11 @@
     <!-- TR-26: this SDK DOES track. When ATT-authorized it reads the IDFA and attaches it to
          events, and it forwards click-ids / hashed email+phone / purchases to third-party ad
          platforms (Meta/Google/TikTok/Snap CAPI) for cross-app attribution. NSPrivacyTracking
-         must therefore be true, with the ingest/api domains listed, and the collected data
-         types flagged Linked (associated with identity) + Tracking (used to track). -->
+         is therefore true, and the collected data types are flagged Linked (associated with
+         identity) + Tracking (used to track). Only tracking.datalyr.com is a tracking domain
+         (see below); ingest.datalyr.com (events, device context) and api.datalyr.com
+         (attribution lookups) are deliberately not listed. The deferred install lookup sends
+         the ATT status, and the server applies the workspace's ATT setting to it. -->
     <key>NSPrivacyTracking</key>
     <true/>
     <!-- Apple requires a non-empty domain list when NSPrivacyTracking is true, and

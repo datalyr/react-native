@@ -1,7 +1,7 @@
 // Redundant-identify suppression (1.7.15) — bare RN AND Expo.
 //
 // Why this file exists: 1.7.15 shipped the suppression with NO test. On Expo it
-// was dead code — `STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT` was missing from
+// was dead code — `STORAGE_KEYS.LAST_IDENTITY_HASH` was missing from
 // utils-expo.ts, so `Storage.getItem(undefined)`/`setItem(undefined, …)` no-opped
 // and every identify still emitted. Three TS2339 errors said so, but
 // tsconfig.json excluded the entire Expo half from `tsc`, jest strips types via
@@ -90,7 +90,7 @@ for (const [variant, createSDK] of variants) {
       }
     });
 
-    test('the fingerprint is actually persisted under a real string key', async () => {
+    test('the identity hash is actually persisted under a real string key', async () => {
       // The Expo regression was invisible precisely because nothing asserted
       // the key existed. Read the store directly.
       const sdk = createSDK();
@@ -154,7 +154,7 @@ for (const [variant, createSDK] of variants) {
     test('suppression survives a restart — it is persisted, not in-memory', async () => {
       // A host calling identify() once per launch is the exact pattern that
       // produced 6.8 identifies/visitor/day in production. A memory-only
-      // fingerprint would not damp it at all.
+      // identity hash would not damp it at all.
       const first = createSDK();
       try {
         await initSDK(first);

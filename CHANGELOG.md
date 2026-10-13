@@ -5,6 +5,25 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.23] - 2026-10-13
+
+### Added
+- The deferred install lookup (iOS) sends the current ATT status as `att_status` (0 notDetermined, 1 restricted, 2 denied, 3 authorized), read from the native module right before the request. Omitted on Android and when the native module is unavailable.
+- A workspace can match iOS installs only when ATT is authorized. The server then answers `{found: false, reason: 'att_not_authorized'}`. The SDK treats that as "not yet": the lookup stays open, the attempt is not counted, and `$attribution_match` with that reason is sent at most once per launch.
+- The lookup runs again once ATT is authorized: after `updateTrackingAuthorization()`, and when the app returns to the foreground (the SDK re-reads the ATT status then). Only after the server declined that lookup for ATT (not after other open states such as an early `no_candidates` or a failed request, which keep their next-launch retry), only inside the 7-day window, while the lookup is unanswered and attempts remain; only one lookup runs at a time.
+- iOS without the native module (Expo Go, missing pods) has no ATT status to send. After the server declines a lookup for ATT in that state, the SDK stops asking (no attempts spent) until a build with the native module reports a status.
+- iOS refreshes advertiser info (IDFA, ATT status) every time the app becomes active, so later events carry the current values.
+
+### Changed
+- Device context is sent as `properties.device_context` instead of `properties.fingerprint`. Ingest reads both, so older builds keep working.
+- The device id in the device context (`deviceId`, stored by ingest as `fingerprint_hash`) is now a random UUID created on first launch and kept in AsyncStorage, on every build. The bare React Native build used `react-native-device-info`'s `getUniqueId()` (on iOS the IDFV stored in the Keychain, which survives a reinstall; on Android `ANDROID_ID`). After updating, each existing install sends a new device id once, then keeps it; a reinstall gets a new one. The visitor id, anonymous id, user id and attribution are unchanged. Installs that already used the stored fallback id (no `react-native-device-info`) keep it.
+- `$att_status` reports the status the device reports (0-3) in `status` and `att_status`, with `status_name` `notDetermined` / `restricted` / `denied` / `authorized` and `authorized: status === 3`. Before, any non-authorized answer was sent as 2 (denied). This is iOS only; on Android `$att_status` still follows the boolean argument (3 or 2). On iOS the argument is used only when the native module is unavailable.
+- Renamed internals that described device context or the identify hash as a "fingerprint": `fingerprintOsVersion` / `fingerprintDeviceModel` are now `deviceOsVersion` / `deviceModelName`, and `STORAGE_KEYS.LAST_IDENTITY_FINGERPRINT` is `STORAGE_KEYS.LAST_IDENTITY_HASH`. The stored key string is unchanged, so identify de-duplication carries over.
+
+### Fixed
+- Docs: the iOS install lookup window is up to 7 days after install, not 24 hours.
+- `PrivacyInfo.xcprivacy`: a comment said the ingest and API domains were listed as tracking domains. They are not, and the comment now says so; the manifest content is unchanged.
+
 ## [1.7.22] - 2026-10-11
 
 ### Added

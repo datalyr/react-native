@@ -24,16 +24,20 @@ export const STORAGE_KEYS = {
   DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',  // capped store for events that exhausted retries (vs silent drop)
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
   LAST_SESSION_TIME: '@datalyr/last_session_time',
-  // Fingerprint of the last identify() that actually emitted, so a host app
+  // Hash of the last identify() that actually emitted (the stored key string keeps
+  // its original name so existing installs keep their dedup state), so a host app
   // calling identify() on every launch/screen does not re-emit unchanged
   // identity. Cleared by reset(). See identifyUser().
-  LAST_IDENTITY_FINGERPRINT: '@datalyr/last_identity_fingerprint',
+  LAST_IDENTITY_HASH: '@datalyr/last_identity_fingerprint',
   // Deferred web→app IP-lookup state, per install: whether the server has given a
   // definitive answer, and how many requests have been issued. `first_launch_time`
   // cannot serve as that state — it records that a launch was OBSERVED, not that the
   // lookup was ANSWERED. See AttributionManager.shouldAttemptDeferredLookup().
   DEFERRED_LOOKUP_RESOLVED: '@datalyr/deferred_lookup_resolved',
   DEFERRED_LOOKUP_ATTEMPTS: '@datalyr/deferred_lookup_attempts',
+  // Set when the server declined the lookup for ATT while the native module was missing
+  // (no ATT status to send); lookups are skipped until the module reports a status.
+  DEFERRED_LOOKUP_NEEDS_ATT_STATUS: '@datalyr/deferred_lookup_needs_att_status',
 };
 
 // Constants
@@ -148,7 +152,7 @@ export const generateSessionId = (): string => {
 };
 
 /**
- * Hash a string to create a fingerprint
+ * Hash a string to a short non-cryptographic digest
  */
 export const hashString = (str: string): string => {
   let hash = 0;
@@ -332,7 +336,7 @@ const getRuntimeLocale = (): string | undefined => {
  *
  * `Platform.Version` on Android is the API LEVEL (34), not the marketing version
  * (14) — and the device-info fallbacks below have no other source for it. The
- * deferred-lookup fingerprint is compared server-side against a version parsed
+ * deferred-lookup device signal is compared server-side against a version parsed
  * out of the CLICK's user agent, which is always the marketing form, so sending
  * "34" guarantees disagreement: neither the exact nor the major-version
  * comparison can ever match, and the strongest single corroborating signal
@@ -348,10 +352,10 @@ const ANDROID_API_TO_RELEASE: Record<number, string> = {
 };
 
 /**
- * The OS version to use as a FINGERPRINT signal, in the marketing form the
+ * The OS version to send as a device signal, in the marketing form the
  * click side reports. Returns undefined when it cannot be determined.
  */
-export const fingerprintOsVersion = (osVersion: string | undefined): string | undefined => {
+export const deviceOsVersion = (osVersion: string | undefined): string | undefined => {
   if (!osVersion) return undefined;
   if (Platform.OS !== 'android') return osVersion;
   // A bare integer on Android is an API level (react-native-device-info's
@@ -367,28 +371,35 @@ export const fingerprintOsVersion = (osVersion: string | undefined): string | un
 const PLACEHOLDER_MODELS = new Set(['android', 'unknown', 'iphone', 'ipad', 'test device']);
 
 /**
- * The device model to use as a FINGERPRINT signal. The device-info fallbacks
+ * The device model to send as a device signal. The device-info fallbacks
  * emit literals like 'Android' / 'Unknown' when the real model is unavailable;
  * those can never match a click-side model ("SM-S918B") and would only ever be
  * noise in the corroboration score.
  */
-export const fingerprintDeviceModel = (model: string | undefined): string | undefined => {
+export const deviceModelName = (model: string | undefined): string | undefined => {
   if (!model) return undefined;
   return PLACEHOLDER_MODELS.has(model.trim().toLowerCase()) ? undefined : model;
 };
 
 /**
- * A STABLE fallback device id, persisted in AsyncStorage so fingerprint_hash doesn't churn
- * on every launch when react-native-device-info is unavailable / throws. Reuses the
- * VISITOR_ID storage namespace via a dedicated key.
+ * The device-context id: a random UUID generated on first use and persisted in
+ * AsyncStorage, so it is stable across launches and resets on reinstall (the app
+ * sandbox, and with it AsyncStorage, is removed on uninstall).
+ *
+ * It used to be react-native-device-info's getUniqueId() whenever that module was
+ * installed. On iOS that is the IDFV kept in the Keychain, which survives a reinstall;
+ * on Android it is ANDROID_ID. The Expo build already used a stored UUID. The storage
+ * key is the one the no-device-info fallback already used, so installs that were on
+ * that path keep their id. Ingest stores this id as fingerprint_hash only; no SDK or
+ * server identity (visitor_id / anonymous_id) is derived from it.
  */
-const FALLBACK_DEVICE_ID_KEY = '@datalyr/fallback_device_id';
-const getOrCreateFallbackDeviceId = async (): Promise<string> => {
+const DEVICE_ID_KEY = '@datalyr/fallback_device_id';
+export const getOrCreateDeviceId = async (): Promise<string> => {
   try {
-    let id = await AsyncStorage.getItem(FALLBACK_DEVICE_ID_KEY);
+    let id = await AsyncStorage.getItem(DEVICE_ID_KEY);
     if (!id) {
       id = generateUUID();
-      await AsyncStorage.setItem(FALLBACK_DEVICE_ID_KEY, id);
+      await AsyncStorage.setItem(DEVICE_ID_KEY, id);
     }
     return id;
   } catch {
@@ -439,8 +450,7 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
   // If DeviceInfo is not available (like in Expo Go), use fallback
   if (!DeviceInfo) {
     return {
-      // Persisted so fingerprint_hash is stable across launches (was a fresh UUID each run).
-      deviceId: await getOrCreateFallbackDeviceId(),
+      deviceId: await getOrCreateDeviceId(),
       model: Platform.OS === 'ios' ? 'iPhone' : 'Android',
       manufacturer: Platform.OS === 'ios' ? 'Apple' : 'Google',
       osVersion: Platform.Version.toString(),
@@ -458,7 +468,6 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
 
   try {
     const [
-      deviceId,
       model,
       manufacturer,
       osVersion,
@@ -470,7 +479,6 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
       carrier,
       isEmulator,
     ] = await Promise.all([
-      DeviceInfo.getUniqueId(),
       DeviceInfo.getModel(),
       DeviceInfo.getManufacturer(),
       DeviceInfo.getSystemVersion(),
@@ -484,7 +492,7 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
     ]);
 
     return {
-      deviceId,
+      deviceId: await getOrCreateDeviceId(),
       model,
       manufacturer,
       osVersion,
@@ -503,8 +511,7 @@ const fetchDeviceInfoInternal = async (): Promise<DeviceInfoType> => {
 
     // Fallback device info
     return {
-      // Persisted so fingerprint_hash is stable across launches (was a fresh UUID each run).
-      deviceId: await getOrCreateFallbackDeviceId(),
+      deviceId: await getOrCreateDeviceId(),
       model: 'Unknown',
       manufacturer: Platform.OS === 'ios' ? 'Apple' : 'Android',
       osVersion: Platform.Version.toString(),

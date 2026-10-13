@@ -905,7 +905,7 @@ Requires a native build (not Expo Go). The library declares the Play Install Ref
 **iOS (Probabilistic, ~90%+ for immediate installs):**
 1. Web SDK records visitor's IP, user agent, and all attribution when `trackAppDownloadClick()` fires
 2. After install, mobile SDK sends device's IP address
-3. Datalyr matches mobile IP against recent `app_download_click` events within 24 hours
+3. Datalyr matches the install against recent `app_download_click` events by IP and device details. The SDK asks again on later launches until the server answers, for up to 7 days after install
 4. If match found, app user is linked to web visitor
 
 **iOS Email Fallback (for delayed installs, VPN changes):**
@@ -931,7 +931,7 @@ Requires a native build (not Expo Go). The library declares the Play Install Ref
 
 ## Step 9: App Tracking Transparency (iOS)
 
-ATT is **not required** for web-to-app campaigns (that's the whole point). But if the user grants permission, it improves match quality by providing IDFA.
+Web-to-app matching does not need ATT unless your workspace is set to match iOS installs only with ATT authorized. In that case the server declines the install lookup until the user grants permission, and the SDK runs it again after `updateTrackingAuthorization()` or the next foreground with ATT authorized. If the user grants permission, events also carry the IDFA.
 
 ```javascript
 import { requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
@@ -1169,7 +1169,7 @@ No. Optional iOS 14+ feature. Not needed if using web-to-app campaigns with Supe
 3. Is mobile SDK initialized in your app?
 4. Did user install from the same IP? (check for VPN/network change)
 5. Is `identify()` called with email? (iOS fallback)
-6. Is attribution within window? (24hr for IP, 30d for email)
+6. Is attribution within window? (up to 7 days after install for IP, 30d for email)
 7. **Android**: Is Play Install Referrer library in build.gradle?
 
 ### Postbacks Not Sending

@@ -107,7 +107,7 @@ for (const [variant, createSDK] of variants) {
 
     it('treats a parsed 200 reporting no match as terminal (past the ingest-lag grace)', async () => {
       // A no-match inside the first hour stays eligible (ingest lag — covered in the
-      // fingerprint describe below); past it, the same answer is terminal. Seed an
+      // device-signal describe below); past it, the same answer is terminal. Seed an
       // install two hours old so this exercises the terminal path.
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
       await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(twoHoursAgo));
@@ -198,7 +198,7 @@ describe('deferred web→app lookup bounds', () => {
   it('is not eligible once the server match window has elapsed', async () => {
     // Past the backend's reach no web touch can match this device, so elapsed time is a
     // hard stop that never shrinks back. The SDK bound is 7 days, matching the server's
-    // tier-2 fingerprint window (DEFERRED_FP_MATCH_MAX_DAYS) — eight days is past it.
+    // tier-2 device-signal window (DEFERRED_FP_MATCH_MAX_DAYS) — eight days is past it.
     const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
     await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(eightDaysAgo));
     await AsyncStorage.setItem('@datalyr/visitor_id', 'visitor_from_earlier_launch');
@@ -215,7 +215,7 @@ describe('deferred web→app lookup bounds', () => {
   it('is still eligible days after install — the tier-2 window is server-side history', async () => {
     // Regression guard, twice over: the bound was 60 minutes against a 180-minute
     // server (two thirds of the window forfeited), then 180 minutes against the 7-day
-    // tier-2 fingerprint matcher. A device that was offline at install, or whose first
+    // tier-2 device-signal matcher. A device that was offline at install, or whose first
     // attempts failed in transit, must still get its lookup days later — the click
     // history lives server-side and does not expire with the SDK's patience.
     for (const hoursAgo of [2, 4, 6 * 24]) {
@@ -254,8 +254,8 @@ describe('deferred web→app lookup bounds', () => {
   });
 });
 
-describe('deferred lookup fingerprint + ingest-lag retry', () => {
-  it('sends the device fingerprint the tier-2 matcher scores against', async () => {
+describe('deferred lookup device signals + ingest-lag retry', () => {
+  it('sends the device signals the tier-2 matcher scores against', async () => {
     const sdk = new DatalyrSDK();
     try { await initSDK(sdk); } finally { sdk.destroy(); }
 

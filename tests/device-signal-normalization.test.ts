@@ -1,14 +1,14 @@
 // `Platform.Version` on Android is the SDK API LEVEL (34), not the marketing
-// version (14). The server compares the fingerprint against a version parsed out
+// version (14). The server compares the device signal against a version parsed out
 // of the CLICK's user agent, which is always the marketing form — so an API
 // level guarantees disagreement on both the exact and the major-version
 // comparison, silently killing the strongest corroborating signal for every app
 // on the device-info fallback path.
 
 import { Platform } from 'react-native';
-import { fingerprintOsVersion, fingerprintDeviceModel } from '../src/utils';
+import { deviceOsVersion, deviceModelName } from '../src/utils';
 
-describe('fingerprint OS version normalization', () => {
+describe('device OS version normalization', () => {
   const asPlatform = (os: 'ios' | 'android') => {
     Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
   };
@@ -16,9 +16,9 @@ describe('fingerprint OS version normalization', () => {
   it('maps an Android API level to the marketing version the click reports', () => {
     asPlatform('android');
     // The fallbacks send Platform.Version.toString(); 34 is Android 14.
-    expect(fingerprintOsVersion('34')).toBe('14');
-    expect(fingerprintOsVersion('33')).toBe('13');
-    expect(fingerprintOsVersion('30')).toBe('11');
+    expect(deviceOsVersion('34')).toBe('14');
+    expect(deviceOsVersion('33')).toBe('13');
+    expect(deviceOsVersion('30')).toBe('11');
   });
 
   it('leaves a real Android marketing version untouched', () => {
@@ -26,38 +26,38 @@ describe('fingerprint OS version normalization', () => {
     // react-native-device-info's getSystemVersion already returns this form.
     // Marketing versions in use are all <= 20 and API levels all >= 21, so the
     // ranges cannot be confused.
-    expect(fingerprintOsVersion('14')).toBe('14');
-    expect(fingerprintOsVersion('9')).toBe('9');
-    expect(fingerprintOsVersion('12.1')).toBe('12.1');
+    expect(deviceOsVersion('14')).toBe('14');
+    expect(deviceOsVersion('9')).toBe('9');
+    expect(deviceOsVersion('12.1')).toBe('12.1');
   });
 
   it('omits an unmappable API level rather than sending a wrong one', () => {
     asPlatform('android');
     // An absent signal costs nothing; a mismatched one costs the match.
-    expect(fingerprintOsVersion('99')).toBeUndefined();
-    expect(fingerprintOsVersion(undefined)).toBeUndefined();
+    expect(deviceOsVersion('99')).toBeUndefined();
+    expect(deviceOsVersion(undefined)).toBeUndefined();
   });
 
   it('never rewrites iOS versions', () => {
     asPlatform('ios');
-    expect(fingerprintOsVersion('17.5')).toBe('17.5');
-    expect(fingerprintOsVersion('26')).toBe('26');
+    expect(deviceOsVersion('17.5')).toBe('17.5');
+    expect(deviceOsVersion('26')).toBe('26');
   });
 });
 
-describe('fingerprint device model normalization', () => {
+describe('device model normalization', () => {
   it('drops the placeholders the device-info fallbacks emit', () => {
     // 'Android' / 'Unknown' can never match a click-side model like SM-S918B;
     // sending them is pure noise in the corroboration score.
     for (const placeholder of ['Android', 'Unknown', 'unknown', 'iPhone', 'Test Device']) {
-      expect(fingerprintDeviceModel(placeholder)).toBeUndefined();
+      expect(deviceModelName(placeholder)).toBeUndefined();
     }
-    expect(fingerprintDeviceModel(undefined)).toBeUndefined();
+    expect(deviceModelName(undefined)).toBeUndefined();
   });
 
   it('keeps a real hardware model', () => {
-    expect(fingerprintDeviceModel('SM-S918B')).toBe('SM-S918B');
-    expect(fingerprintDeviceModel('Pixel 8')).toBe('Pixel 8');
-    expect(fingerprintDeviceModel('iPhone 15 Pro')).toBe('iPhone 15 Pro');
+    expect(deviceModelName('SM-S918B')).toBe('SM-S918B');
+    expect(deviceModelName('Pixel 8')).toBe('Pixel 8');
+    expect(deviceModelName('iPhone 15 Pro')).toBe('iPhone 15 Pro');
   });
 });

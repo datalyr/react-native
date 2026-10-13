@@ -17,7 +17,7 @@ export const STORAGE_KEYS = {
   EVENT_QUEUE: '@datalyr/event_queue',
   // Parity with utils.ts. event-queue.ts is shared and imports STORAGE_KEYS from
   // './utils', so the dead-letter store already worked on Expo — but leaving the
-  // key absent here is the same drift that made LAST_IDENTITY_FINGERPRINT a
+  // key absent here is the same drift that made LAST_IDENTITY_HASH a
   // no-op. Kept in lockstep and enforced by tests/identify-dedupe.test.ts.
   DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
@@ -25,21 +25,25 @@ export const STORAGE_KEYS = {
   LAST_APP_VERSION: '@datalyr/last_app_version',
   LAST_SESSION_TIME: '@datalyr/last_session_time',
   DEVICE_ID: '@datalyr/device_id',
-  // Fingerprint of the last identify() that actually emitted, so a host app
+  // Hash of the last identify() that actually emitted (the stored key string keeps
+  // its original name so existing installs keep their dedup state), so a host app
   // calling identify() on every launch/screen does not re-emit unchanged
   // identity. Cleared by reset(). See identifyUser().
   //
   // MUST stay byte-identical to utils.ts's value — bare RN and Expo share one
   // AsyncStorage namespace, so a divergent key would silently give an app that
-  // switches entry points two independent fingerprints and re-emit once per
+  // switches entry points two independent identity hashes and re-emit once per
   // switch. This key was present in utils.ts from 1.7.15 but MISSING here,
   // which made the whole suppression a no-op on Expo (see CHANGELOG 1.7.16).
-  LAST_IDENTITY_FINGERPRINT: '@datalyr/last_identity_fingerprint',
+  LAST_IDENTITY_HASH: '@datalyr/last_identity_fingerprint',
   // Deferred web→app IP-lookup state. Mirrors utils.ts — attribution.ts is shared and
   // reads these through './utils', so the values MUST stay byte-identical (both builds
   // share one AsyncStorage namespace).
   DEFERRED_LOOKUP_RESOLVED: '@datalyr/deferred_lookup_resolved',
   DEFERRED_LOOKUP_ATTEMPTS: '@datalyr/deferred_lookup_attempts',
+  // Set when the server declined the lookup for ATT while the native module was missing
+  // (no ATT status to send); lookups are skipped until the module reports a status.
+  DEFERRED_LOOKUP_NEEDS_ATT_STATUS: '@datalyr/deferred_lookup_needs_att_status',
 } as const;
 
 // Debug logging

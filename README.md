@@ -2,7 +2,7 @@
 
 Mobile analytics and attribution for React Native and Expo. Track events, identify users, and capture ad attribution.
 
-Current release: **1.7.22**. Every event posts to `https://ingest.datalyr.com/track`.
+Current release: **1.7.23**. Every event posts to `https://ingest.datalyr.com/track`.
 
 Full reference: [docs.datalyr.com/sdk-reference/react-native](https://docs.datalyr.com/sdk-reference/react-native).
 
@@ -312,7 +312,7 @@ await Datalyr.identify('user_123', {
 });
 ```
 
-A repeat call with an unchanged identity fingerprint sends no `$identify` event.
+A repeat call with an unchanged identity sends no `$identify` event.
 
 ### Identity on the wire
 
@@ -323,7 +323,7 @@ A repeat call with an unchanged identity fingerprint sends no `$identify` event.
 | `userId` | Your ID from `identify()`. |
 | `properties.sessionId` | Format `sess_<epoch_ms>_<9 base36 chars>`. |
 | `context.session_id` | The same session ID. This is the field Datalyr reads. |
-| `properties.fingerprint.deviceId` | A UUID for the install. |
+| `properties.device_context.deviceId` | A random UUID created on first launch and stored by the SDK. A reinstall gets a new one. Sent as `properties.fingerprint` before 1.7.23. |
 
 This SDK sends no `distinct_id` and no top-level `visitor_id`. Only the Web SDK sends `distinct_id`.
 
@@ -413,7 +413,9 @@ Play Install Referrer needs a native build (the library declares the `installref
 
 ### Web-to-app attribution
 
-On Android the Web SDK's `trackAppDownloadClick()` writes attribution into the Play Store `referrer` parameter, and the SDK reads it through the Play Install Referrer API. On iOS the SDK asks the Datalyr API to match the device IP against `$app_download_click` web events from the last 24 hours.
+On Android the Web SDK's `trackAppDownloadClick()` writes attribution into the Play Store `referrer` parameter, and the SDK reads it through the Play Install Referrer API. On iOS the SDK asks the Datalyr API to match the install against recent `$app_download_click` web events by IP address and device details (OS version, model, language, time zone). Until the server gives an answer, the SDK asks again on later launches, for up to 7 days after install and at most 3 times. The request includes the ATT status as `att_status` (0 notDetermined, 1 restricted, 2 denied, 3 authorized).
+
+A workspace can choose to match iOS installs only when ATT is authorized. The server then declines the lookup until it is. The SDK does not count that as an attempt, and runs the lookup again as soon as ATT is authorized: after `updateTrackingAuthorization()`, or when the app returns to the foreground.
 
 Both run inside `initialize()`, before `app_install` fires. Your app needs no extra code.
 
@@ -432,7 +434,7 @@ const { granted } = await requestTrackingPermissionsAsync();
 await Datalyr.updateTrackingAuthorization(granted);
 ```
 
-This sends `$att_status` and refreshes `idfa`, `idfv`, `gaid`, `att_status`, and `advertiser_tracking_enabled` on later events.
+This sends `$att_status` and refreshes `idfa`, `idfv`, `gaid`, `att_status`, and `advertiser_tracking_enabled` on later events. `$att_status` reports the status the device reports (0 notDetermined, 1 restricted, 2 denied, 3 authorized); on iOS the boolean you pass is used only when the native module is unavailable (Expo Go); on Android it decides the status (3 or 2). If the server declined the install lookup for ATT, it runs again after an authorized status.
 
 ---
 

@@ -339,7 +339,7 @@ export class HttpClient {
         ...payload.eventData,
         sessionId: payload.sessionId,
         source: payload.source || 'mobile_app',
-        fingerprint: payload.deviceContext,
+        device_context: payload.deviceContext,
       },
       context: {
         library: SDK_LIBRARY_NAME,
