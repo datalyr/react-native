@@ -277,6 +277,34 @@ for (const [variant, createSDK] of variants) {
       } finally { sdk.destroy(); }
     });
 
+    it('a grant does not re-run a lookup the server kept open for another reason', async () => {
+      // Allowing workspace: a fresh no_candidates stays open for ingest lag, and a
+      // failed request stays open too. Neither is an ATT decline, so a grant must not
+      // spend the next-launch retry early.
+      for (const reply of [
+        async () => ok({ found: false, reason: 'no_candidates' }),
+        async () => { throw new Error('Network request failed'); },
+        async () => ({ ok: false, status: 503, json: async () => ({}) }),
+      ]) {
+        await (AsyncStorage as any).clear();
+        relaunch();
+        deferredBodies = [];
+        nativeAttStatus = 0;
+        respond = reply;
+        const sdk = createSDK();
+        try {
+          await initSDK(sdk);
+          expect(deferredBodies).toHaveLength(1);
+          expect(await AsyncStorage.getItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED)).toBeNull();
+          nativeAttStatus = 3;
+          await appStateHandler!('active');
+          await sdk.updateTrackingAuthorization(true);
+          await settle();
+          expect(deferredBodies).toHaveLength(1);
+        } finally { sdk.destroy(); }
+      }
+    });
+
     it('a grant does not re-run a lookup that was already answered', async () => {
       // Non-strict workspace: the launch lookup (status 0) gets a definitive answer.
       respond = async () => ok({ found: false, reason: 'no_web_traffic' });
@@ -318,6 +346,52 @@ for (const [variant, createSDK] of variants) {
     });
   });
 
+  describe(`${variant} — iOS without the native module`, () => {
+    it('stops asking after an ATT decline while the status is unavailable, resumes when it is', async () => {
+      nativeAttStatus = null;
+      respond = strictServer();
+      const first = createSDK();
+      try {
+        await initSDK(first);
+        expect(deferredBodies).toHaveLength(1);
+        expect('att_status' in deferredBodies[0]).toBe(false);
+        // Same launch: nothing more.
+        await first.runDeferredLookupIfEligible();
+        await appStateHandler!('active');
+        await settle();
+        expect(deferredBodies).toHaveLength(1);
+      } finally { first.destroy(); }
+
+      // Later launches skip without spending attempts while the module is still missing.
+      relaunch();
+      const second = createSDK();
+      try { await initSDK(second); } finally { second.destroy(); }
+      expect(deferredBodies).toHaveLength(1);
+      expect(await AsyncStorage.getItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED)).toBeNull();
+      expect(await AsyncStorage.getItem(STORAGE_KEYS.DEFERRED_LOOKUP_ATTEMPTS)).toBe('0');
+
+      // A build with the module: the lookup runs again and the flag clears.
+      nativeAttStatus = 3;
+      relaunch();
+      const third = createSDK();
+      try { await initSDK(third); } finally { third.destroy(); }
+      expect(deferredBodies).toHaveLength(2);
+      expect(deferredBodies[1].att_status).toBe(3);
+      expect(await AsyncStorage.getItem(STORAGE_KEYS.DEFERRED_LOOKUP_NEEDS_ATT_STATUS)).toBeNull();
+    });
+
+    it('keeps asking when the server answers without an ATT decline', async () => {
+      nativeAttStatus = null;
+      respond = async () => { throw new Error('Network request failed'); };
+      const first = createSDK();
+      try { await initSDK(first); } finally { first.destroy(); }
+      relaunch();
+      const second = createSDK();
+      try { await initSDK(second); } finally { second.destroy(); }
+      expect(deferredBodies).toHaveLength(2);
+    });
+  });
+
   describe(`${variant} — $att_status reports the real native status`, () => {
     it.each([
       [0, 'notDetermined'],
@@ -354,24 +428,40 @@ for (const [variant, createSDK] of variants) {
   });
 }
 
-describe('Android', () => {
-  it('runs no deferred lookup and refreshes nothing on foreground for ATT', async () => {
+for (const [variant, createSDK] of variants) {
+  describe(`${variant} — Android`, () => {
     const original = Platform.OS;
-    (Platform as any).OS = 'android';
-    try {
-      const sdk = new DatalyrSDK();
+    beforeEach(() => { (Platform as any).OS = 'android'; });
+    afterEach(() => { (Platform as any).OS = original; });
+
+    it('runs no deferred lookup on init, grant or foreground', async () => {
+      const sdk = createSDK();
       try {
         await initSDK(sdk);
         nativeAttStatus = 3;
         await sdk.updateTrackingAuthorization(true);
+        await appStateHandler!('active');
         await settle();
       } finally { sdk.destroy(); }
       expect(deferredBodies).toHaveLength(0);
-    } finally {
-      (Platform as any).OS = original;
-    }
+    });
+
+    it.each([[true, 3, 'authorized'], [false, 2, 'denied']])(
+      '$att_status follows the argument (%s → %i), not the native Limit Ad Tracking value',
+      async (arg, status, name) => {
+        // The Android native module reports 0 when no advertising id is available.
+        nativeAttStatus = 0;
+        const sdk = createSDK();
+        try {
+          await initSDK(sdk);
+          await sdk.updateTrackingAuthorization(arg);
+          const event = trackedEvents.find((e) => e.name === '$att_status');
+          expect(event?.data).toEqual({ authorized: arg, status, status_name: name, att_status: status });
+        } finally { sdk.destroy(); }
+      },
+    );
   });
-});
+}
 
 describe('device context on the wire', () => {
   it('is sent as properties.device_context, not properties.fingerprint', () => {

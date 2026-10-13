@@ -757,6 +757,27 @@ export class DatalyrSDK {
 
     debugLog('Fetching deferred web attribution via IP matching...');
 
+    // The server matches iOS installs only with ATT authorized when the workspace asks
+    // for that, so send the status as it is now: read from the native module, not the
+    // launch-time cache (the prompt may have been answered since). Omitted off iOS.
+    await this.refreshAdvertiserInfo();
+    const attStatus = Platform.OS === 'ios' ? attStatusFrom(this.cachedAdvertiserInfo) : undefined;
+    this.deferredLookupAwaitingAtt = false;
+
+    // Without the native module (Expo Go, missing pods) the status is unknown and can
+    // never read as authorized. Once the server has declined such a lookup for ATT, stop
+    // asking while that is still the case; the flag clears when the module is present.
+    if (Platform.OS === 'ios') {
+      if (attStatus === undefined) {
+        if (await Storage.getItem<boolean>(STORAGE_KEYS.DEFERRED_LOOKUP_NEEDS_ATT_STATUS)) {
+          debugLog('Deferred lookup skipped: needs ATT authorization, and the ATT status is unavailable');
+          return;
+        }
+      } else {
+        await Storage.removeItem(STORAGE_KEYS.DEFERRED_LOOKUP_NEEDS_ATT_STATUS);
+      }
+    }
+
     // Spend the attempt before the request goes out: a request that never returns (app
     // killed mid-flight, hung connection) must still count against the bound.
     await attributionManager.recordDeferredLookupAttempt();
@@ -766,13 +787,6 @@ export class DatalyrSDK {
     const deviceSignals = await getDeviceInfo().catch(() => ({
       osVersion: undefined, model: undefined, locale: undefined, timezone: undefined,
     } as any));
-
-    // The server matches iOS installs only with ATT authorized when the workspace asks
-    // for that, so send the status as it is now: read from the native module, not the
-    // launch-time cache (the prompt may have been answered since). Omitted off iOS.
-    await this.refreshAdvertiserInfo();
-    const attStatus = Platform.OS === 'ios' ? attStatusFrom(this.cachedAdvertiserInfo) : undefined;
-    this.deferredLookupAwaitingAtt = false;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -845,6 +859,9 @@ export class DatalyrSDK {
     if (result.found === false && result.reason === ATT_NOT_AUTHORIZED_REASON) {
       await attributionManager.refundDeferredLookupAttempt();
       this.deferredLookupAwaitingAtt = true;
+      if (attStatus === undefined) {
+        await Storage.setItem(STORAGE_KEYS.DEFERRED_LOOKUP_NEEDS_ATT_STATUS, true);
+      }
       debugLog('Deferred lookup needs ATT authorization — retrying after it is granted');
       if (!this.attNotAuthorizedReported) {
         this.attNotAuthorizedReported = true;
@@ -983,18 +1000,19 @@ export class DatalyrSDK {
   }
 
   /**
-   * After a fresh ATT status read: if ATT is now authorized and either it was not before
-   * or this launch's lookup was declined for lack of it, run the lookup again (subject
-   * to the usual eligibility). A lookup already in flight may have been sent before the
-   * grant, so it is allowed to finish first.
+   * After a fresh ATT status read: if ATT is now authorized and this launch's lookup was
+   * declined for lack of it (att_not_authorized), run the lookup again (subject to the
+   * usual eligibility). Only after such a decline: any other open state (an ingest-lag
+   * no_candidates, a failed request) keeps its own retry on a later launch. A lookup
+   * already in flight may have been sent before the grant, so it finishes first.
    */
-  private async rerunDeferredLookupIfAttGranted(previousStatus: number | undefined): Promise<void> {
+  private async rerunDeferredLookupIfAttGranted(): Promise<void> {
     if (Platform.OS !== 'ios' || !this.state.initialized) return;
     if (attStatusFrom(this.cachedAdvertiserInfo) !== 3) return;
     if (this.deferredLookupInFlight) {
       await this.deferredLookupInFlight;
     }
-    if (previousStatus === 3 && !this.deferredLookupAwaitingAtt) return;
+    if (!this.deferredLookupAwaitingAtt) return;
     await this.runDeferredLookupIfEligible();
   }
 
@@ -1593,13 +1611,14 @@ export class DatalyrSDK {
     }
 
     // Refresh cached advertiser info after ATT status change
-    const previousStatus = attStatusFrom(this.cachedAdvertiserInfo);
     await this.refreshAdvertiserInfo();
 
     // Report the native status (0 notDetermined, 1 restricted, 2 denied, 3 authorized),
     // not a yes/no folded to 3/2: "restricted" and "not yet asked" are different answers
-    // from "denied". The argument only stands in when the native module is unavailable.
-    const status = attStatusFrom(this.cachedAdvertiserInfo) ?? (enabled ? 3 : 2);
+    // from "denied". The argument only stands in when the native module is unavailable,
+    // and on Android (no ATT; the native value there is the Limit Ad Tracking proxy).
+    const nativeStatus = Platform.OS === 'ios' ? attStatusFrom(this.cachedAdvertiserInfo) : undefined;
+    const status = nativeStatus ?? (enabled ? 3 : 2);
     await this.track('$att_status', {
       authorized: status === 3,
       status,
@@ -1611,7 +1630,7 @@ export class DatalyrSDK {
 
     // A grant re-opens the deferred lookup the server declined without it. Not awaited:
     // the caller is usually mid-onboarding and must not wait on a network round trip.
-    void this.rerunDeferredLookupIfAttGranted(previousStatus);
+    void this.rerunDeferredLookupIfAttGranted();
   }
 
   /**
@@ -1924,9 +1943,8 @@ export class DatalyrSDK {
           // iOS: the ATT answer can change while the app is away (the prompt itself, or
           // Settings), so re-read it; a grant re-opens a declined deferred lookup.
           if (Platform.OS === 'ios') {
-            const previousStatus = attStatusFrom(this.cachedAdvertiserInfo);
             await this.refreshAdvertiserInfo();
-            void this.rerunDeferredLookupIfAttGranted(previousStatus);
+            void this.rerunDeferredLookupIfAttGranted();
           }
         }
       });

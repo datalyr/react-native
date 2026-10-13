@@ -41,6 +41,9 @@ export const STORAGE_KEYS = {
   // share one AsyncStorage namespace).
   DEFERRED_LOOKUP_RESOLVED: '@datalyr/deferred_lookup_resolved',
   DEFERRED_LOOKUP_ATTEMPTS: '@datalyr/deferred_lookup_attempts',
+  // Set when the server declined the lookup for ATT while the native module was missing
+  // (no ATT status to send); lookups are skipped until the module reports a status.
+  DEFERRED_LOOKUP_NEEDS_ATT_STATUS: '@datalyr/deferred_lookup_needs_att_status',
 } as const;
 
 // Debug logging

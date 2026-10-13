@@ -434,7 +434,7 @@ const { granted } = await requestTrackingPermissionsAsync();
 await Datalyr.updateTrackingAuthorization(granted);
 ```
 
-This sends `$att_status` and refreshes `idfa`, `idfv`, `gaid`, `att_status`, and `advertiser_tracking_enabled` on later events. `$att_status` reports the status the device reports (0 notDetermined, 1 restricted, 2 denied, 3 authorized); the boolean you pass is used only when the native module is unavailable (Expo Go). If the install lookup is still waiting for ATT, it runs again after an authorized status.
+This sends `$att_status` and refreshes `idfa`, `idfv`, `gaid`, `att_status`, and `advertiser_tracking_enabled` on later events. `$att_status` reports the status the device reports (0 notDetermined, 1 restricted, 2 denied, 3 authorized); on iOS the boolean you pass is used only when the native module is unavailable (Expo Go); on Android it decides the status (3 or 2). If the server declined the install lookup for ATT, it runs again after an authorized status.
 
 ---
 
