@@ -1081,6 +1081,15 @@ export class DatalyrSDKExpo {
         return;
       }
 
+      // A provisional (pre-login) id is not an account to alias from: the server
+      // treats any `$alias` as an unconditional merge, while the guest→account
+      // join must go through its §2.10 guards. Signing in from a guest is a
+      // plain identify (same install, no reset, no `$alias`).
+      if (!previousId && this.state.currentUserId && this.currentUserProvisional) {
+        await this.identify(newUserId);
+        return;
+      }
+
       const aliasData = {
         newUserId,
         // ingest's $alias link builder reads camelCase `userId`/`previousId`; `newUserId`
