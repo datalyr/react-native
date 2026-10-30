@@ -150,6 +150,7 @@ await Datalyr.initialize({
 | `enableWebToAppAttribution` | `boolean` | Unset. Anything other than `false` turns it on. | — |
 | `autoEventConfig` | `AutoEventConfig` | Unset | — |
 | `skadTemplate` | `'ecommerce' \| 'gaming' \| 'subscription'` | Unset | — |
+| `existingUserHint` | `() => boolean \| null \| undefined` | Unset | Read once on the first SDK launch. `true` marks an existing user (sends `$sdk_first_launch_existing`, not `app_install`) |
 
 ### AutoEventConfig
 
