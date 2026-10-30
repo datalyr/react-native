@@ -2,7 +2,7 @@
 
 Mobile analytics and attribution for React Native and Expo. Track events, identify users, and capture ad attribution.
 
-Current release: **1.7.23**. Every event posts to `https://ingest.datalyr.com/track`.
+Current release: **1.7.24**. Every event posts to `https://ingest.datalyr.com/track`.
 
 Full reference: [docs.datalyr.com/sdk-reference/react-native](https://docs.datalyr.com/sdk-reference/react-native).
 
@@ -314,6 +314,22 @@ await Datalyr.identify('user_123', {
 
 A repeat call with an unchanged identity sends no `$identify` event.
 
+### Pre-login (provisional) IDs
+
+If your app gives each install its own ID before sign-in (a guest UUID, for example), identify it as provisional:
+
+```typescript
+await Datalyr.identify(guestId, undefined, { provisional: true });
+
+// later, at sign-in: no reset, same device IDs and attribution
+await Datalyr.identify(accountId);
+```
+
+- While a provisional ID is the current user, every event carries `$provisional_user_id: true`.
+- A provisional ID is ignored while a signed-in user is current, so re-sending the guest ID on every launch is safe.
+- The next `identify()` with a real ID replaces it without running `reset()`. Replacing one provisional ID with another does not run `reset()` either.
+- The flag is stored with the user ID and survives a restart. `reset()` clears it.
+
 ### Identity on the wire
 
 | Wire field | Value |
@@ -350,7 +366,7 @@ await Datalyr.alias('new_user_456', 'old_user_123');
 await Datalyr.reset();
 ```
 
-`reset()` rotates both the anonymous ID and the visitor ID, ends the session, and clears the user ID, user properties, attribution, the journey, and SKAdNetwork state. Call it on logout.
+`reset()` rotates both the anonymous ID and the visitor ID, ends the session, and clears the user ID, user properties, attribution, the journey, and SKAdNetwork state. Call it on logout. If you use RevenueCat or Superwall, log out of them first (see [Superwall and RevenueCat](#superwall-and-revenuecat)).
 
 ---
 
@@ -574,24 +590,41 @@ Without a conversion rule, the platform receives nothing, even when the SDK capt
 
 ## Superwall and RevenueCat
 
-Call both methods after the two SDKs initialize, and again after the ATT prompt resolves.
+Register a sync handler for each provider right after the SDKs are configured. DATALYR calls it now (or once `initialize()` finishes) and again whenever `datalyr_id` or the attribution can change: after every `reset()` (including the reset inside `identify()` on an account switch), after an `identify()` that sent `$identify`, and after `bindProviderIdentity()`.
 
 ```typescript
 import { Datalyr } from '@datalyr/react-native';
 import Superwall from '@superwall/react-native-superwall';
 import Purchases from 'react-native-purchases';
 
-Superwall.setUserAttributes(Datalyr.getSuperwallAttributes());
-await Purchases.setAttributes(Datalyr.getRevenueCatAttributes());
+Datalyr.syncRevenueCatAttributes((attrs) => Purchases.setAttributes(attrs));
+Datalyr.syncSuperwallAttributes((attrs) => Superwall.setUserAttributes(attrs));
+
+// Before showing the paywall: identify, then present.
+await Datalyr.identify(userId);
 ```
 
-Both methods return `Record<string, string>` and omit every empty value.
+Set the attributes and call `identify()` **before** showing the paywall, so the purchase carries the right `datalyr_id`.
+
+On logout, log out of the providers **first**, then reset DATALYR:
+
+```typescript
+await Purchases.logOut();
+await Superwall.reset();
+await Datalyr.reset(); // pushes the new datalyr_id to the logged-out (anonymous) provider users
+```
+
+Called the other way round, the new `datalyr_id` lands on the user who just logged out (and `Superwall.reset()` wipes it).
+
+Each method returns an unsubscribe function. Registering again replaces the previous handler. Errors thrown by a handler are logged, never thrown into your app. The ATT prompt does not trigger a push: after it resolves, set `getSuperwallAttributes()` / `getRevenueCatAttributes()` again yourself to send the IDFA.
+
+Both `get…Attributes()` methods return `Record<string, string>` and omit every empty value.
 
 ### getSuperwallAttributes
 
 | Key | Value |
 |---|---|
-| `datalyr_id` | The visitor ID |
+| `datalyr_id` | The anonymous ID (`anon_…`) |
 | `media_source` | `utm_source` |
 | `campaign` | `utm_campaign` |
 | `adgroup` | `adset_id`, or `utm_content` when `adset_id` is empty |
@@ -611,7 +644,6 @@ Reserved keys:
 
 | Key | Value |
 |---|---|
-| `$datalyrId` | The visitor ID |
 | `$mediaSource` | `utm_source` |
 | `$campaign` | `utm_campaign` |
 | `$adGroup` | `adset_id` |
@@ -625,6 +657,7 @@ Custom keys:
 
 | Key | Value |
 |---|---|
+| `datalyr_id` | The anonymous ID (`anon_…`). Un-prefixed: RevenueCat drops unknown `$` keys |
 | `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content` | UTM parameters |
 | `lyr` | Datalyr tracking link ID |
 | `fbclid`, `gclid`, `ttclid`, `wbraid`, `gbraid` | Ad click IDs |
@@ -807,7 +840,7 @@ Every method below is static on `Datalyr`, except where marked.
 | `initialize` | `(config: DatalyrConfig) => Promise<void>` |
 | `track` | `(eventName: string, eventData?: EventData) => Promise<void>` |
 | `screen` | `(screenName: string, properties?: EventData) => Promise<void>` |
-| `identify` | `(userId: string, properties?: UserProperties) => Promise<void>` |
+| `identify` | `(userId: string, properties?: UserProperties, options?: { provisional?: boolean }) => Promise<void>` |
 | `alias` | `(newUserId: string, previousId?: string) => Promise<void>` |
 | `reset` | `() => Promise<void>` |
 | `flush` | `() => Promise<void>` |
@@ -839,6 +872,8 @@ Every method below is static on `Datalyr`, except where marked.
 | `getPlayInstallReferrer` | `() => Record<string, any> \| null` — instance, and static on the Expo entry point |
 | `getSuperwallAttributes` | `() => Record<string, string>` |
 | `getRevenueCatAttributes` | `() => Record<string, string>` |
+| `syncSuperwallAttributes` | `(handler: (attrs: Record<string, string>) => void \| Promise<void>) => () => void` |
+| `syncRevenueCatAttributes` | `(handler: (attrs: Record<string, string>) => void \| Promise<void>) => () => void` |
 | `updateTrackingAuthorization` | `(enabled: boolean) => Promise<void>` |
 
 ### TypeScript

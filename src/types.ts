@@ -176,6 +176,20 @@ export interface EventPayload {
   userProperties?: Record<string, any>;
 }
 
+// identify() options
+export interface IdentifyOptions {
+  /**
+   * The id is the app's own pre-login (guest) id, not a signed-in account.
+   * Ignored while a signed-in (non-provisional) user is current. Every event sent
+   * while it is the current user carries `$provisional_user_id: true`. The next
+   * identify() with a real id replaces it WITHOUT the account-switch reset.
+   */
+  provisional?: boolean;
+}
+
+/** Receives provider attributes (`datalyr_id` etc.) from syncRevenueCatAttributes / syncSuperwallAttributes. */
+export type ProviderAttributesHandler = (attributes: Record<string, string>) => void | Promise<void>;
+
 // User Properties
 export interface UserProperties {
   [key: string]: any;

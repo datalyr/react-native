@@ -14,6 +14,9 @@ export const STORAGE_KEYS = {
   SESSION_START: '@datalyr/session_start',
   USER_ID: '@datalyr/user_id',
   USER_PROPERTIES: '@datalyr/user_properties',
+  // 'true' while the persisted USER_ID is a provisional (pre-login) id. Byte-identical
+  // in utils.ts and utils-expo.ts (both builds share one AsyncStorage namespace).
+  USER_ID_PROVISIONAL: '@datalyr/user_id_provisional',
   EVENT_QUEUE: '@datalyr/event_queue',
   // Parity with utils.ts. event-queue.ts is shared and imports STORAGE_KEYS from
   // './utils', so the dead-letter store already worked on Expo — but leaving the

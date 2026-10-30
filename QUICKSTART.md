@@ -2,7 +2,7 @@
 
 > Everything you need to set up mobile attribution, event tracking, and web-to-app campaigns in your React Native or Expo app.
 
-Current release: **1.7.17**. Every event posts to `https://ingest.datalyr.com/track`.
+Current release: **1.7.24**. Every event posts to `https://ingest.datalyr.com/track`.
 
 **Links:** [Full Docs](https://docs.datalyr.com) | [React Native SDK Reference](https://docs.datalyr.com/sdk-reference/react-native) | [npm](https://www.npmjs.com/package/@datalyr/react-native)
 
@@ -353,6 +353,14 @@ await Datalyr.identify('user_123', {
 - After login
 - After profile update (if email changes)
 
+**Pre-login (guest) IDs:** if your app gives each install its own ID before sign-in, pass it as provisional. It does not count as a signed-in account: every event carries `$provisional_user_id: true`, it is ignored while a signed-in user is current (safe to re-send on every launch), and the real `identify()` at sign-in replaces it without a reset. `reset()` clears it.
+
+```javascript
+await Datalyr.identify(guestId, undefined, { provisional: true });
+// at sign-in:
+await Datalyr.identify(accountId, { email: 'user@example.com' });
+```
+
 ### 3e. Alias
 
 Associate a new user ID with a previous one (e.g., after account merge):
@@ -374,6 +382,14 @@ await Datalyr.reset();
 ```
 
 Always call `reset()` on logout. Without it, the next user's events are attributed to the previous user.
+
+If you use RevenueCat or Superwall, log out of them **first**, then call `reset()`. `reset()` pushes the new `datalyr_id` through your sync handlers (Step 4); called first, that id lands on the user who is logging out:
+
+```javascript
+await Purchases.logOut();
+await Superwall.reset();
+await Datalyr.reset();
+```
 
 ### 3g. Anonymous ID
 
@@ -441,21 +457,25 @@ const journey = datalyr.getJourney();
 import { Datalyr } from '@datalyr/react-native';
 import Superwall from '@superwall/react-native-superwall';
 
-// After BOTH SDKs are initialized
-const attrs = Datalyr.getSuperwallAttributes();
-Superwall.setUserAttributes(attrs);
+// Once, right after configuring Superwall. DATALYR calls the handler now (or once
+// initialize() finishes) and again after every reset(), every identify() that
+// sends $identify, and bindProviderIdentity().
+Datalyr.syncSuperwallAttributes((attrs) => Superwall.setUserAttributes(attrs));
 ```
 
-**Call this:**
-- After both SDKs are initialized (on app launch)
-- Again after `identify()` if user info changes
-- Again after the user responds to the ATT prompt (to include IDFA)
+**Set the attributes and call `identify()` BEFORE showing the paywall**, so the purchase carries the right `datalyr_id`.
+
+**On logout:** call `Superwall.reset()` FIRST, then `Datalyr.reset()`. `Superwall.reset()` wipes the user attributes; `Datalyr.reset()` then pushes the new `datalyr_id`. The other way round, the new id is wiped.
+
+**After the ATT prompt:** set `Datalyr.getSuperwallAttributes()` again yourself to include the IDFA (the prompt does not trigger a push).
+
+`syncSuperwallAttributes()` returns an unsubscribe function. Errors thrown by the handler are logged, never thrown into your app.
 
 **Returned attribute keys:**
 
 | Key | Description |
 |---|---|
-| `datalyr_id` | Datalyr visitor ID |
+| `datalyr_id` | DATALYR anonymous ID (`anon_…`) |
 | `media_source` | Acquisition source (from `utm_source`) |
 | `campaign` | Campaign name |
 | `adgroup` | Ad group / adset |
@@ -513,16 +533,22 @@ Only non-empty values are included. This method returns no `oppref`.
 import { Datalyr } from '@datalyr/react-native';
 import Purchases from 'react-native-purchases';
 
-// After BOTH SDKs are initialized
-const attrs = Datalyr.getRevenueCatAttributes();
-Purchases.setAttributes(attrs);
+// Once, right after Purchases.configure(). DATALYR calls the handler now (or once
+// initialize() finishes) and again after every reset(), every identify() that
+// sends $identify, and bindProviderIdentity().
+Datalyr.syncRevenueCatAttributes((attrs) => Purchases.setAttributes(attrs));
 ```
+
+**Set the attributes and call `identify()` BEFORE showing the paywall**, so the purchase carries the right `datalyr_id`.
+
+**On logout:** call `Purchases.logOut()` FIRST, then `Datalyr.reset()`. Otherwise the new `datalyr_id` lands on the RevenueCat user who is logging out.
+
+`syncRevenueCatAttributes()` returns an unsubscribe function. Errors thrown by the handler are logged, never thrown into your app.
 
 **Returned attribute keys (reserved `$`-prefixed):**
 
 | Key | Description |
 |---|---|
-| `$datalyrId` | Datalyr visitor ID |
 | `$mediaSource` | Acquisition source |
 | `$campaign` | Campaign name |
 | `$adGroup` | Ad group / adset |
@@ -545,6 +571,7 @@ Purchases.setAttributes(attrs);
 
 | Key | Description |
 |---|---|
+| `datalyr_id` | DATALYR anonymous ID (`anon_…`). Un-prefixed: RevenueCat drops unknown `$` keys |
 | `utm_source`, `utm_medium`, `utm_campaign`, `utm_term`, `utm_content` | UTM parameters |
 | `lyr` | Datalyr tracking link ID |
 | `fbclid`, `gclid`, `ttclid`, `wbraid`, `gbraid` | Ad click IDs |
@@ -1073,7 +1100,8 @@ console.log(Datalyr.getAppleSearchAdsAttribution());
 |---|---|---|
 | Using `trackPurchase()` with Superwall/RevenueCat | Counts trials and failed payments as revenue | Use webhooks only for subscription revenue |
 | Not calling `identify()` with email | iOS web-to-app attribution fails (no fallback) | Always identify with email after signup/login |
-| Not passing attributes to Superwall/RevenueCat | Revenue events not attributed to campaigns | Call `getSuperwallAttributes()`/`getRevenueCatAttributes()` after SDK init |
+| Not passing attributes to Superwall/RevenueCat | Revenue events not attributed to campaigns | Register `syncSuperwallAttributes()`/`syncRevenueCatAttributes()` after configuring the provider |
+| `Datalyr.reset()` before `Purchases.logOut()` / `Superwall.reset()` | The new `datalyr_id` lands on the logged-out user | Log out of the provider first, then `Datalyr.reset()` |
 | Server-side redirects for landing pages | Web SDK never loads, attribution data lost | Must use JavaScript-based page |
 | Duplicate screen tracking | Manual `screen()` + automatic tracking | Use ONE method only |
 | Wrong API key format | Auth errors | Must start with `dk_`, from **Settings → API** |
@@ -1240,7 +1268,7 @@ npm install && cd ios && pod install
 ### User Identity
 | Method | Description |
 |---|---|
-| `Datalyr.identify(userId, properties?)` | Identify a user |
+| `Datalyr.identify(userId, properties?, { provisional? })` | Identify a user; `provisional: true` for a pre-login ID |
 | `Datalyr.alias(newUserId, previousId?)` | Associate new user ID with previous |
 | `Datalyr.reset()` | Clear user data, rotate the anonymous and visitor IDs, end the session |
 | `Datalyr.getAnonymousId()` | Get persistent anonymous device ID |
@@ -1266,6 +1294,8 @@ npm install && cd ios && pod install
 |---|---|
 | `Datalyr.getSuperwallAttributes()` | Get attrs formatted for Superwall |
 | `Datalyr.getRevenueCatAttributes()` | Get attrs formatted for RevenueCat |
+| `Datalyr.syncSuperwallAttributes(handler)` | Push Superwall attrs now and whenever `datalyr_id` can change; returns unsubscribe |
+| `Datalyr.syncRevenueCatAttributes(handler)` | Push RevenueCat attrs now and whenever `datalyr_id` can change; returns unsubscribe |
 
 ### SKAdNetwork
 | Method | Description |

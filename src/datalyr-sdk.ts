@@ -3,6 +3,8 @@ import {
   DatalyrConfig,
   EventData,
   UserProperties,
+  IdentifyOptions,
+  ProviderAttributesHandler,
   EventPayload,
   SDKState,
   AppState as AppStateType,
@@ -53,18 +55,13 @@ import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 import { appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
 import { AppleSearchAdsAttribution, AdvertiserInfoBridge, isNativeModuleAvailable } from './native/DatalyrNativeBridge';
 import { networkStatusManager } from './network-status';
+// Provider namespaces the server's webhooks join on `external_ids` (one list shared by
+// both entry points; MUST match the server's person-contract.js).
+import { KNOWN_EXTERNAL_NAMESPACES } from './provider-namespaces';
 
 // Largest serialized `eventData` accepted by track(). Ingest answers 413 above its body
 // cap; dropping here (with a loud log) beats a queued event that can never deliver.
 const MAX_EVENT_DATA_BYTES = 200_000;
-
-// Provider namespaces the server's webhooks join on `external_ids`. MUST match
-// KNOWN_EXTERNAL_NAMESPACES in datalyr-v2/infra/cloudflare/lib/person-contract.js.
-const KNOWN_EXTERNAL_NAMESPACES: readonly string[] = [
-  'revenuecat', 'superwall', 'stripe', 'shopify', 'whop', 'checkoutchamp',
-  'clickfunnels', 'firebase',
-  'klaviyo',
-];
 
 // Once-per-process warning latches (unconditional console.warn, not debug-gated).
 let skadTemplateMissingWarned = false;
@@ -96,6 +93,13 @@ export class DatalyrSDK {
   private static debugEnabled = false;
   /** Events that arrived before initialize() completed. Flushed once init finishes. */
   private preInitQueue: Array<{ eventName: string; eventData?: EventData }> = [];
+  /**
+   * The current user id is the app's provisional (pre-login) id, not a signed-in
+   * account. Persisted (STORAGE_KEYS.USER_ID_PROVISIONAL) with the user id.
+   */
+  private currentUserProvisional = false;
+  /** Handlers registered by syncRevenueCatAttributes / syncSuperwallAttributes. */
+  private providerAttributeHandlers: { revenuecat?: ProviderAttributesHandler; superwall?: ProviderAttributesHandler } = {};
   private static readonly PRE_INIT_QUEUE_MAX = 50;
 
   constructor() {
@@ -372,6 +376,10 @@ export class DatalyrSDK {
         console.warn('[Datalyr] Native modules not linked — SKAdNetwork, IDFA and Apple Search Ads are disabled. Expo Go does not support them; use a development build and re-run pod install.');
       }
 
+      // Handlers registered before initialize() finished get their first push now (ids
+      // and any deferred web attribution are in place).
+      this.notifyProviderAttributeHandlers();
+
       debugLog('Datalyr SDK initialized successfully', {
         workspaceId: this.state.config.workspaceId,
         visitorId: this.state.visitorId,
@@ -478,10 +486,16 @@ export class DatalyrSDK {
   }
 
   /**
-   * Identify a user
+   * Identify a user.
+   *
+   * Pass `{ provisional: true }` when `userId` is the app's own pre-login (guest) id
+   * rather than a signed-in account. A provisional id is ignored while a signed-in user
+   * is current, every event sent while it is current carries
+   * `$provisional_user_id: true`, and the next identify() with a real id replaces it
+   * without the account-switch reset (same person, same install).
    */
-  async identify(userId: string, properties?: UserProperties): Promise<void> {
-    await this.identifyUser(userId, properties, true);
+  async identify(userId: string, properties?: UserProperties, options?: IdentifyOptions): Promise<void> {
+    await this.identifyUser(userId, properties, true, options?.provisional === true);
   }
 
   /**
@@ -492,6 +506,7 @@ export class DatalyrSDK {
     userId: string,
     properties: UserProperties | undefined,
     resetOnAccountSwitch: boolean,
+    provisional = false,
   ): Promise<void> {
     try {
       if (!userId || typeof userId !== 'string') {
@@ -499,17 +514,32 @@ export class DatalyrSDK {
         return;
       }
 
-      debugLog('Identifying user:', { userId, properties });
+      debugLog('Identifying user:', { userId, properties, provisional });
+
+      // A provisional (pre-login) id never overrides a signed-in account and never
+      // triggers the account-switch reset: apps re-send their guest id on every launch.
+      if (provisional && await this.hasSignedInUser()) {
+        debugLog('Ignoring provisional identify: a signed-in user is current', userId);
+        return;
+      }
 
       // Treat an account switch as an implicit logout. This prevents a shared
       // device anonymous/visitor node from being linked to two people when an
       // app forgets to call reset() between accounts.
-      if (resetOnAccountSwitch && this.state.currentUserId && this.state.currentUserId !== userId) {
+      // Not from a provisional id: provisional -> real and provisional -> provisional are
+      // the same person on the same install (server §2.10), so there is nothing to reset.
+      if (
+        resetOnAccountSwitch &&
+        this.state.currentUserId &&
+        this.state.currentUserId !== userId &&
+        !this.currentUserProvisional
+      ) {
         await this.reset();
       }
 
       // Update current user ID
       this.state.currentUserId = userId;
+      this.currentUserProvisional = provisional;
 
       // Merge user properties
       this.state.userProperties = { ...this.state.userProperties, ...properties };
@@ -533,6 +563,10 @@ export class DatalyrSDK {
       const identityHash = this.stableEmailHash(
         `${this.state.visitorId}|${userId}|${
           properties ? Object.keys(properties).sort().map((k) => `${k}=${String((properties as Record<string, unknown>)[k])}`).join('&') : ''
+        }${
+          // Provisional ids hash differently (appended only for them, so a real user's
+          // hash is unchanged across the upgrade and does not re-emit).
+          provisional ? '|provisional' : ''
         }`,
       );
       const previousIdentityHash = await Storage.getItem(STORAGE_KEYS.LAST_IDENTITY_HASH);
@@ -567,7 +601,13 @@ export class DatalyrSDK {
           ...(phone ? { phone } : {}),
           ...(firstName ? { first_name: firstName } : {}),
           ...(lastName ? { last_name: lastName } : {}),
+          // Stamped here as well as in createEventPayload: a $identify buffered before
+          // initialize() is materialized at replay, when a later real identify may have
+          // replaced this provisional user.
+          ...(provisional ? { $provisional_user_id: true } : {}),
         });
+
+        this.notifyProviderAttributeHandlers();
       }
 
       // Fetch and merge web attribution if email is provided.
@@ -1109,11 +1149,13 @@ export class DatalyrSDK {
 
       // Clear user data
       this.state.currentUserId = undefined;
+      this.currentUserProvisional = false;
       this.state.userProperties = {};
 
       // Remove from storage
       await Storage.removeItem(STORAGE_KEYS.USER_ID);
       await Storage.removeItem(STORAGE_KEYS.USER_PROPERTIES);
+      await Storage.removeItem(STORAGE_KEYS.USER_ID_PROVISIONAL);
       // Clear the identify hash so the NEXT identify after a logout /
       // account switch always re-emits (the new identity must relink).
       await Storage.removeItem(STORAGE_KEYS.LAST_IDENTITY_HASH);
@@ -1158,6 +1200,9 @@ export class DatalyrSDK {
       await SKAdNetworkBridge.resetConversionState();
 
       debugLog('User data reset completed');
+
+      // The anonymous id (datalyr_id) just rotated: re-push it to RevenueCat / Superwall.
+      this.notifyProviderAttributeHandlers();
 
     } catch (error) {
       errorLog('Error resetting user data:', error as Error);
@@ -1487,9 +1532,113 @@ export class DatalyrSDK {
         external_ids: { [ns]: id },
         provider_namespace: ns,
       });
+      this.notifyProviderAttributeHandlers();
     } catch (error) {
       errorLog('Error binding provider identity:', error as Error);
     }
+  }
+
+  /**
+   * Keep RevenueCat's attributes in sync with DATALYR. The handler receives
+   * getRevenueCatAttributes() now (or once initialize() finishes) and again whenever
+   * `datalyr_id` or the attribution can change: after every reset() (including the
+   * account-switch reset inside identify()), after an identify() that emitted, and
+   * after bindProviderIdentity(). Registering again replaces the previous handler.
+   * Handler errors are caught and logged.
+   *
+   * ```ts
+   * Datalyr.syncRevenueCatAttributes((attrs) => Purchases.setAttributes(attrs));
+   * ```
+   *
+   * Logout order: call `Purchases.logOut()` FIRST, then `Datalyr.reset()`. reset()
+   * pushes the new `datalyr_id`; called the other way round it lands on the
+   * logged-out RevenueCat user.
+   *
+   * @returns a function that unregisters this handler.
+   */
+  syncRevenueCatAttributes(handler: ProviderAttributesHandler): () => void {
+    return this.registerProviderAttributeHandler('revenuecat', handler);
+  }
+
+  /**
+   * Keep Superwall's user attributes in sync with DATALYR. Same contract as
+   * syncRevenueCatAttributes(), with getSuperwallAttributes().
+   *
+   * ```ts
+   * Datalyr.syncSuperwallAttributes((attrs) => Superwall.setUserAttributes(attrs));
+   * ```
+   *
+   * Logout order: call Superwall's `reset()` FIRST, then `Datalyr.reset()`.
+   * Superwall.reset() wipes the user attributes; reset() then pushes the new
+   * `datalyr_id`. The other way round the new id is wiped or lands on the
+   * logged-out user.
+   *
+   * @returns a function that unregisters this handler.
+   */
+  syncSuperwallAttributes(handler: ProviderAttributesHandler): () => void {
+    return this.registerProviderAttributeHandler('superwall', handler);
+  }
+
+  private registerProviderAttributeHandler(
+    provider: 'revenuecat' | 'superwall',
+    handler: ProviderAttributesHandler,
+  ): () => void {
+    if (typeof handler !== 'function') {
+      errorLog(`sync${provider === 'revenuecat' ? 'RevenueCat' : 'Superwall'}Attributes requires a function`);
+      return () => undefined;
+    }
+    this.providerAttributeHandlers[provider] = handler;
+    // Before initialize() finishes there is no datalyr_id yet: initialize() pushes.
+    this.runProviderAttributeHandler(provider);
+    return () => {
+      if (this.providerAttributeHandlers[provider] === handler) {
+        this.providerAttributeHandlers[provider] = undefined;
+      }
+    };
+  }
+
+  /** Push current attributes to every registered provider handler (post-init only). */
+  private notifyProviderAttributeHandlers(): void {
+    this.runProviderAttributeHandler('revenuecat');
+    this.runProviderAttributeHandler('superwall');
+  }
+
+  /**
+   * Call one provider handler. Invoked synchronously (so the push happens before the
+   * reset()/identify() that triggered it returns) but never awaited: a slow native call
+   * in the app's handler must not stall the SDK. Errors are logged, never thrown.
+   */
+  private runProviderAttributeHandler(provider: 'revenuecat' | 'superwall'): void {
+    const handler = this.providerAttributeHandlers[provider];
+    if (!handler || !this.state.initialized) return;
+    try {
+      const attributes = provider === 'revenuecat'
+        ? this.getRevenueCatAttributes()
+        : this.getSuperwallAttributes();
+      const result = handler(attributes);
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        (result as Promise<void>).then(undefined, (error: unknown) => {
+          errorLog(`${provider} attribute handler failed:`, error as Error);
+        });
+      }
+    } catch (error) {
+      errorLog(`${provider} attribute handler failed:`, error as Error);
+    }
+  }
+
+  /**
+   * Whether a signed-in (non-provisional) user is current. Before initialize() has
+   * restored the persisted user, read it from storage, so a provisional identify made
+   * during startup cannot replace a signed-in user from the previous launch.
+   */
+  private async hasSignedInUser(): Promise<boolean> {
+    if (this.state.currentUserId) return !this.currentUserProvisional;
+    if (this.state.initialized) return false;
+    const [persistedUserId, persistedProvisional] = await Promise.all([
+      Storage.getItem<string>(STORAGE_KEYS.USER_ID),
+      Storage.getItem<boolean>(STORAGE_KEYS.USER_ID_PROVISIONAL),
+    ]);
+    return !!persistedUserId && persistedProvisional !== true;
   }
 
   /**
@@ -1812,6 +1961,18 @@ export class DatalyrSDK {
       payload.eventData.previousId = this.state.currentUserId || this.state.anonymousId;
     }
 
+    // Provisional (pre-login) user id: mark every event that carries it, so the server
+    // can treat it as a guest id (§2.10) rather than a signed-in account. Matched on the
+    // event's own userId, so a $alias naming a different id is not marked.
+    if (
+      this.currentUserProvisional &&
+      this.state.currentUserId &&
+      payload.eventData &&
+      payload.eventData.userId === this.state.currentUserId
+    ) {
+      payload.eventData['$provisional_user_id'] = true;
+    }
+
     if (Object.keys(this.state.userProperties).length > 0) {
       payload.userProperties = this.state.userProperties;
     }
@@ -1828,9 +1989,10 @@ export class DatalyrSDK {
    */
   private async loadPersistedUserData(): Promise<void> {
     try {
-      const [userId, userProperties] = await Promise.all([
+      const [userId, userProperties, userIdProvisional] = await Promise.all([
         Storage.getItem<string>(STORAGE_KEYS.USER_ID),
         Storage.getItem<UserProperties>(STORAGE_KEYS.USER_PROPERTIES),
+        Storage.getItem<boolean>(STORAGE_KEYS.USER_ID_PROVISIONAL),
       ]);
 
       // Only restore the persisted user when an identify() hasn't ALREADY set one. This
@@ -1840,6 +2002,7 @@ export class DatalyrSDK {
       // would silently become A). Don't overwrite a live identity.
       if (userId && this.state.currentUserId === undefined) {
         this.state.currentUserId = userId;
+        this.currentUserProvisional = userIdProvisional === true;
       }
 
       if (userProperties && Object.keys(this.state.userProperties).length === 0) {
@@ -1866,6 +2029,9 @@ export class DatalyrSDK {
           ? Storage.setItem(STORAGE_KEYS.USER_ID, this.state.currentUserId)
           : Storage.removeItem(STORAGE_KEYS.USER_ID),
         Storage.setItem(STORAGE_KEYS.USER_PROPERTIES, this.state.userProperties),
+        this.state.currentUserId && this.currentUserProvisional
+          ? Storage.setItem(STORAGE_KEYS.USER_ID_PROVISIONAL, true)
+          : Storage.removeItem(STORAGE_KEYS.USER_ID_PROVISIONAL),
       ]);
     } catch (error) {
       errorLog('Error persisting user data:', error as Error);
@@ -2075,8 +2241,8 @@ export class Datalyr {
     await datalyr.screen(screenName, properties);
   }
 
-  static async identify(userId: string, properties?: UserProperties): Promise<void> {
-    await datalyr.identify(userId, properties);
+  static async identify(userId: string, properties?: UserProperties, options?: IdentifyOptions): Promise<void> {
+    await datalyr.identify(userId, properties, options);
   }
 
   static async alias(newUserId: string, previousId?: string): Promise<void> {
@@ -2197,6 +2363,16 @@ export class Datalyr {
 
   static getRevenueCatAttributes(): Record<string, string> {
     return datalyr.getRevenueCatAttributes();
+  }
+
+  /** See DatalyrSDK.syncRevenueCatAttributes. Logout: Purchases.logOut() FIRST, then Datalyr.reset(). */
+  static syncRevenueCatAttributes(handler: ProviderAttributesHandler): () => void {
+    return datalyr.syncRevenueCatAttributes(handler);
+  }
+
+  /** See DatalyrSDK.syncSuperwallAttributes. Logout: Superwall reset FIRST, then Datalyr.reset(). */
+  static syncSuperwallAttributes(handler: ProviderAttributesHandler): () => void {
+    return datalyr.syncSuperwallAttributes(handler);
   }
 }
 
