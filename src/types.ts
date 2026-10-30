@@ -46,6 +46,14 @@ export interface DatalyrConfig {
   /** Required: API key from Datalyr dashboard (starts with 'dk_') */
   apiKey: string;
 
+  /**
+   * Optional: tell the SDK whether the person on this device already used the app
+   * before it shipped DATALYR (e.g. a stored login token or a finished onboarding).
+   * Read once, on the first SDK launch only; `true` wins over every other signal.
+   * Return null/undefined when you cannot tell.
+   */
+  existingUserHint?: () => boolean | null | undefined;
+
   /** Optional: Workspace ID for multi-workspace setups */
   workspaceId?: string;
 

@@ -16,6 +16,14 @@ public class DatalyrNativeModule: Module {
       ])
     }
 
+    // MARK: - First-launch install signals (1.8.0)
+
+    AsyncFunction("getInstallSignals") { (promise: Promise) in
+      Task {
+        promise.resolve(await DatalyrInstallSignals.read())
+      }
+    }
+
     // MARK: - Advertiser Info (IDFA, IDFV, ATT Status)
 
     AsyncFunction("getAdvertiserInfo") { (promise: Promise) in

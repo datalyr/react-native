@@ -218,7 +218,7 @@ export class DatalyrSDK {
       attributionManager.setDeepLinkHandler((params, url) => {
         void this.track('$deep_link', { ...params, deep_link_url: url, source: 'deep_link' });
       });
-      await attributionManager.detectInstall();
+      await attributionManager.detectInstall({ existingUserHint: this.state.config.existingUserHint });
 
       // PARALLEL INITIALIZATION: IDs and core managers
       // Run ID creation and core manager initialization in parallel for faster startup
@@ -369,12 +369,24 @@ export class DatalyrSDK {
       await this.runDeferredLookupIfEligible();
 
       // Check for app install (after SDK is marked as initialized)
-      if (attributionManager.isInstall()) {
+      if (attributionManager.isExistingUserFirstLaunch()) {
+        // Not an install: an existing user's first launch of a build with the SDK (1.8.0).
+        // Its own event, so no install rule, count or export picks it up; it carries no
+        // click ids or install attribution (an old install's click is not this launch's).
+        await this.track('$sdk_first_launch_existing', {
+          platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
+          sdk_version: SDK_VERSION,
+          first_sdk_launch_time: new Date().toISOString(),
+          ...(attributionManager.getInstallClassification() ?? {}),
+        });
+        await attributionManager.markInstallTracked();
+      } else if (attributionManager.isInstall()) {
         const installData = await attributionManager.trackInstall();
         await this.track('app_install', {
           platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'android',
           sdk_version: SDK_VERSION,
           ...installData,
+          ...(attributionManager.getInstallClassification() ?? {}),
         });
         // TR-21: commit the first-launch marker only AFTER app_install is durably enqueued —
         // a crash before this re-fires app_install next launch instead of losing it.
@@ -1985,14 +1997,14 @@ export class DatalyrSDK {
         // Attribution data
         // alart only on app_install / $deep_link with tracking authorized; SDK bookkeeping
         // never (attributionForEvent).
-        ...attributionForEvent(eventName, attributionData, advertiserInfo?.att_status),
+        ...(eventName === '$sdk_first_launch_existing' ? {} : attributionForEvent(eventName, attributionData, advertiserInfo?.att_status)),
         // Apple Search Ads attribution (iOS)
-        ...asaData,
+        ...(eventName === '$sdk_first_launch_existing' ? {} : asaData),
         // Google Play Install Referrer (Android) — gclid/gbraid/wbraid/utm_*. Fill it
         // ONLY when the web→app bridge hasn't already recovered ad attribution, so a
         // web-sourced gclid/utm isn't clobbered. (Was fetched at init but never merged
         // at all, dropping Android Google Ads install attribution.)
-        ...((attributionData.gclid || attributionData.utm_source)
+        ...((attributionData.gclid || attributionData.utm_source || eventName === '$sdk_first_launch_existing')
           ? {}
           : playInstallReferrerIntegration.getAttributionData()),
         // Caller-supplied event properties WIN over all auto/attribution fields above.

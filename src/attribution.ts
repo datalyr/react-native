@@ -1,6 +1,11 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Storage, STORAGE_KEYS, debugLog, errorLog, generateUUID, parseQueryString } from './utils';
+import { classifyInstall, restoredOntoNewInstall, type InstallClassification } from './install-classifier';
+import { InstallSignalsBridge } from './native/DatalyrNativeBridge';
+
+/** The first-launch install classification, decided once (1.8.0). */
+export const INSTALL_CLASS_KEY = '@datalyr/install_class';
 
 // Attribution parameter mapping
 const ATTRIBUTION_PARAMS = [
@@ -242,6 +247,8 @@ export interface AttributionData {
 export class AttributionManager {
   private attributionData: AttributionData = {};
   private isFirstLaunch: boolean = false;
+  private existingUserFirstLaunch: boolean = false;
+  private installClassification: InstallClassification | null = null;
   private initialized: boolean = false;
   private deepLinkSubscription: { remove: () => void } | null = null;
   // Set by the SDK: called with the attribution params of every attributable deep link so
@@ -308,32 +315,43 @@ export class AttributionManager {
    * Idempotent and safe to call before initialize(); initialize() calls
    * checkFirstLaunch() itself, which is a no-op re-read.
    */
-  async detectInstall(): Promise<void> {
-    // RN-24: an app upgrading INTO this fix has no `@datalyr/first_launch_time`
-    // marker — only markInstallTracked() ever wrote it, and that never ran while
-    // `enableAttribution: false`. Without a guard, checkFirstLaunch() would set
-    // isFirstLaunch = true for EVERY existing device on the first launch after
-    // upgrade, firing `app_install` dated today for the entire install base at
-    // once (and, on iOS, a deferred web-attribution lookup per device). That is
-    // precisely the failure this method's docstring warns about.
-    //
-    // So before trusting the missing marker, look for evidence that this device
-    // has run the SDK before. Any of these keys means "returning user": adopt the
-    // install time we can infer and write the marker so this never re-fires.
-    //
-    // MUST run before the SDK creates its ids — `@datalyr/visitor_id` and
-    // friends are written during initialize(), so reading them afterwards would
-    // see a brand-new install's own freshly-written id and suppress a REAL
-    // install. Both entry points call this first, ahead of id creation.
+  async detectInstall(options: { existingUserHint?: () => boolean | null | undefined } = {}): Promise<void> {
     const existing = await Storage.getItem<string>('@datalyr/first_launch_time');
-    if (!existing) {
-      // Read RAW, not through Storage. `Storage.getItem` JSON.parses and returns
-      // null on failure — and `@datalyr/visitor_id` / `@datalyr/anonymous_id` are
-      // written RAW by utils.ts (getOrCreateVisitorId uses AsyncStorage directly),
-      // so a real uuid would throw in JSON.parse and be reported as ABSENT. That
-      // conflation is exactly the bare↔Expo encoding divergence noted in
-      // 09-sdks.md; here it would have silently defeated this guard. Presence of
-      // the key is the signal, not its parsed value.
+    if (existing) {
+      // Android: Auto Backup restores app data (our marker included) onto a fresh
+      // install before its first launch, so a reinstall or a new device would never
+      // fire app_install. Our second marker lives in noBackupFilesDir, which is never
+      // restored: marker missing + this package installed after the restored marker's
+      // time = a restore. An upgrade from an SDK that never wrote it keeps the old
+      // install time and just gets the marker.
+      if (Platform.OS === 'android') {
+        const signals = await InstallSignalsBridge.getInstallSignals();
+        if (signals && restoredOntoNewInstall(signals, Date.parse(existing))) {
+          this.installClassification = { install_type: 'reinstall', detection_method: 'backup_marker' };
+          this.isFirstLaunch = true;
+          const installTime = new Date().toISOString();
+          this.attributionData.install_time = installTime;
+          this.attributionData.first_open_time = installTime;
+          this.installTimeMs = Date.parse(installTime);
+          debugLog('App data restored onto a new install; tracking it as a reinstall');
+          return;
+        }
+        if (signals?.backupMarkerPresent === false) await InstallSignalsBridge.writeInstallMarker();
+      }
+      await this.checkFirstLaunch();
+      return;
+    }
+
+    // No install tracked yet: classify this launch once, before any id exists. A class
+    // stored by an earlier launch that died before the event was queued is reused, so
+    // the files and ids that launch left behind cannot turn a real install into an
+    // "existing user" (the old RN-24 guard did exactly that after a kill).
+    let classification = await Storage.getItem<InstallClassification>(INSTALL_CLASS_KEY);
+    if (!classification?.install_type) {
+      // RN-24: keys an older DATALYR build left behind. Read RAW, not through Storage:
+      // `@datalyr/visitor_id` / `@datalyr/anonymous_id` are written raw by utils.ts, so
+      // Storage.getItem's JSON.parse would report a real uuid as absent. Presence is
+      // the signal, not the value.
       const evidence = await Promise.all([
         '@datalyr/visitor_id',
         '@datalyr/anonymous_id',
@@ -342,23 +360,44 @@ export class AttributionManager {
         '@datalyr/current_session',
         '@datalyr/event_queue',
       ].map((key) => AsyncStorage.getItem(key).catch(() => null)));
-      if (evidence.some((v) => v !== null && v !== undefined)) {
-        // Returning device on an older build. We cannot know the true install
-        // date, so record the marker WITHOUT claiming one — isFirstLaunch stays
-        // false, no app_install fires, and this branch never runs again.
-        this.isFirstLaunch = false;
-        await Storage.setItem('@datalyr/first_launch_time', new Date().toISOString());
-        // The marker we just wrote is dated NOW, which would otherwise put this device
-        // inside the deferred lookup's match window and fire an IP lookup for the entire
-        // existing install base on the launch after an upgrade. This device installed long
-        // ago; no web touch from the last hour belongs to it, so the lookup is terminal.
-        await Storage.setItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED, true);
-        debugLog('Existing install detected on upgrade; suppressing retroactive app_install');
-        return;
+      let hint: boolean | null | undefined;
+      try {
+        hint = options.existingUserHint?.();
+      } catch {
+        hint = undefined;
       }
+      const signals = (await InstallSignalsBridge.getInstallSignals()) ?? {};
+      classification = classifyInstall(signals, {
+        platform: Platform.OS,
+        hint,
+        priorSdk: evidence.some((v) => v !== null && v !== undefined),
+        now: Date.now(),
+      });
+      await Storage.setItem(INSTALL_CLASS_KEY, classification);
+      debugLog('First SDK launch classified', classification);
+    }
+    this.installClassification = classification;
+
+    if (classification.install_type === 'existing_user') {
+      // Not an install. No first-launch state, and the deferred IP lookup is terminal:
+      // this device installed long ago, so no web visit from the last days is its own.
+      this.isFirstLaunch = false;
+      this.existingUserFirstLaunch = true;
+      await Storage.setItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED, true);
+      return;
     }
 
     await this.checkFirstLaunch();
+  }
+
+  /** How this device's first SDK launch was classified (null once it was tracked). */
+  getInstallClassification(): InstallClassification | null {
+    return this.installClassification;
+  }
+
+  /** True on an existing user's first launch of a build with the SDK (not an install). */
+  isExistingUserFirstLaunch(): boolean {
+    return this.existingUserFirstLaunch;
   }
 
   /**
@@ -368,6 +407,10 @@ export class AttributionManager {
     try {
       const firstLaunchTime = await Storage.getItem<string>('@datalyr/first_launch_time');
       
+      if (!firstLaunchTime && this.existingUserFirstLaunch) {
+        this.isFirstLaunch = false;
+        return;
+      }
       if (!firstLaunchTime) {
         // This is the first launch
         this.isFirstLaunch = true;
@@ -728,6 +771,9 @@ export class AttributionManager {
   async markInstallTracked(): Promise<void> {
     const installTime = this.attributionData.install_time || new Date().toISOString();
     await Storage.setItem('@datalyr/first_launch_time', installTime);
+    await InstallSignalsBridge.writeInstallMarker();
+    await Storage.removeItem(INSTALL_CLASS_KEY);
+    this.existingUserFirstLaunch = false;
   }
 
   /**

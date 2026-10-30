@@ -5,6 +5,25 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-10-30
+
+### Changed
+- The first SDK launch on a device is now classified before the SDK creates any id. The test is whether a run of the app already happened here:
+    - iOS: app folders and files (WebKit, Cookies, HTTPStorages, the URL cache, the preferences plist, the top level of Documents and Application Support) were created before this process started. StoreKit 2 `AppTransaction` (iOS 16+, production only, 3 s hard cap, never `refresh()`) and the app bundle's date against the data container's are cross-checks.
+    - Android: `PackageInfo` `lastUpdateTime` is later than `firstInstallTime`, and app files predate this process.
+  The class is stored, so a kill before the event is queued re-fires the same class. This also fixes the RN-24 race: a kill between id creation and the install marker used to turn a real install into a silent upgrade.
+- An existing user who updated into a build with the SDK no longer sends `app_install`. That launch sends `$sdk_first_launch_existing` with `install_type: existing_user`, `detection_method` and a coarse `prior_install_age`. It carries no click ids, UTMs, Play referrer or Search Ads data. Devices that ran an older DATALYR build without the marker (RN-24) also send this event now, instead of nothing.
+- `app_install` now carries `install_type` (`new`, `reinstall` or `unknown`) and `detection_method`. An earlier run less than a day before this launch is `unknown`, and is still sent like an install: this covers apps that start the SDK only after consent or login.
+- Android: a second install marker lives in `noBackupFilesDir`, which Auto Backup never restores. A restored DATALYR state on a fresh install (a reinstall, or a new phone) now sends `app_install` with `install_type: reinstall`. Before, it sent nothing.
+- For an existing user, the deferred web-to-app IP lookup is marked resolved and never runs.
+
+### Added
+- `existingUserHint` config option: a function the app can use to say whether the person already used the app before it shipped DATALYR (for example a stored login token). It is read once, on the first SDK launch only. Only `true` changes the result; `false` and `null` leave the decision to the device signals. It runs during `initialize()`, so keep it cheap and free of UI work.
+- Native `getInstallSignals()` on iOS and Android, plus Android `writeInstallMarker()`. With an older native build (no rebuild) the launch is labelled `unknown` and sent as before.
+
+### Privacy
+- The iOS privacy manifest declares `NSPrivacyAccessedAPICategoryFileTimestamp` with reason `C617.1` (timestamps of files inside the app container). Raw dates never leave the device; only the age bucket does.
+
 ## [1.7.24] - 2026-10-29
 
 ### Added

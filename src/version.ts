@@ -23,7 +23,7 @@
  * it stays derived. Hardcoding a version there would make it a third drift site
  * and fail that test.
  */
-export const SDK_VERSION = '1.7.24';
+export const SDK_VERSION = '1.8.0';
 
 /**
  * Library identifier sent as `context.library`. Server-side platform detection
