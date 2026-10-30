@@ -11,6 +11,7 @@
 
 import { NativeModules, Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
+import type { InstallSignals } from '../install-classifier';
 
 /**
  * Apple Search Ads attribution data returned from AdServices API (iOS only)
@@ -61,6 +62,13 @@ interface DatalyrNativeModule {
 
   // Apple Search Ads Methods (iOS only)
   getAppleSearchAdsAttribution(): Promise<AppleSearchAdsAttribution | null>;
+
+  // First-launch install signals (1.8.0+ native code; absent on older builds)
+  getInstallSignals?(): Promise<InstallSignals | null>;
+  // Android: only the no-backup marker and the install/update times (cheap, every launch)
+  getRestoreSignals?(): Promise<InstallSignals | null>;
+  // Android: mark this install in noBackupFilesDir (never restored by Auto Backup)
+  writeInstallMarker?(): Promise<boolean>;
 
   // SDK Availability
   getSDKAvailability(): Promise<{
@@ -209,6 +217,48 @@ export const PlayInstallReferrerNativeBridge = {
     } catch (error) {
       console.error('[Datalyr/PlayInstallReferrer] Get referrer failed:', error);
       return null;
+    }
+  },
+};
+
+// MARK: - Install Signals Bridge
+
+export const InstallSignalsBridge = {
+  /**
+   * What the OS says about this install, read on the first SDK launch only:
+   * whether app files predate this process, the install/update times (Android),
+   * the App Store record (iOS 16+, production). Null when the native module is
+   * missing or older than 1.8.0, in which case the launch is classified unknown.
+   */
+  async getInstallSignals(): Promise<InstallSignals | null> {
+    if (!DatalyrNative?.getInstallSignals) return null;
+    try {
+      return await DatalyrNative.getInstallSignals();
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Android, on launches after the install was tracked: only the no-backup marker and
+   * the install/update times (no file scan). Null elsewhere or on older native builds.
+   */
+  async getRestoreSignals(): Promise<InstallSignals | null> {
+    if (Platform.OS !== 'android' || !DatalyrNative?.getRestoreSignals) return null;
+    try {
+      return await DatalyrNative.getRestoreSignals();
+    } catch {
+      return null;
+    }
+  },
+
+  /** Android: write the no-backup install marker. No-op elsewhere. */
+  async writeInstallMarker(): Promise<void> {
+    if (Platform.OS !== 'android' || !DatalyrNative?.writeInstallMarker) return;
+    try {
+      await DatalyrNative.writeInstallMarker();
+    } catch {
+      // best effort: a missing marker only means a later restore is not labelled
     }
   },
 };

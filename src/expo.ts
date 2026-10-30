@@ -21,6 +21,7 @@ export * from './types';
 
 // Export attribution manager
 export { attributionManager } from './attribution';
+export type { InstallClassification, InstallType } from './install-classifier';
 
 // Export journey tracking
 export { journeyManager } from './journey';

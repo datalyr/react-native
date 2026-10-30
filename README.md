@@ -2,7 +2,7 @@
 
 Mobile analytics and attribution for React Native and Expo. Track events, identify users, and capture ad attribution.
 
-Current release: **1.7.24**. Every event posts to `https://ingest.datalyr.com/track`.
+Current release: **1.8.0**. Every event posts to `https://ingest.datalyr.com/track`.
 
 Full reference: [docs.datalyr.com/sdk-reference/react-native](https://docs.datalyr.com/sdk-reference/react-native).
 
@@ -150,6 +150,7 @@ await Datalyr.initialize({
 | `enableWebToAppAttribution` | `boolean` | Unset. Anything other than `false` turns it on. | — |
 | `autoEventConfig` | `AutoEventConfig` | Unset | — |
 | `skadTemplate` | `'ecommerce' \| 'gaming' \| 'subscription'` | Unset | — |
+| `existingUserHint` | `() => boolean \| null \| undefined` | Unset | Read once on the first SDK launch. `true` marks an existing user (sends `$sdk_first_launch_existing`, not `app_install`) |
 
 ### AutoEventConfig
 

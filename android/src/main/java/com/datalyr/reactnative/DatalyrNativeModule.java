@@ -1,6 +1,13 @@
 package com.datalyr.reactnative;
 
+import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.os.Build;
+import android.os.Process;
+import android.os.SystemClock;
 import android.util.Log;
+
+import java.io.File;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
@@ -44,6 +51,95 @@ public class DatalyrNativeModule extends ReactContextBaseJavaModule {
         // Apple Search Ads is iOS only
         result.putBoolean("appleSearchAds", false);
         promise.resolve(result);
+    }
+
+    // ============================================================================
+    // First-launch install signals (1.8.0)
+    // ============================================================================
+
+    private static final String INSTALL_MARKER = "datalyr_install_marker";
+
+    /**
+     * What the OS says about this install, for telling a real install from an existing
+     * user's first launch after an update added the SDK: PackageInfo first-install and
+     * last-update times (kept on update, reset on reinstall), whether files the app
+     * wrote predate this process (Auto Backup restores them before first launch, and an
+     * earlier run of the app leaves them), and our marker in noBackupFilesDir. Read on
+     * the first SDK launch only; raw times are bucketed in JS and never sent.
+     */
+    @ReactMethod
+    public void getInstallSignals(Promise promise) {
+        try {
+            Context context = reactContext.getApplicationContext();
+            WritableMap result = Arguments.createMap();
+            PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            result.putDouble("containerCreatedAtMs", (double) info.firstInstallTime);
+            result.putDouble("lastUpdateTimeMs", (double) info.lastUpdateTime);
+            long versionCode = Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode;
+            result.putString("currentBuild", String.valueOf(versionCode));
+            if (Build.VERSION.SDK_INT >= 24) {
+                long processStart = System.currentTimeMillis()
+                    - (SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime());
+                long earliest = earliestFileBefore(context, processStart - 1000);
+                result.putBoolean("ranBefore", earliest > 0);
+                result.putDouble("processStartMs", (double) processStart);
+                if (earliest > 0) result.putDouble("earliestEvidenceMs", (double) earliest);
+            }
+            result.putBoolean("backupMarkerPresent", new File(context.getNoBackupFilesDir(), INSTALL_MARKER).exists());
+            promise.resolve(result);
+        } catch (Exception e) {
+            Log.w(TAG, "Install signals unavailable", e);
+            promise.resolve(null);
+        }
+    }
+
+    /** Every launch after the install was tracked: the marker and the install/update times only. */
+    @ReactMethod
+    public void getRestoreSignals(Promise promise) {
+        try {
+            Context context = reactContext.getApplicationContext();
+            PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            WritableMap result = Arguments.createMap();
+            result.putDouble("containerCreatedAtMs", (double) info.firstInstallTime);
+            result.putDouble("lastUpdateTimeMs", (double) info.lastUpdateTime);
+            result.putBoolean("backupMarkerPresent", new File(context.getNoBackupFilesDir(), INSTALL_MARKER).exists());
+            promise.resolve(result);
+        } catch (Exception e) {
+            promise.resolve(null);
+        }
+    }
+
+    @ReactMethod
+    public void writeInstallMarker(Promise promise) {
+        try {
+            File marker = new File(reactContext.getApplicationContext().getNoBackupFilesDir(), INSTALL_MARKER);
+            promise.resolve(marker.exists() || marker.createNewFile());
+        } catch (Exception e) {
+            promise.resolve(false);
+        }
+    }
+
+    /**
+     * The oldest top-level item the app writes (files/, shared_prefs/, databases/) last
+     * changed before cutoff, or 0. Last-modified, not creation: Android does not expose a
+     * birth time, so an item rewritten in this process is not counted (only hides evidence).
+     */
+    private static long earliestFileBefore(Context context, long cutoffMs) {
+        File dataDir = new File(context.getApplicationInfo().dataDir);
+        File[] roots = { context.getFilesDir(), new File(dataDir, "shared_prefs"), new File(dataDir, "databases") };
+        long earliest = 0;
+        for (File root : roots) {
+            File[] children = root == null ? null : root.listFiles();
+            if (children == null) continue;
+            int seen = 0;
+            for (File child : children) {
+                if (++seen > 50) break;
+                if (child.getName().startsWith(".")) continue;
+                long modified = child.lastModified();
+                if (modified > 0 && modified < cutoffMs && (earliest == 0 || modified < earliest)) earliest = modified;
+            }
+        }
+        return earliest;
     }
 
     // ============================================================================

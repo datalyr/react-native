@@ -15,6 +15,7 @@ export { Datalyr };
 // Export types and utilities
 export * from './types';
 export { attributionManager } from './attribution';
+export type { InstallClassification, InstallType } from './install-classifier';
 export { journeyManager } from './journey';
 export type { TouchAttribution, TouchPoint } from './journey';
 export { createAutoEventsManager, AutoEventsManager } from './auto-events';
