@@ -96,7 +96,8 @@ describe('classifyInstall', () => {
     expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 400 * DAY, lastUpdateTimeMs: NOW - DAY }, marker, NOW)).toBe(false);
     // Moved phones months ago on 1.7.x, upgrading into 1.8.0 now: updated in place.
     expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 90 * DAY, lastUpdateTimeMs: NOW - DAY }, NOW - 400 * DAY, NOW)).toBe(false);
-    // Restored long ago and never updated: not a fresh restore.
+    // Restored a week ago, opened now: still a restore. Restored months ago: not one.
+    expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 7 * DAY, lastUpdateTimeMs: NOW - 7 * DAY }, NOW - 400 * DAY, NOW)).toBe(true);
     expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 90 * DAY, lastUpdateTimeMs: NOW - 90 * DAY }, NOW - 400 * DAY, NOW)).toBe(false);
     expect(restoredOntoNewInstall({ backupMarkerPresent: true, ...fresh }, marker, NOW)).toBe(false);
     expect(restoredOntoNewInstall({ ...fresh }, marker, NOW)).toBe(false);

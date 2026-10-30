@@ -150,7 +150,8 @@ export function restoredOntoNewInstall(s: InstallSignals, markerTimeMs: number |
   if (s.containerCreatedAtMs <= markerTimeMs + 60 * 60_000) return false;
   // A restore installs the current build: never updated in place. An upgrade into 1.8.0
   // always is, which keeps a phone move made on an older SDK from reading as a reinstall
-  // the day the update lands. And a restore is recent: the first launch follows it.
+  // the day the update lands. A restore is opened within weeks (setup restores many apps
+  // at once; users open them days later).
   if (s.lastUpdateTimeMs === undefined || s.lastUpdateTimeMs - s.containerCreatedAtMs > UPDATE_GAP_MS) return false;
-  return s.containerCreatedAtMs > now - DAY_MS;
+  return s.containerCreatedAtMs > now - 30 * DAY_MS;
 }
