@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Storage, STORAGE_KEYS, debugLog, errorLog, generateUUID, parseQueryString } from './utils';
 import { classifyInstall, restoredOntoNewInstall, type InstallClassification } from './install-classifier';
 import { InstallSignalsBridge } from './native/DatalyrNativeBridge';
+import { journeyManager } from './journey';
 
 /** The first-launch install classification, decided once (1.8.0). */
 export const INSTALL_CLASS_KEY = '@datalyr/install_class';
@@ -325,15 +326,18 @@ export class AttributionManager {
       // time = a restore. An upgrade from an SDK that never wrote it keeps the old
       // install time and just gets the marker.
       if (Platform.OS === 'android') {
-        const signals = await InstallSignalsBridge.getInstallSignals();
-        if (signals && restoredOntoNewInstall(signals, Date.parse(existing))) {
-          this.installClassification = { install_type: 'reinstall', detection_method: 'backup_marker' };
-          this.isFirstLaunch = true;
-          const installTime = new Date().toISOString();
-          this.attributionData.install_time = installTime;
-          this.attributionData.first_open_time = installTime;
-          this.installTimeMs = Date.parse(installTime);
+        const signals = await InstallSignalsBridge.getRestoreSignals();
+        if (signals && restoredOntoNewInstall(signals, Date.parse(existing), Date.now())) {
+          // A reinstall. Store the class first (a kill before the event is queued must not
+          // see the restored ids as an older DATALYR build), then drop the restored state:
+          // the marker, and the old install's click ids, UTMs and lookup state.
+          const restored: InstallClassification = { install_type: 'reinstall', detection_method: 'backup_marker' };
+          await Storage.setItem(INSTALL_CLASS_KEY, restored);
+          await this.clearAttributionData();
+          await journeyManager.clearJourney();
+          this.installClassification = restored;
           debugLog('App data restored onto a new install; tracking it as a reinstall');
+          await this.checkFirstLaunch();
           return;
         }
         if (signals?.backupMarkerPresent === false) await InstallSignalsBridge.writeInstallMarker();

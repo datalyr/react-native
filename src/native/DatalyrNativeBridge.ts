@@ -65,6 +65,8 @@ interface DatalyrNativeModule {
 
   // First-launch install signals (1.8.0+ native code; absent on older builds)
   getInstallSignals?(): Promise<InstallSignals | null>;
+  // Android: only the no-backup marker and the install/update times (cheap, every launch)
+  getRestoreSignals?(): Promise<InstallSignals | null>;
   // Android: mark this install in noBackupFilesDir (never restored by Auto Backup)
   writeInstallMarker?(): Promise<boolean>;
 
@@ -232,6 +234,19 @@ export const InstallSignalsBridge = {
     if (!DatalyrNative?.getInstallSignals) return null;
     try {
       return await DatalyrNative.getInstallSignals();
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Android, on launches after the install was tracked: only the no-backup marker and
+   * the install/update times (no file scan). Null elsewhere or on older native builds.
+   */
+  async getRestoreSignals(): Promise<InstallSignals | null> {
+    if (Platform.OS !== 'android' || !DatalyrNative?.getRestoreSignals) return null;
+    try {
+      return await DatalyrNative.getRestoreSignals();
     } catch {
       return null;
     }

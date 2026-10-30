@@ -93,6 +93,22 @@ public class DatalyrNativeModule extends ReactContextBaseJavaModule {
         }
     }
 
+    /** Every launch after the install was tracked: the marker and the install/update times only. */
+    @ReactMethod
+    public void getRestoreSignals(Promise promise) {
+        try {
+            Context context = reactContext.getApplicationContext();
+            PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            WritableMap result = Arguments.createMap();
+            result.putDouble("containerCreatedAtMs", (double) info.firstInstallTime);
+            result.putDouble("lastUpdateTimeMs", (double) info.lastUpdateTime);
+            result.putBoolean("backupMarkerPresent", new File(context.getNoBackupFilesDir(), INSTALL_MARKER).exists());
+            promise.resolve(result);
+        } catch (Exception e) {
+            promise.resolve(null);
+        }
+    }
+
     @ReactMethod
     public void writeInstallMarker(Promise promise) {
         try {

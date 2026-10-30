@@ -144,8 +144,13 @@ export function classifyInstall(
  * time. An upgrade from an SDK that never wrote the marker keeps the old install
  * time, so it is not mistaken for a restore.
  */
-export function restoredOntoNewInstall(s: InstallSignals, markerTimeMs: number | undefined): boolean {
+export function restoredOntoNewInstall(s: InstallSignals, markerTimeMs: number | undefined, now: number): boolean {
   if (s.backupMarkerPresent !== false) return false;
-  if (markerTimeMs === undefined || s.containerCreatedAtMs === undefined) return false;
-  return s.containerCreatedAtMs > markerTimeMs + 60 * 60_000;
+  if (markerTimeMs === undefined || !Number.isFinite(markerTimeMs) || s.containerCreatedAtMs === undefined) return false;
+  if (s.containerCreatedAtMs <= markerTimeMs + 60 * 60_000) return false;
+  // A restore installs the current build: never updated in place. An upgrade into 1.8.0
+  // always is, which keeps a phone move made on an older SDK from reading as a reinstall
+  // the day the update lands. And a restore is recent: the first launch follows it.
+  if (s.lastUpdateTimeMs === undefined || s.lastUpdateTimeMs - s.containerCreatedAtMs > UPDATE_GAP_MS) return false;
+  return s.containerCreatedAtMs > now - DAY_MS;
 }

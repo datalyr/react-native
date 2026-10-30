@@ -88,12 +88,18 @@ describe('classifyInstall', () => {
       .toEqual(['detection_method', 'install_type', 'prior_install_age']);
   });
 
-  it('restoredOntoNewInstall: only a missing no-backup marker on a package installed after the marker time', () => {
+  it('restoredOntoNewInstall: a missing no-backup marker on a fresh, never-updated package installed after the marker', () => {
     const marker = NOW - 300 * DAY;
-    expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 60_000 }, marker)).toBe(true);
-    expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 400 * DAY }, marker)).toBe(false);
-    expect(restoredOntoNewInstall({ backupMarkerPresent: true, containerCreatedAtMs: NOW - 60_000 }, marker)).toBe(false);
-    expect(restoredOntoNewInstall({ containerCreatedAtMs: NOW - 60_000 }, marker)).toBe(false);
+    const fresh = { containerCreatedAtMs: NOW - 60_000, lastUpdateTimeMs: NOW - 60_000 };
+    expect(restoredOntoNewInstall({ backupMarkerPresent: false, ...fresh }, marker, NOW)).toBe(true);
+    // Upgrade on the same phone from an SDK that never wrote the marker.
+    expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 400 * DAY, lastUpdateTimeMs: NOW - DAY }, marker, NOW)).toBe(false);
+    // Moved phones months ago on 1.7.x, upgrading into 1.8.0 now: updated in place.
+    expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 90 * DAY, lastUpdateTimeMs: NOW - DAY }, NOW - 400 * DAY, NOW)).toBe(false);
+    // Restored long ago and never updated: not a fresh restore.
+    expect(restoredOntoNewInstall({ backupMarkerPresent: false, containerCreatedAtMs: NOW - 90 * DAY, lastUpdateTimeMs: NOW - 90 * DAY }, NOW - 400 * DAY, NOW)).toBe(false);
+    expect(restoredOntoNewInstall({ backupMarkerPresent: true, ...fresh }, marker, NOW)).toBe(false);
+    expect(restoredOntoNewInstall({ ...fresh }, marker, NOW)).toBe(false);
   });
 });
 
@@ -121,6 +127,7 @@ beforeEach(async () => {
   signalReads = 0;
   markerWrites = 0;
   jest.spyOn(InstallSignalsBridge, 'getInstallSignals').mockImplementation(async () => { signalReads += 1; return signals; });
+  jest.spyOn(InstallSignalsBridge, 'getRestoreSignals').mockImplementation(async () => signals);
   jest.spyOn(InstallSignalsBridge, 'writeInstallMarker').mockImplementation(async () => { markerWrites += 1; });
 });
 
@@ -200,18 +207,41 @@ describe('Android Auto Backup restore', () => {
   const originalOS = Platform.OS;
   afterEach(() => { (Platform as any).OS = originalOS; });
 
-  it('a restored marker on a fresh install is a reinstall; an upgrade just gets the no-backup marker', async () => {
+  for (const [variant, createSDK] of variants) {
+    it(`${variant}: a restored marker on a fresh install sends app_install as a reinstall, without the old click ids (attribution on)`, async () => {
+      (Platform as any).OS = 'android';
+      await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(new Date(Date.now() - 300 * DAY).toISOString()));
+      await AsyncStorage.setItem('@datalyr/attribution_data', JSON.stringify({ fbclid: 'fb.restored.old', utm_source: 'facebook' }));
+      await AsyncStorage.setItem('@datalyr/deferred_lookup_resolved', 'true');
+      await AsyncStorage.setItem('@datalyr/visitor_id', 'visitor-restored');
+      signals = { backupMarkerPresent: false, containerCreatedAtMs: Date.now() - 60_000, lastUpdateTimeMs: Date.now() - 60_000 };
+      const seen = await launch(createSDK, { enableAttribution: true });
+      const [install] = named(seen, 'app_install');
+      expect(install).toMatchObject({ install_type: 'reinstall', detection_method: 'backup_marker' });
+      expect(install.fbclid).toBeUndefined();
+      expect(install.utm_source).toBeUndefined();
+    });
+  }
+
+  it('an upgrade (or an old phone move) just gets the no-backup marker', async () => {
     (Platform as any).OS = 'android';
     await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(new Date(Date.now() - 300 * DAY).toISOString()));
-    signals = { backupMarkerPresent: false, containerCreatedAtMs: Date.now() - 60_000 };
-    await attributionManager.detectInstall();
-    expect(attributionManager.isInstall()).toBe(true);
-    expect(attributionManager.getInstallClassification()).toEqual({ install_type: 'reinstall', detection_method: 'backup_marker' });
-
-    Object.assign(attributionManager as any, { isFirstLaunch: false, installClassification: null });
-    signals = { backupMarkerPresent: false, containerCreatedAtMs: Date.now() - 400 * DAY };
+    signals = { backupMarkerPresent: false, containerCreatedAtMs: Date.now() - 90 * DAY, lastUpdateTimeMs: Date.now() - DAY };
     await attributionManager.detectInstall();
     expect(attributionManager.isInstall()).toBe(false);
     expect(markerWrites).toBe(1);
+  });
+
+  it('a kill after the restore was detected re-fires the reinstall, not an existing user', async () => {
+    (Platform as any).OS = 'android';
+    await AsyncStorage.setItem('@datalyr/first_launch_time', JSON.stringify(new Date(Date.now() - 300 * DAY).toISOString()));
+    await AsyncStorage.setItem('@datalyr/visitor_id', 'visitor-restored');
+    signals = { backupMarkerPresent: false, containerCreatedAtMs: Date.now() - 60_000, lastUpdateTimeMs: Date.now() - 60_000 };
+    await attributionManager.detectInstall();
+    // killed here: next launch
+    Object.assign(attributionManager as any, { isFirstLaunch: false, installClassification: null });
+    await attributionManager.detectInstall();
+    expect(attributionManager.isInstall()).toBe(true);
+    expect(attributionManager.getInstallClassification()?.install_type).toBe('reinstall');
   });
 });

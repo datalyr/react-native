@@ -350,6 +350,7 @@ export class DatalyrSDKExpo {
         await this.track('$sdk_first_launch_existing', {
           platform: Platform.OS,
           sdk_version: SDK_VERSION,
+          sdk_variant: 'expo',
           first_sdk_launch_time: new Date().toISOString(),
           ...(attributionManager.getInstallClassification() ?? {}),
         });
