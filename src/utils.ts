@@ -20,6 +20,9 @@ export const STORAGE_KEYS = {
   SESSION_ID: '@datalyr/session_id',
   USER_ID: '@datalyr/user_id',
   USER_PROPERTIES: '@datalyr/user_properties',
+  // 'true' while the persisted USER_ID is a provisional (pre-login) id. Byte-identical
+  // in utils.ts and utils-expo.ts (both builds share one AsyncStorage namespace).
+  USER_ID_PROVISIONAL: '@datalyr/user_id_provisional',
   EVENT_QUEUE: '@datalyr/event_queue',
   DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',  // capped store for events that exhausted retries (vs silent drop)
   ATTRIBUTION_DATA: '@datalyr/attribution_data',

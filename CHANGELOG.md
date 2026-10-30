@@ -5,6 +5,19 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.24] - 2026-10-29
+
+### Added
+- `identify(userId, properties, { provisional: true })` (instance and static, bare and Expo) for an app's own pre-login (guest) id. While a provisional id is the current user, every event (including `$identify` and `app_install`) carries `$provisional_user_id: true`. The marker is SDK-owned: a `$provisional_user_id` passed in properties is dropped. The server reads the marker in a later release; until then the guest-to-account join runs only on workspaces where it is turned on. A provisional identify is ignored while a signed-in user is current (it never resets). The next real `identify()` replaces it without the account-switch reset (same device ids, attribution and session); replacing one provisional id with another does not reset either. The flag is stored bound to the user id (`@datalyr/user_id_provisional` = `provisional:<hash of the id>`, so a stale flag never marks a different, real user) and survives a restart; `reset()` clears it. No `$alias` is sent.
+- `syncRevenueCatAttributes(handler)` and `syncSuperwallAttributes(handler)` (instance and static, bare and Expo). The handler receives `getRevenueCatAttributes()` / `getSuperwallAttributes()` once `initialize()` has finished and again, once per call, after every `reset()`, after an `identify()` that sent `$identify`, switched accounts or merged web attribution, and after `bindProviderIdentity()`. Calls run on a microtask after the DATALYR method completes. Before, `datalyr_id` set once at launch went stale after `reset()` rotated the anonymous id. Returns an unsubscribe function; registering again replaces the handler; handler errors are logged, never thrown. On login call `Purchases.logIn()` / `Superwall.shared.identify()` first, then `Datalyr.identify()`; on logout call `Purchases.logOut()` / `Superwall.shared.reset()` first, then `Datalyr.reset()`.
+- `bindProviderIdentity()` knows the `iclosed`, `commas`, `hubspot` and `calendly` namespaces (13 in all, matching the server). One list is shared by both entry points.
+
+### Changed
+- The redundant-identify hash includes the provisional flag (appended only for provisional ids, so existing signed-in users do not re-send `$identify` after the update).
+
+### Fixed
+- Docs: RevenueCat's DATALYR id key is `datalyr_id` (un-prefixed), not `$datalyrId`; `datalyr_id` is the anonymous id, not the visitor id.
+
 ## [1.7.23] - 2026-10-13
 
 ### Added
