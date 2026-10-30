@@ -66,6 +66,37 @@ afterEach(() => {
 
 for (const [variant, createSDK] of variants) {
   describe(`${variant} — provisional identify`, () => {
+    test('alias() from a guest is a plain sign-in: no $alias, no reset', async () => {
+      const sdk = createSDK();
+      try {
+        await initSDK(sdk);
+        await sdk.identify('guest-uuid', undefined, { provisional: true });
+        const before = sdk.getStatus();
+        await sdk.alias('firebase-uid');
+        const after = sdk.getStatus();
+        expect(named('$alias')).toHaveLength(0);
+        expect(after.currentUserId).toBe('firebase-uid');
+        expect(after.anonymousId).toBe(before.anonymousId);
+        expect(last('$identify').eventData.userId).toBe('firebase-uid');
+        expect(last('$identify').eventData.$provisional_user_id).toBeUndefined();
+      } finally {
+        sdk.destroy();
+      }
+    });
+
+    test('alias() from a real user still sends $alias', async () => {
+      const sdk = createSDK();
+      try {
+        await initSDK(sdk);
+        await sdk.identify('acct-1');
+        await sdk.alias('acct-1-new');
+        expect(named('$alias')).toHaveLength(1);
+        expect(named('$alias')[0].eventData.previousId).toBe('acct-1');
+      } finally {
+        sdk.destroy();
+      }
+    });
+
     test('$identify and every later event carry $provisional_user_id while the guest id is current', async () => {
       const sdk = createSDK();
       try {
