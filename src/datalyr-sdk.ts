@@ -1614,7 +1614,7 @@ export class DatalyrSDK {
    * Datalyr.syncSuperwallAttributes((attrs) => Superwall.shared.setUserAttributes(attrs));
    * ```
    *
-   * Login order: `Superwall.shared.identify(id)` FIRST, then `Datalyr.identify(id)`.
+   * Login order: `Superwall.shared.identify({ userId: id })` FIRST, then `Datalyr.identify(id)`.
    *
    * Logout order: `Superwall.shared.reset()` FIRST, then `Datalyr.reset()`.
    * Superwall's reset wipes the user attributes; Datalyr.reset() then pushes the new

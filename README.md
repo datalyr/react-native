@@ -605,7 +605,7 @@ On login, identify the user with the providers **first**, then with DATALYR. The
 
 ```typescript
 await Purchases.logIn(userId);
-await Superwall.shared.identify(userId);
+await Superwall.shared.identify({ userId });
 await Datalyr.identify(userId); // pushes datalyr_id to the user above
 ```
 

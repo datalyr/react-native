@@ -397,7 +397,7 @@ await Superwall.shared.reset();
 await Datalyr.reset(); // pushes the new datalyr_id to the logged-out (anonymous) provider users
 ```
 
-On login it is the same order: `Purchases.logIn(id)` / `Superwall.shared.identify(id)` first, then `Datalyr.identify(id)`.
+On login it is the same order: `Purchases.logIn(id)` / `Superwall.shared.identify({ userId: id })` first, then `Datalyr.identify(id)`.
 
 ### 3g. Anonymous ID
 
@@ -473,7 +473,7 @@ Datalyr.syncSuperwallAttributes((attrs) => Superwall.shared.setUserAttributes(at
 
 **Set the attributes and call `identify()` BEFORE showing the paywall**, so the purchase carries the right `datalyr_id`.
 
-**On login:** call `Superwall.shared.identify(id)` FIRST, then `Datalyr.identify(id)`.
+**On login:** call `Superwall.shared.identify({ userId: id })` FIRST, then `Datalyr.identify(id)`.
 
 **On logout:** call `Superwall.shared.reset()` FIRST, then `Datalyr.reset()`. Superwall's reset wipes the user attributes; `Datalyr.reset()` then pushes the new `datalyr_id`. The other way round, the new id is wiped.
 
