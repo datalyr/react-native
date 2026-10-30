@@ -79,12 +79,15 @@ for (const [variant, createSDK] of variants) {
         }
       });
 
-      test('registered after initialize(): called immediately', async () => {
+      test('registered after initialize(): called right after registration', async () => {
         const sdk = createSDK();
         try {
           await initSDK(sdk);
           const handler = jest.fn();
           sdk[syncMethod](handler);
+          // Scheduled, not inline: runs on a microtask after registration.
+          expect(handler).not.toHaveBeenCalled();
+          await flushMicrotasks();
           expect(handler).toHaveBeenCalledTimes(1);
           expect(handler.mock.calls[0][0].datalyr_id).toBe(sdk.getStatus().anonymousId);
         } finally {
@@ -98,6 +101,7 @@ for (const [variant, createSDK] of variants) {
           await initSDK(sdk);
           const handler = jest.fn();
           sdk[syncMethod](handler);
+          await flushMicrotasks();
           const oldId = sdk.getStatus().anonymousId;
 
           await sdk.reset();
@@ -116,6 +120,7 @@ for (const [variant, createSDK] of variants) {
           await initSDK(sdk);
           const handler = jest.fn();
           sdk[syncMethod](handler);
+          await flushMicrotasks();
 
           await sdk.identify('user_A');
           expect(handler).toHaveBeenCalledTimes(2);
@@ -133,13 +138,15 @@ for (const [variant, createSDK] of variants) {
           await sdk.identify('user_A');
           const handler = jest.fn();
           sdk[syncMethod](handler);
+          await flushMicrotasks();
           handler.mockClear();
 
           await sdk.identify('user_B');
+          await flushMicrotasks();
           const newId = sdk.getStatus().anonymousId;
-          expect(handler).toHaveBeenCalled();
-          const lastCall = handler.mock.calls[handler.mock.calls.length - 1][0];
-          expect(lastCall.datalyr_id).toBe(newId);
+          // Exactly one push for the whole switch (reset + $identify), with the new id.
+          expect(handler).toHaveBeenCalledTimes(1);
+          expect(handler.mock.calls[0][0].datalyr_id).toBe(newId);
         } finally {
           sdk.destroy();
         }
@@ -151,6 +158,7 @@ for (const [variant, createSDK] of variants) {
           await initSDK(sdk);
           const handler = jest.fn();
           sdk[syncMethod](handler);
+          await flushMicrotasks();
           await sdk.bindProviderIdentity('revenuecat', 'rc_user_1');
           expect(handler).toHaveBeenCalledTimes(2);
         } finally {
@@ -165,6 +173,7 @@ for (const [variant, createSDK] of variants) {
           const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
           expect(() => sdk[syncMethod](() => { throw new Error('boom'); })).not.toThrow();
+          await flushMicrotasks();
           await expect(sdk.reset()).resolves.toBeUndefined();
           await expect(sdk.identify('user_A')).resolves.toBeUndefined();
           expect(sdk.getStatus().currentUserId).toBe('user_A');
@@ -187,6 +196,7 @@ for (const [variant, createSDK] of variants) {
           const second = jest.fn();
           const unsubscribeFirst = sdk[syncMethod](first);
           const unsubscribeSecond = sdk[syncMethod](second);
+          await flushMicrotasks();
           first.mockClear();
           second.mockClear();
 
@@ -203,6 +213,88 @@ for (const [variant, createSDK] of variants) {
           sdk.destroy();
         }
       });
+
+      test('an old unsubscribe handle does not remove a re-registration of the same function', async () => {
+        const sdk = createSDK();
+        try {
+          await initSDK(sdk);
+          const handler = jest.fn();
+          const oldUnsubscribe = sdk[syncMethod](handler);
+          sdk[syncMethod](handler);
+          await flushMicrotasks();
+          handler.mockClear();
+
+          oldUnsubscribe();
+          await sdk.reset();
+          expect(handler).toHaveBeenCalledTimes(1);
+        } finally {
+          sdk.destroy();
+        }
+      });
+
+      test('a handler that calls back into DATALYR runs after reset() finished', async () => {
+        const sdk = createSDK();
+        try {
+          await initSDK(sdk);
+          const seen: Array<{ datalyrId: string; anonymousId: string; sessionId: string }> = [];
+          sdk[syncMethod](async (attrs: Record<string, string>) => {
+            seen.push({ datalyrId: attrs.datalyr_id, anonymousId: sdk.getStatus().anonymousId, sessionId: sdk.getStatus().sessionId });
+            await sdk.track('from_handler');
+          });
+          await flushMicrotasks();
+          seen.length = 0;
+
+          await sdk.reset();
+          await flushMicrotasks();
+          const status = sdk.getStatus();
+          expect(seen).toEqual([{ datalyrId: status.anonymousId, anonymousId: status.anonymousId, sessionId: status.sessionId }]);
+        } finally {
+          sdk.destroy();
+        }
+      });
+
+      test('identify pushes after the web-attribution merge, and on a redundant identify that merged', async () => {
+        const sdk = createSDK();
+        try {
+          let webFound = false;
+          (globalThis as any).fetch = async (url: string) => {
+            if (String(url).includes('/attribution/lookup') && webFound) {
+              return {
+                ok: true,
+                status: 200,
+                json: async () => ({ found: true, attribution: { visitor_id: 'web_visitor', fbclid: 'FB_WEB', utm_source: 'facebook' } }),
+              };
+            }
+            if (String(url).includes('/attribution/lookup')) return { ok: false, status: 503, json: async () => ({}) };
+            return { ok: true, status: 200, json: async () => ({}) };
+          };
+          await sdk.initialize({ apiKey: 'dk_test', flushInterval: 999999, enableAutoEvents: false });
+          const handler = jest.fn();
+          sdk[syncMethod](handler);
+          await flushMicrotasks();
+          handler.mockClear();
+
+          // Emits $identify; the lookup fails (503): one push, no fbclid yet.
+          await sdk.identify('user_A', { email: 'a@example.com' });
+          await flushMicrotasks();
+          expect(handler).toHaveBeenCalledTimes(1);
+          expect(handler.mock.calls[0][0].fbclid).toBeUndefined();
+
+          // Redundant identify, but the retried lookup merges: push again, with the click.
+          webFound = true;
+          await sdk.identify('user_A', { email: 'a@example.com' });
+          await flushMicrotasks();
+          expect(handler).toHaveBeenCalledTimes(2);
+          expect(handler.mock.calls[1][0].fbclid).toBe('FB_WEB');
+
+          // Redundant and nothing merged (already checked): no push.
+          await sdk.identify('user_A', { email: 'a@example.com' });
+          await flushMicrotasks();
+          expect(handler).toHaveBeenCalledTimes(2);
+        } finally {
+          sdk.destroy();
+        }
+      });
     });
   }
 
@@ -214,6 +306,7 @@ for (const [variant, createSDK] of variants) {
       const sw = jest.fn();
       sdk.syncRevenueCatAttributes(rc);
       sdk.syncSuperwallAttributes(sw);
+      await flushMicrotasks();
       await sdk.reset();
       expect(rc).toHaveBeenCalledTimes(2);
       expect(sw).toHaveBeenCalledTimes(2);

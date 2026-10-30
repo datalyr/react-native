@@ -590,7 +590,7 @@ Without a conversion rule, the platform receives nothing, even when the SDK capt
 
 ## Superwall and RevenueCat
 
-Register a sync handler for each provider right after the SDKs are configured. DATALYR calls it now (or once `initialize()` finishes) and again whenever `datalyr_id` or the attribution can change: after every `reset()` (including the reset inside `identify()` on an account switch), after an `identify()` that sent `$identify`, and after `bindProviderIdentity()`.
+Register a sync handler for each provider right after the SDKs are configured. DATALYR calls it once `initialize()` has finished, and again (once per call) after: every `reset()`; an `identify()` that sent `$identify`, switched accounts, or merged web attribution found by email; and `bindProviderIdentity()`. The call runs just after the DATALYR method finishes. Other attribution changes do not trigger a push.
 
 ```typescript
 import { Datalyr } from '@datalyr/react-native';
@@ -598,10 +598,15 @@ import Superwall from '@superwall/react-native-superwall';
 import Purchases from 'react-native-purchases';
 
 Datalyr.syncRevenueCatAttributes((attrs) => Purchases.setAttributes(attrs));
-Datalyr.syncSuperwallAttributes((attrs) => Superwall.setUserAttributes(attrs));
+Datalyr.syncSuperwallAttributes((attrs) => Superwall.shared.setUserAttributes(attrs));
+```
 
-// Before showing the paywall: identify, then present.
-await Datalyr.identify(userId);
+On login, identify the user with the providers **first**, then with DATALYR. The push from `identify()` then lands on the signed-in provider user:
+
+```typescript
+await Purchases.logIn(userId);
+await Superwall.shared.identify(userId);
+await Datalyr.identify(userId); // pushes datalyr_id to the user above
 ```
 
 Set the attributes and call `identify()` **before** showing the paywall, so the purchase carries the right `datalyr_id`.
@@ -609,12 +614,18 @@ Set the attributes and call `identify()` **before** showing the paywall, so the 
 On logout, log out of the providers **first**, then reset DATALYR:
 
 ```typescript
-await Purchases.logOut();
-await Superwall.reset();
+// Log out of the providers first. Purchases.logOut() throws when the RevenueCat user
+// is already anonymous; catch it so Datalyr.reset() still runs.
+try {
+  await Purchases.logOut();
+} catch {
+  // already anonymous
+}
+await Superwall.shared.reset();
 await Datalyr.reset(); // pushes the new datalyr_id to the logged-out (anonymous) provider users
 ```
 
-Called the other way round, the new `datalyr_id` lands on the user who just logged out (and `Superwall.reset()` wipes it).
+Called the other way round, the new `datalyr_id` lands on the user who just logged out (and Superwall's reset wipes it).
 
 Each method returns an unsubscribe function. Registering again replaces the previous handler. Errors thrown by a handler are logged, never thrown into your app. The ATT prompt does not trigger a push: after it resolves, set `getSuperwallAttributes()` / `getRevenueCatAttributes()` again yourself to send the IDFA.
 

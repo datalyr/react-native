@@ -386,10 +386,18 @@ Always call `reset()` on logout. Without it, the next user's events are attribut
 If you use RevenueCat or Superwall, log out of them **first**, then call `reset()`. `reset()` pushes the new `datalyr_id` through your sync handlers (Step 4); called first, that id lands on the user who is logging out:
 
 ```javascript
-await Purchases.logOut();
-await Superwall.reset();
-await Datalyr.reset();
+// Log out of the providers first. Purchases.logOut() throws when the RevenueCat user
+// is already anonymous; catch it so Datalyr.reset() still runs.
+try {
+  await Purchases.logOut();
+} catch {
+  // already anonymous
+}
+await Superwall.shared.reset();
+await Datalyr.reset(); // pushes the new datalyr_id to the logged-out (anonymous) provider users
 ```
+
+On login it is the same order: `Purchases.logIn(id)` / `Superwall.shared.identify(id)` first, then `Datalyr.identify(id)`.
 
 ### 3g. Anonymous ID
 
@@ -457,15 +465,17 @@ const journey = datalyr.getJourney();
 import { Datalyr } from '@datalyr/react-native';
 import Superwall from '@superwall/react-native-superwall';
 
-// Once, right after configuring Superwall. DATALYR calls the handler now (or once
-// initialize() finishes) and again after every reset(), every identify() that
-// sends $identify, and bindProviderIdentity().
-Datalyr.syncSuperwallAttributes((attrs) => Superwall.setUserAttributes(attrs));
+// Once, right after configuring Superwall. DATALYR calls the handler once initialize()
+// has finished, and again after every reset(), an identify() that sent $identify,
+// switched accounts or merged web attribution, and bindProviderIdentity().
+Datalyr.syncSuperwallAttributes((attrs) => Superwall.shared.setUserAttributes(attrs));
 ```
 
 **Set the attributes and call `identify()` BEFORE showing the paywall**, so the purchase carries the right `datalyr_id`.
 
-**On logout:** call `Superwall.reset()` FIRST, then `Datalyr.reset()`. `Superwall.reset()` wipes the user attributes; `Datalyr.reset()` then pushes the new `datalyr_id`. The other way round, the new id is wiped.
+**On login:** call `Superwall.shared.identify(id)` FIRST, then `Datalyr.identify(id)`.
+
+**On logout:** call `Superwall.shared.reset()` FIRST, then `Datalyr.reset()`. Superwall's reset wipes the user attributes; `Datalyr.reset()` then pushes the new `datalyr_id`. The other way round, the new id is wiped.
 
 **After the ATT prompt:** set `Datalyr.getSuperwallAttributes()` again yourself to include the IDFA (the prompt does not trigger a push).
 
@@ -533,15 +543,17 @@ Only non-empty values are included. This method returns no `oppref`.
 import { Datalyr } from '@datalyr/react-native';
 import Purchases from 'react-native-purchases';
 
-// Once, right after Purchases.configure(). DATALYR calls the handler now (or once
-// initialize() finishes) and again after every reset(), every identify() that
-// sends $identify, and bindProviderIdentity().
+// Once, right after Purchases.configure(). DATALYR calls the handler once initialize()
+// has finished, and again after every reset(), an identify() that sent $identify,
+// switched accounts or merged web attribution, and bindProviderIdentity().
 Datalyr.syncRevenueCatAttributes((attrs) => Purchases.setAttributes(attrs));
 ```
 
 **Set the attributes and call `identify()` BEFORE showing the paywall**, so the purchase carries the right `datalyr_id`.
 
-**On logout:** call `Purchases.logOut()` FIRST, then `Datalyr.reset()`. Otherwise the new `datalyr_id` lands on the RevenueCat user who is logging out.
+**On login:** call `Purchases.logIn(id)` FIRST, then `Datalyr.identify(id)`. Otherwise the push lands on the previous RevenueCat user.
+
+**On logout:** call `Purchases.logOut()` FIRST (wrapped in try/catch: it throws when the user is already anonymous), then `Datalyr.reset()`. Otherwise the new `datalyr_id` lands on the RevenueCat user who is logging out.
 
 `syncRevenueCatAttributes()` returns an unsubscribe function. Errors thrown by the handler are logged, never thrown into your app.
 
@@ -969,7 +981,7 @@ await Datalyr.updateTrackingAuthorization(status === 'granted');
 
 // After ATT response, re-pass attributes to include IDFA
 const attrs = Datalyr.getSuperwallAttributes(); // or getRevenueCatAttributes()
-Superwall.setUserAttributes(attrs);
+Superwall.shared.setUserAttributes(attrs);
 ```
 
 ---
@@ -1101,7 +1113,8 @@ console.log(Datalyr.getAppleSearchAdsAttribution());
 | Using `trackPurchase()` with Superwall/RevenueCat | Counts trials and failed payments as revenue | Use webhooks only for subscription revenue |
 | Not calling `identify()` with email | iOS web-to-app attribution fails (no fallback) | Always identify with email after signup/login |
 | Not passing attributes to Superwall/RevenueCat | Revenue events not attributed to campaigns | Register `syncSuperwallAttributes()`/`syncRevenueCatAttributes()` after configuring the provider |
-| `Datalyr.reset()` before `Purchases.logOut()` / `Superwall.reset()` | The new `datalyr_id` lands on the logged-out user | Log out of the provider first, then `Datalyr.reset()` |
+| `Datalyr.reset()` before `Purchases.logOut()` / `Superwall.shared.reset()` | The new `datalyr_id` lands on the logged-out user | Log out of the provider first, then `Datalyr.reset()` |
+| `Datalyr.identify()` before `Purchases.logIn()` / `Superwall.shared.identify()` | The `datalyr_id` push lands on the previous provider user | Log in to the provider first, then `Datalyr.identify()` |
 | Server-side redirects for landing pages | Web SDK never loads, attribution data lost | Must use JavaScript-based page |
 | Duplicate screen tracking | Manual `screen()` + automatic tracking | Use ONE method only |
 | Wrong API key format | Auth errors | Must start with `dk_`, from **Settings → API** |
@@ -1294,8 +1307,8 @@ npm install && cd ios && pod install
 |---|---|
 | `Datalyr.getSuperwallAttributes()` | Get attrs formatted for Superwall |
 | `Datalyr.getRevenueCatAttributes()` | Get attrs formatted for RevenueCat |
-| `Datalyr.syncSuperwallAttributes(handler)` | Push Superwall attrs now and whenever `datalyr_id` can change; returns unsubscribe |
-| `Datalyr.syncRevenueCatAttributes(handler)` | Push RevenueCat attrs now and whenever `datalyr_id` can change; returns unsubscribe |
+| `Datalyr.syncSuperwallAttributes(handler)` | Push Superwall attrs after init, reset(), identify() and bindProviderIdentity(); returns unsubscribe |
+| `Datalyr.syncRevenueCatAttributes(handler)` | Push RevenueCat attrs after init, reset(), identify() and bindProviderIdentity(); returns unsubscribe |
 
 ### SKAdNetwork
 | Method | Description |

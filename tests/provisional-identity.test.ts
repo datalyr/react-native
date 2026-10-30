@@ -25,6 +25,7 @@ import { EventQueue } from '../src/event-queue';
 import { attributionManager } from '../src/attribution';
 import { journeyManager } from '../src/journey';
 import type { EventPayload } from '../src/types';
+import { provisionalFlagFor } from '../src/provisional-identity';
 
 const variants: Array<[string, () => any]> = [
   ['bare React Native', () => new DatalyrSDK()],
@@ -263,6 +264,96 @@ for (const [variant, createSDK] of variants) {
         expect(guest?.eventData.$provisional_user_id).toBe(true);
         expect(real?.eventData.$provisional_user_id).toBeUndefined();
         expect(sdk.getStatus().currentUserId).toBe('firebase-uid');
+      } finally {
+        sdk.destroy();
+      }
+    });
+
+    test('guest then real identify, not awaited: the real user wins, no reset, its $identify is sent', async () => {
+      const sdk = createSDK();
+      try {
+        await initSDK(sdk);
+        const before = sdk.getStatus();
+        const guest = sdk.identify('guest-uuid', undefined, { provisional: true });
+        const real = sdk.identify('firebase-uid');
+        await Promise.all([guest, real]);
+
+        const after = sdk.getStatus();
+        expect(after.currentUserId).toBe('firebase-uid');
+        expect(after.anonymousId).toBe(before.anonymousId);
+        expect((sdk as any).currentUserProvisional).toBe(false);
+        expect(named('$identify').map((p) => p.eventData.userId)).toEqual(['firebase-uid']);
+      } finally {
+        sdk.destroy();
+      }
+    });
+
+    test('guest then real identify before initialize(), not awaited: the real $identify survives', async () => {
+      const sdk = createSDK();
+      try {
+        const guest = sdk.identify('guest-uuid', undefined, { provisional: true });
+        const real = sdk.identify('firebase-uid');
+        await Promise.all([guest, real]);
+        await initSDK(sdk);
+
+        expect(sdk.getStatus().currentUserId).toBe('firebase-uid');
+        const realIdentify = named('$identify').find((p) => p.eventData.userId === 'firebase-uid');
+        expect(realIdentify).toBeDefined();
+        expect(realIdentify!.eventData.$provisional_user_id).toBeUndefined();
+      } finally {
+        sdk.destroy();
+      }
+    });
+
+    test('a stale provisional flag written for another id does not mark the stored real user', async () => {
+      // OTA rollback / kill between writes: user_id is the real account, the flag is
+      // left over from the guest id (or a pre-1.7.24 boolean).
+      for (const staleFlag of [provisionalFlagFor('guest-uuid'), true]) {
+        await (AsyncStorage as any).clear();
+        sent = [];
+        await AsyncStorage.setItem('@datalyr/user_id', JSON.stringify('firebase-uid'));
+        await AsyncStorage.setItem('@datalyr/user_id_provisional', JSON.stringify(staleFlag));
+
+        const sdk = createSDK();
+        try {
+          // Pre-init check reads the same binding: the guest id is ignored.
+          await sdk.identify('guest-2', undefined, { provisional: true });
+          await initSDK(sdk);
+          expect(sdk.getStatus().currentUserId).toBe('firebase-uid');
+          expect((sdk as any).currentUserProvisional).toBe(false);
+          await sdk.track('relaunch_event');
+          expect(last('relaunch_event').eventData.$provisional_user_id).toBeUndefined();
+        } finally {
+          sdk.destroy();
+        }
+      }
+    });
+
+    test('the stored flag is bound to the user id (not a bare boolean)', async () => {
+      const sdk = createSDK();
+      try {
+        await initSDK(sdk);
+        await sdk.identify('guest-uuid', undefined, { provisional: true });
+        const stored = JSON.parse(String(await AsyncStorage.getItem('@datalyr/user_id_provisional')));
+        expect(stored).toBe(provisionalFlagFor('guest-uuid'));
+        expect(stored).not.toContain('guest-uuid');
+      } finally {
+        sdk.destroy();
+      }
+    });
+
+    test('$provisional_user_id is SDK-owned: a caller-set value is dropped', async () => {
+      const sdk = createSDK();
+      try {
+        await initSDK(sdk);
+        await sdk.identify('firebase-uid', { $provisional_user_id: true } as any);
+        await sdk.track('custom', { $provisional_user_id: true });
+        expect(last('$identify').eventData.$provisional_user_id).toBeUndefined();
+        expect(last('custom').eventData.$provisional_user_id).toBeUndefined();
+
+        // A hand-made $identify naming another id gets no marker either.
+        await sdk.track('$identify', { userId: 'someone-else', $provisional_user_id: true });
+        expect(last('$identify').eventData.$provisional_user_id).toBeUndefined();
       } finally {
         sdk.destroy();
       }
