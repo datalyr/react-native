@@ -1,0 +1,38 @@
+name: CI
+
+# Public repo: GitHub-hosted runners are free here, and fork PRs never run on
+# paid (Blacksmith) machines. Fork PRs get a read-only token and no secrets.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer commit on the same PR cancels the older run; each push to main keeps
+# its own run.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      # package-lock.json was generated without peer installs (it has no
+      # react-native entry), so a strict install sees the host app's peers
+      # (react-native 0.88 wants @types/react 19) and refuses the lockfile.
+      - run: npm ci --legacy-peer-deps
+      - name: Typecheck and build (tsc)
+        run: npm run build
+      - run: npm run lint
+      - run: npm test -- --ci
+      # scripts/validate-ios.sh compiles the native module inside a local Expo
+      # app; it stays a manual pre-release step.
