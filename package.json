@@ -82,6 +82,7 @@
     "eslint": "^9.0.0",
     "expo-modules-core": "^3.0.29",
     "jest": "^30.0.0",
+    "react": "^18.2.0",
     "typescript": "^5.7.0"
   },
   "react-native": "src/index.ts",
