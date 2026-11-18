@@ -26,7 +26,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # package-lock.json was generated without peer installs (it has no
+      # react-native entry), so a strict install sees the host app's peers
+      # (react-native 0.88 wants @types/react 19) and refuses the lockfile.
+      - run: npm ci --legacy-peer-deps
       - name: Typecheck and build (tsc)
         run: npm run build
       - run: npm run lint
