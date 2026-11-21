@@ -5,6 +5,12 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- The deferred web-to-app install lookup (`POST /attribution/deferred-lookup`) now sends the SDK's `anonymous_id`, so the server can record an ad-click claim as owned by this install and recognise the install's own retries.
+- A failed install lookup now reports why on its `$attribution_match` event (`reason: request_failed`): `error_class` (`timeout`, `network`, `http_4xx`, `http_5xx`, `http_other`, `decode`), `elapsed_ms`, and `http_status` for HTTP failures. HTTP and unparseable-body failures used to send no event; they now send this one. Retry behaviour is unchanged.
+
 ## [1.8.0] - 2026-10-30
 
 ### Changed

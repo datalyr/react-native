@@ -45,6 +45,7 @@ import {
   leadProperties,
 } from './ecommerce-properties';
 import { SDK_VERSION } from './version';
+import { sendDeferredLookup, httpFailure } from './deferred-lookup-request';
 import { createHttpClient, HttpClient, utf8ByteLength } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
 import { attributionManager, AttributionData, presentWebMatchIds, primaryClickIdType, attributionForEvent, removeAppUserIdsUnlessAuthorized, attStatusFrom, ATT_STATUS_NAMES, ATT_NOT_AUTHORIZED_REASON } from './attribution';
@@ -878,43 +879,42 @@ export class DatalyrSDK {
       osVersion: undefined, model: undefined, locale: undefined, timezone: undefined,
     } as any));
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const sent = await sendDeferredLookup('https://api.datalyr.com/attribution/deferred-lookup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Datalyr-API-Key': this.state.config.apiKey,
+      },
+      // Device signals — the exact values the click-side fp_* capture
+      // approximates from the redirect request's headers. This is what opens the
+      // server's tier-2 matcher (device-signal-corroborated store clicks up to 7
+      // days old); without it the server only runs the short exact-IP window.
+      body: JSON.stringify({
+        platform: Platform.OS,
+        os_version: deviceOsVersion(deviceSignals.osVersion),
+        device_model: deviceModelName(deviceSignals.model),
+        language: deviceSignals.locale,
+        timezone: deviceSignals.timezone,
+        // The install's own id: the server records a click claim as owned by this
+        // device, so a retry from the same install is recognised as its own instead of
+        // being refused as a second install on the same IP.
+        ...(this.state.anonymousId ? { anonymous_id: this.state.anonymousId } : {}),
+        ...(attStatus !== undefined ? { att_status: attStatus } : {}),
+      }),
+    });
 
-    let response: Response;
-    try {
-      response = await fetch('https://api.datalyr.com/attribution/deferred-lookup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Datalyr-API-Key': this.state.config.apiKey,
-        },
-        // Device signals — the exact values the click-side fp_* capture
-        // approximates from the redirect request's headers. This is what opens the
-        // server's tier-2 matcher (device-signal-corroborated store clicks up to 7
-        // days old); without it the server only runs the short exact-IP window.
-        body: JSON.stringify({
-          platform: Platform.OS,
-          os_version: deviceOsVersion(deviceSignals.osVersion),
-          device_model: deviceModelName(deviceSignals.model),
-          language: deviceSignals.locale,
-          timezone: deviceSignals.timezone,
-          ...(attStatus !== undefined ? { att_status: attStatus } : {}),
-        }),
-        signal: controller.signal,
-      });
-    } catch (error) {
+    if (!sent.ok) {
       // Transport-level failure (offline, captive portal, timeout) — the ordinary state
       // right after a store install. Nothing was answered, so the lookup stays eligible
       // and a later launch inside the match window retries it.
-      errorLog('Deferred attribution lookup did not reach the server — retrying on a later launch', error as Error);
+      errorLog('Deferred attribution lookup did not reach the server — retrying on a later launch', sent.error as Error);
       // Still reported: a workspace whose misses are overwhelmingly `request_failed` has a
       // connectivity problem, not an attribution problem, and those need different fixes.
-      await this.trackAttributionMatchOutcome(false, 'request_failed');
+      // error_class (timeout / network) and elapsed_ms tell the two apart.
+      await this.trackAttributionMatchOutcome(false, 'request_failed', { ...sent.failure });
       return;
-    } finally {
-      clearTimeout(timeout);
     }
+    const response = sent.response;
 
     if (!response.ok) {
       // 5xx/408/429 are transient, so stay eligible. Anything else is definitive for this
@@ -928,6 +928,7 @@ export class DatalyrSDK {
         `Deferred attribution lookup failed with status ${response.status}` +
         (retryable ? ' — retrying on a later launch' : ' — not retryable, no further attempts'),
       );
+      await this.trackAttributionMatchOutcome(false, 'request_failed', { ...httpFailure(response.status, sent.elapsedMs) });
       return;
     }
 
@@ -939,6 +940,10 @@ export class DatalyrSDK {
       result = await response.json() as { found: boolean; attribution?: any; reason?: string; window_minutes?: number };
     } catch (error) {
       errorLog('Deferred attribution lookup returned an unparseable body — retrying on a later launch', error as Error);
+      await this.trackAttributionMatchOutcome(false, 'request_failed', {
+        error_class: 'decode',
+        elapsed_ms: Date.now() - sent.startedAt,
+      });
       return;
     }
 
