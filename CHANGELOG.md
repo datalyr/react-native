@@ -5,6 +5,17 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Events are no longer dead-lettered by a server outage. A 5xx (503 included), 429, 408, a timeout or a network error keeps the event in the queue with the same `eventId`, uses none of its retry budget, and backs the whole queue off (5 s doubling to 5 minutes, never sooner than the server's `Retry-After`, honoured up to 10 minutes). Before, three failed flushes (about 1 to 2 minutes of 5xx or 429) moved events to the dead-letter store, and a timeout (`Aborted`) was not recognised as a connectivity failure.
+- `Retry-After` is now honoured on 5xx answers (ingest answers 503 with `Retry-After` when the fault is its own), not only on 429 and 408. A `Retry-After` longer than 30 s is no longer cut short in-request.
+- Any 2xx is a delivered event, whatever its body. Ingest answers 204 with no body for a filtered event; that used to count as a failed send and re-send the event.
+- A final 4xx (400, 403, 404, 415, 422, ...) drops the event at once and counts it, instead of re-sending it on three flushes and then replaying it from the dead-letter store. 401 (10-minute hold) and 413 (parked permanently) are unchanged.
+
+### Added
+- Every event the SDK gives up on is counted, persisted across launches, by reason: `rejected` (final 4xx), `dead_letter_full` (the 100-entry dead-letter store pushed out its oldest), `dead_letter_expired` (replayed 3 times or older than 7 days). Read them in `getStatus().queueStats.dropped`. `queueStats.retryInMs` shows the current backoff.
+
 ## [1.8.0] - 2026-10-30
 
 ### Changed
