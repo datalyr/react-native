@@ -39,6 +39,9 @@ export class EventQueue {
   private consecutiveTransientFailures: number = 0;
   // Serialises updates of the persisted drop counter.
   private dropCountWrite: Promise<void> = Promise.resolve();
+  // Serialises every read-modify-write of the dead-letter store (deadLetter, replay), so
+  // un-awaited track() calls cannot overwrite each other's entries.
+  private deadLetterChain: Promise<void> = Promise.resolve();
   private droppedCounts: Partial<Record<DropReason, number>> = {};
 
   constructor(httpClient: HttpClient, config: QueueConfig) {
@@ -104,7 +107,18 @@ export class EventQueue {
    * events that exhaust MAX_REPLAYS or exceed MAX_DEAD_LETTER_AGE_MS are dropped for good
    * (genuinely undeliverable), so this can't loop a permanently-bad event forever.
    */
-  private async replayDeadLetter(): Promise<void> {
+  private replayDeadLetter(): Promise<void> {
+    return this.serialDeadLetter(() => this.replayDeadLetterNow());
+  }
+
+  /** Run one dead-letter store operation after every earlier one has finished. */
+  private serialDeadLetter(op: () => Promise<void>): Promise<void> {
+    const run = this.deadLetterChain.then(op, op);
+    this.deadLetterChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async replayDeadLetterNow(): Promise<void> {
     if (this.destroyed) return;
     const MAX_REPLAYS = 3;
     const MAX_DEAD_LETTER_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -115,6 +129,9 @@ export class EventQueue {
       const now = Date.now();
       let replayed = 0;
       let expired = 0;
+      // Entries that are still replayable but do not fit under the queue limit stay in
+      // the dead-letter store for the next replay.
+      const kept: QueuedEvent[] = [];
       for (const event of stored) {
         if (!event || !event.payload || typeof event.payload.eventName !== 'string') continue;
         // Permanent entries (413 payload-too-large) can never deliver; never replay them.
@@ -125,6 +142,10 @@ export class EventQueue {
           expired++;
           continue;
         }
+        if (this.queue.length >= this.config.maxQueueSize) {
+          kept.push(event);
+          continue;
+        }
         // Reset retryCount for a fresh delivery window; bump replayCount to bound retries.
         this.queue.push({ ...event, retryCount: 0, replayCount: replayCount + 1 });
         replayed++;
@@ -132,7 +153,11 @@ export class EventQueue {
 
       // Clear the dead-letter store — anything not replayed was too old / too-often-retried
       // and is intentionally dropped (it would never deliver).
-      await Storage.removeItem(STORAGE_KEYS.DEAD_LETTER_QUEUE);
+      if (kept.length > 0) {
+        await Storage.setItem(STORAGE_KEYS.DEAD_LETTER_QUEUE, kept);
+      } else {
+        await Storage.removeItem(STORAGE_KEYS.DEAD_LETTER_QUEUE);
+      }
       if (expired > 0) {
         errorLog(`Dropped ${expired} dead-letter event(s) past their replay limit or age`);
         await this.countDropped('dead_letter_expired', expired);
@@ -175,21 +200,22 @@ export class EventQueue {
       retryCount: 0,
     };
 
-    // Check queue size limit
-    if (this.queue.length >= this.config.maxQueueSize) {
-      // Queue full — the OLDEST event is evicted. Don't drop it silently: it's often the
-      // earliest, highest-value event (session_start / app_install / a purchase queued
-      // while offline). Surface it and park it in the capped dead-letter store so it's
-      // recoverable, mirroring the max-retry path.
-      const evicted = this.queue.shift();
-      if (evicted) {
-        errorLog(`Queue full (max ${this.config.maxQueueSize}); oldest event moved to dead-letter: ${evicted.payload.eventName}`);
-        await this.deadLetter(evicted);
-      }
-    }
-
+    // Push and enforce the limit with no await in between, so un-awaited concurrent
+    // enqueues can never take the queue past it. Queue full — the OLDEST events are
+    // evicted. Don't drop them silently: often the earliest, highest-value events
+    // (session_start / app_install / a purchase queued while offline). Park them in the
+    // capped dead-letter store (serialised; its own overflow is counted).
     this.queue.push(queuedEvent);
+    const evicted: QueuedEvent[] = [];
+    while (this.queue.length > Math.max(1, this.config.maxQueueSize)) {
+      const oldest = this.queue.shift();
+      if (oldest) evicted.push(oldest);
+    }
     debugLog(`Event queued: ${payload.eventName} (queue size: ${this.queue.length})`);
+    for (const e of evicted) {
+      errorLog(`Queue full (max ${this.config.maxQueueSize}); oldest event moved to dead-letter: ${e.payload.eventName}`);
+      await this.deadLetter(e);
+    }
 
     // Persist to storage
     await this.persistQueue();
@@ -246,6 +272,8 @@ export class EventQueue {
               // into the same outage would only add load.
               this.scheduleBackoff(response.retryAfterMs);
               debugLog(`Temporary failure (status ${response.status}); keeping event queued: ${queuedEvent.payload.eventName}`);
+              // Events delivered earlier in this batch must not stay on disk.
+              await this.persistQueue();
               return;
             } else if (response.rejected) {
               // A final 4xx: the server will never accept this event. Drop it and count it.
@@ -260,6 +288,7 @@ export class EventQueue {
               // $identify, $att_status, the first pageviews) would 401 and dead-letter for a
               // transient missing key. The flush timer retries once the key is set.
               debugLog(`Auth not ready; keeping event queued: ${queuedEvent.payload.eventName}`);
+              await this.persistQueue();
               return;
             } else if (response.payloadTooLarge) {
               // 413: the server will never accept this body. Dead-letter NOW (no retry
@@ -326,7 +355,11 @@ export class EventQueue {
    * Park a permanently-failed event in a capped dead-letter store instead of silently
    * dropping it — surfaced (errorLog) and recoverable for replay/inspection.
    */
-  private async deadLetter(event: QueuedEvent, reason?: string): Promise<void> {
+  private deadLetter(event: QueuedEvent, reason?: string): Promise<void> {
+    return this.serialDeadLetter(() => this.deadLetterNow(event, reason));
+  }
+
+  private async deadLetterNow(event: QueuedEvent, reason?: string): Promise<void> {
     if (reason) {
       errorLog(`Event moved to dead-letter (${reason}): ${event.payload.eventName}`);
     } else {
@@ -354,9 +387,11 @@ export class EventQueue {
   private scheduleBackoff(retryAfterMs?: number): void {
     this.consecutiveTransientFailures++;
     const exp = TRANSIENT_BACKOFF_BASE_MS * Math.pow(2, Math.min(this.consecutiveTransientFailures - 1, 16));
-    const backoff = Math.min(exp, TRANSIENT_BACKOFF_MAX_MS) * (0.75 + Math.random() * 0.25);
+    // Jitter spreads phones out after a shared outage: the plain backoff lands anywhere
+    // in 0.5x to 1.0x, and a Retry-After gets 0 to 25% added (never less than asked).
+    const backoff = Math.min(exp, TRANSIENT_BACKOFF_MAX_MS) * (0.5 + Math.random() * 0.5);
     const serverWait = retryAfterMs != null && Number.isFinite(retryAfterMs)
-      ? Math.min(Math.max(retryAfterMs, 0), MAX_RETRY_AFTER_MS)
+      ? Math.min(Math.max(retryAfterMs, 0), MAX_RETRY_AFTER_MS) * (1 + Math.random() * 0.25)
       : 0;
     this.retryNotBefore = Date.now() + Math.max(backoff, serverWait);
   }

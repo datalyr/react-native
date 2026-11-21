@@ -28,8 +28,8 @@ interface HttpResponse {
   // true when the failure is temporary (5xx including 503, 429, 408, a timeout or a
   // network error): the queue keeps the event, burns no retry, and backs off.
   transient?: boolean;
-  // true when the server refused the event for good (a 4xx other than 401, 408, 413 and
-  // 429): sending it again can never succeed, so the queue drops it and counts the drop.
+  // true when the server refused the event for good (400, 415, 422): sending it again
+  // can never succeed, so the queue drops it and counts the drop.
   rejected?: boolean;
   // The server's Retry-After, in ms, when it sent one with a transient answer.
   retryAfterMs?: number;
@@ -43,11 +43,14 @@ export const isTransientStatus = (status: number): boolean =>
   status >= 500 || status === 429 || status === 408;
 
 /**
- * A 4xx the server means as final. 401 has its own hold-then-dead-letter path, 413 is
- * parked permanently, 408/429 are transient.
+ * The 4xx answers ingest gives for an event it will never accept (a malformed or
+ * incomplete body). Every other 4xx keeps the counted-retry-then-dead-letter path: a
+ * firewall or captive proxy can answer 403 or 404 on one network, and that must not
+ * wipe events for good. 401 has its own hold, 413 is parked permanently, 408/429 are
+ * transient.
  */
 export const isFinalRejectionStatus = (status: number): boolean =>
-  status >= 400 && status < 500 && status !== 401 && status !== 408 && status !== 413 && status !== 429;
+  status === 400 || status === 415 || status === 422;
 
 /**
  * UTF-8 byte length of a string without TextEncoder/Buffer (neither is guaranteed in RN).

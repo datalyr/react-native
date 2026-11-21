@@ -127,7 +127,15 @@ describe('HttpClient: what counts as accepted, temporary, or final', () => {
     expect(res.rejected).toBeFalsy();
   });
 
-  it.each([400, 403, 404, 415, 422])('%s is a final refusal', async (status) => {
+  it.each([403, 404])('%s is NOT final (a firewall or captive proxy may answer it): no drop flag', async (status) => {
+    answers = [{ status, body: {} }];
+    const res = await client().sendEvent(makePayload('purchase'));
+    expect(res.success).toBe(false);
+    expect(res.rejected).toBeFalsy();
+    expect(res.transient).toBeFalsy();
+  });
+
+  it.each([400, 415, 422])('%s is a final refusal', async (status) => {
     answers = [{ status, body: {} }];
     const res = await client().sendEvent(makePayload('purchase'));
     expect(sent).toHaveLength(1);
@@ -185,7 +193,7 @@ describe('EventQueue: kept on temporary errors, dropped only on a final 4xx, eve
       await enqueueQuiet(q, makePayload('purchase'));
       await q.flush();
       const first = q.getStats().retryInMs;
-      expect(first).toBeGreaterThanOrEqual(3000);
+      expect(first).toBeGreaterThanOrEqual(2400);
       const sends = sent.length;
       await q.flush();
       expect(sent.length).toBe(sends);
@@ -269,5 +277,131 @@ describe('EventQueue: kept on temporary errors, dropped only on a final 4xx, eve
     try {
       expect(q.getStats().dropped).toEqual({ rejected: 4 });
     } finally { q.destroy(); }
+  });
+});
+
+describe('review fixes (A–D)', () => {
+  it('A: a temporary failure mid-flush leaves no delivered event on disk', async () => {
+    answers = [{ status: 200, body: { success: true } }, { status: 200, body: { success: true } }, { status: 503, body: {}, retryAfter: '0' }];
+    const q = await newQueue();
+    try {
+      for (let i = 0; i < 4; i++) await enqueueQuiet(q, makePayload('e' + i, 'evt_' + i));
+      await flushNow(q);
+      // A kill now keeps only what is on disk: the two delivered events must be gone.
+      expect((await liveQueue()).map((e) => e.payload.eventId)).toEqual(['evt_2', 'evt_3']);
+    } finally { q.destroy(); }
+  });
+
+  it('B: concurrent enqueues never exceed the limit, and every evicted event is accounted for', async () => {
+    const q = await newQueue({ maxQueueSize: 2 });
+    try {
+      (q as any).isOnline = false;
+      await Promise.all(Array.from({ length: 8 }, (_, i) => q.enqueue(makePayload('e' + i, 'evt_' + i))));
+      expect(q.getStats().queueSize).toBeLessThanOrEqual(2);
+      const live = await liveQueue();
+      expect(live.length).toBeLessThanOrEqual(2);
+      const dl = await deadLetters();
+      const lost = (await dropped()).dead_letter_full || 0;
+      const ids = new Set([...live, ...dl].map((e: any) => e.payload.eventId));
+      expect(ids.size + lost).toBe(8);
+      expect(live.length + dl.length + lost).toBe(8);
+    } finally { q.destroy(); }
+  });
+
+  it('B: concurrent evictions into a nearly full dead-letter store count every push-out', async () => {
+    const full = Array.from({ length: 99 }, (_, i) => ({ payload: makePayload('old' + i, 'old_' + i), timestamp: Date.now(), retryCount: 3 }));
+    const q = await newQueue({ maxQueueSize: 1 });
+    try {
+      await Storage.setItem(STORAGE_KEYS.DEAD_LETTER_QUEUE, full);
+      (q as any).isOnline = false;
+      await Promise.all(Array.from({ length: 6 }, (_, i) => q.enqueue(makePayload('e' + i, 'evt_' + i))));
+      const dl = await deadLetters();
+      expect(dl).toHaveLength(100);
+      // 99 old + 5 evicted = 104 into a store of 100: 4 pushed out, all counted.
+      expect((await dropped()).dead_letter_full).toBe(4);
+      expect((await liveQueue()).length + dl.length + 4).toBe(99 + 6);
+    } finally { q.destroy(); }
+  });
+
+  it('B: a dead-letter replay never takes the queue over its limit; the rest stays dead-lettered', async () => {
+    await Storage.setItem(STORAGE_KEYS.DEAD_LETTER_QUEUE,
+      Array.from({ length: 10 }, (_, i) => ({ payload: makePayload('d' + i, 'dl_' + i), timestamp: Date.now(), retryCount: 3 })));
+    answers = ['network'];
+    const q = await newQueue({ maxQueueSize: 4 });
+    try {
+      await new Promise((r) => setTimeout(r, 20));
+      expect(q.getStats().queueSize).toBeLessThanOrEqual(4);
+      expect(q.getStats().queueSize + (await deadLetters()).length).toBe(10);
+      expect(await dropped()).toEqual({});
+    } finally { q.destroy(); }
+  });
+
+  it('C: the queue waits Retry-After plus up to 25% jitter, never less', async () => {
+    (Math.random as jest.Mock).mockReturnValue(0.999);
+    answers = [{ status: 503, body: {}, retryAfter: '120' }];
+    const q = await newQueue();
+    try {
+      await enqueueQuiet(q, makePayload('purchase'));
+      await q.flush();
+      const wait = q.getStats().retryInMs;
+      expect(wait).toBeGreaterThan(120000 * 1.2);
+      expect(wait).toBeLessThanOrEqual(120000 * 1.25);
+    } finally { q.destroy(); }
+  });
+
+  it('C: the plain backoff is spread over 0.5x to 1.0x', async () => {
+    (Math.random as jest.Mock).mockReturnValue(0);
+    answers = [{ status: 500, body: {} }];
+    const q = await newQueue();
+    try {
+      await enqueueQuiet(q, makePayload('purchase'));
+      await q.flush();
+      const wait = q.getStats().retryInMs;
+      expect(wait).toBeGreaterThan(2400);
+      expect(wait).toBeLessThanOrEqual(2500);
+    } finally { q.destroy(); }
+  });
+
+  it.each([403, 404])('D: %s takes the counted-retry path, then the dead-letter store (not dropped at once)', async (status) => {
+    answers = [{ status, body: {} }];
+    const q = await newQueue({ maxRetryCount: 3 });
+    try {
+      await enqueueQuiet(q, makePayload('purchase', 'evt_x'));
+      await flushNow(q);
+      expect((await liveQueue()).map((e) => e.payload.eventId)).toEqual(['evt_x']);
+      expect((await liveQueue())[0].retryCount).toBe(1);
+      expect(await dropped()).toEqual({});
+      await flushNow(q);
+      await flushNow(q);
+      expect(await liveQueue()).toHaveLength(0);
+      expect((await deadLetters()).map((e: any) => e.payload.eventId)).toEqual(['evt_x']);
+      expect(await dropped()).toEqual({});
+    } finally { q.destroy(); }
+  });
+
+  it('D: 401 keeps its path: held for 10 minutes, then counted retries, dead-letter, and a counted expiry', async () => {
+    answers = [{ status: 401, body: {} }];
+    const http = client();
+    const q = new EventQueue(http, { maxQueueSize: 100, batchSize: 10, flushInterval: 999999, maxRetryCount: 2 });
+    await new Promise((r) => setTimeout(r, 10));
+    try {
+      await enqueueQuiet(q, makePayload('purchase', 'evt_401'));
+      await flushNow(q);
+      expect((await liveQueue())[0].retryCount).toBe(0); // held, no retry spent
+      (http as any).firstUnauthorizedAt = Date.now() - 11 * 60 * 1000;
+      await flushNow(q);
+      await flushNow(q);
+      expect(await liveQueue()).toHaveLength(0);
+      const dl = await deadLetters();
+      expect(dl.map((e: any) => e.payload.eventId)).toEqual(['evt_401']);
+      expect(await dropped()).toEqual({});
+      // A later launch finds it replayed too often: dropped and counted.
+      await Storage.setItem(STORAGE_KEYS.DEAD_LETTER_QUEUE, [{ ...dl[0], replayCount: 3 }]);
+    } finally { q.destroy(); }
+    const q2 = await newQueue();
+    try {
+      await new Promise((r) => setTimeout(r, 20));
+      expect(await dropped()).toEqual({ dead_letter_expired: 1 });
+    } finally { q2.destroy(); }
   });
 });
