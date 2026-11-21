@@ -169,6 +169,23 @@ for (const [variant, createSDK] of variants) {
       expect(await AsyncStorage.getItem(STORAGE_KEYS.DEFERRED_LOOKUP_RESOLVED)).toBeNull();
     });
 
+    it('failed lookups stop after 3 attempts per install, across launches, each one reported', async () => {
+      respond = async () => { throw new TypeError('Network request failed'); };
+      for (let launch = 0; launch < 5; launch++) {
+        if (launch > 0) {
+          (attributionManager as any).initialized = false;
+          (attributionManager as any).isFirstLaunch = false;
+          (attributionManager as any).installTimeMs = null;
+          require('../src/network-status').networkStatusManager.destroy();
+        }
+        const sdk = createSDK();
+        try { await initSDK(sdk); } finally { sdk.destroy(); }
+      }
+      expect(deferredBodies).toHaveLength(3);
+      expect(failureEvents()).toHaveLength(3);
+      expect(failureEvents().every((e) => e.data.error_class === 'network')).toBe(true);
+    });
+
     it('an answer is not reported as a failure', async () => {
       const sdk = createSDK();
       try { await initSDK(sdk); } finally { sdk.destroy(); }
