@@ -73,7 +73,7 @@ export class AutoEventsManager {
           await Storage.setItem('@datalyr/current_session', this.currentSession);
           debugLog('Session resumed (context session unchanged):', canonicalId);
         } else {
-          // RN-21: close out the PREVIOUS session before opening a new one.
+          // close out the PREVIOUS session before opening a new one.
           //
           // A stored session with a different canonical id is one that already
           // ended — the app was backgrounded and then killed, or simply left for
@@ -189,20 +189,11 @@ export class AutoEventsManager {
   }
 
   /**
-   * Setup session monitoring (app state changes)
-   * In a real implementation, this would use React Native's AppState
+   * Setup session monitoring (app state changes).
+   * The SDK's AppState listener calls handleAppForeground / handleAppBackground.
    */
   private setupSessionMonitoring(): void {
     try {
-      // For React Native, this would be:
-      // AppState.addEventListener('change', async (nextAppState: AppStateStatus) => {
-      //   if (nextAppState === 'active') {
-      //     await this.handleAppForeground();
-      //   } else if (nextAppState === 'background') {
-      //     await this.handleAppBackground();
-      //   }
-      // });
-
       debugLog('Session monitoring set up (requires React Native AppState)');
 
     } catch (error) {

@@ -7,9 +7,8 @@ Pod::Spec.new do |s|
   s.version      = package['version']
   s.summary      = package['description']
   s.description  = <<-DESC
-    Datalyr SDK for React Native with server-side attribution tracking.
-    Provides event capture, Apple Search Ads attribution, and Play Install
-    Referrer support. Conversion routing handled server-side via postback.
+    DATALYR SDK for React Native and Expo. Captures events and attribution,
+    including Apple Search Ads, SKAdNetwork and the Play Install Referrer.
   DESC
   s.homepage     = package['homepage']
   s.license      = package['license']

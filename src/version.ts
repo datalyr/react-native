@@ -1,7 +1,7 @@
 /**
  * The one place the SDK version is written in TypeScript.
  *
- * RN-20. There used to be six independent hardcoded literals: `package.json`,
+ * There used to be six independent hardcoded literals: `package.json`,
  * the transport envelope's `context.version`, the `User-Agent` header,
  * `properties.sdk_version` in the bare build, the same in the Expo build, and a
  * *third* `sdk_version` stamped only on `app_install` (×2, one per build). All
