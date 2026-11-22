@@ -20,6 +20,8 @@ Ships as a minor version (1.9.0). Read the install change below before upgrading
 - SKAdNetwork and AdAttributionKit success messages, and failed Apple Search Ads, advertiser-info and Play Install Referrer lookups in the native bridge, now log only when debug logging is on (`__DEV__` or `debug: true`). Warnings for a missing native module and failed SKAdNetwork updates are unchanged.
 - iOS: `setPostbackEnvironment` no longer writes an `NSLog` line; the JS side logs the result when debug logging is on.
 - The error thrown by `initialize()` without an `apiKey` no longer names a version.
+- The deferred web-to-app install lookup (`POST /attribution/deferred-lookup`) now sends the SDK's `anonymous_id`, so the server can record an ad-click claim as owned by this install and recognise the install's own retries.
+- A failed install lookup now reports why on its `$attribution_match` event (`reason: request_failed`): `error_class` (`timeout`, `network`, `http_4xx`, `http_5xx`, `http_other`, `decode`), `elapsed_ms`, and `http_status` for HTTP failures. HTTP and unparseable-body failures used to send no event; they now send this one. Retry behaviour is unchanged.
 
 ### Deprecated
 - `getDeferredAttributionData()` (instance and static, bare and Expo) and the `DeferredDeepLinkResult` type. It always returns `null`; deferred web attribution is applied at install and is part of `getAttributionData()`.
