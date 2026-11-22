@@ -189,20 +189,11 @@ export class AutoEventsManager {
   }
 
   /**
-   * Setup session monitoring (app state changes)
-   * In a real implementation, this would use React Native's AppState
+   * Setup session monitoring (app state changes).
+   * The SDK's AppState listener calls handleAppForeground / handleAppBackground.
    */
   private setupSessionMonitoring(): void {
     try {
-      // For React Native, this would be:
-      // AppState.addEventListener('change', async (nextAppState: AppStateStatus) => {
-      //   if (nextAppState === 'active') {
-      //     await this.handleAppForeground();
-      //   } else if (nextAppState === 'background') {
-      //     await this.handleAppBackground();
-      //   }
-      // });
-
       debugLog('Session monitoring set up (requires React Native AppState)');
 
     } catch (error) {

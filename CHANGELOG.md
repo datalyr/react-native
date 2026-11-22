@@ -7,9 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+Ships as a minor version (1.9.0). Read the install change below before upgrading.
+
+### Added
+- `Datalyr.getPlayInstallReferrer()` on the bare React Native static facade (the instance and the Expo facade already had it).
+- Every event the SDK gives up on is counted, persisted across launches, by reason: `rejected` (final 4xx), `dead_letter_full` (the 100-entry dead-letter store pushed out its oldest), `dead_letter_expired` (replayed 3 times or older than 7 days). Read them in `getStatus().queueStats.dropped`. `queueStats.retryInMs` shows the current backoff.
+
 ### Changed
+- `uuid` is now `^11.1.1` (was `^10.0.0`). This clears the one production advisory. The SDK only uses `v4()`; ids keep the same format. `@types/uuid` is gone, since uuid 11 ships its own types.
+- The Expo modules the SDK loads are now declared as optional peer dependencies: `expo-application`, `expo-device`, `expo-network`, `expo-router`, `expo` and `@expo/config-plugins` (Expo SDK 52 or later, the same floor as `expo-modules-core`). Your package manager now warns about a version it cannot work with. Nothing is installed for you. The unused `expo-tracking-transparency` entry is removed.
+- `debug: true` now turns on the SDK's debug logs in a release build. Before, they printed only in a development build (`__DEV__`) and the option did nothing else.
+- SKAdNetwork and AdAttributionKit success messages, and failed Apple Search Ads, advertiser-info and Play Install Referrer lookups in the native bridge, now log only when debug logging is on (`__DEV__` or `debug: true`). Warnings for a missing native module and failed SKAdNetwork updates are unchanged.
+- iOS: `setPostbackEnvironment` no longer writes an `NSLog` line; the JS side logs the result when debug logging is on.
+- The error thrown by `initialize()` without an `apiKey` no longer names a version.
+- The deferred web-to-app install lookup (`POST /attribution/deferred-lookup`) now sends the SDK's `anonymous_id`, so the server can record an ad-click claim as owned by this install and recognise the install's own retries.
+- A failed install lookup now reports why on its `$attribution_match` event (`reason: request_failed`): `error_class` (`timeout`, `network`, `http_4xx`, `http_5xx`, `http_other`, `decode`), `elapsed_ms`, and `http_status` for HTTP failures. HTTP and unparseable-body failures used to send no event; they now send this one. Retry behaviour is unchanged.
 - The bare React Native build and the Expo build now run one shared SDK core (`src/sdk-core.ts`); only the platform utilities differ (`utils.ts` vs `utils-expo.ts`). Public API and exports of `@datalyr/react-native` and `@datalyr/react-native/expo` are unchanged, and the bare build sends exactly what it sent before (pinned by `tests/payload-parity.test.ts`).
 - Expo build: `trackAddPaymentInfo()` without an argument now sends `success: true`, as the bare build does (it sent no `success`). Startup now runs as in the bare build: ids, persisted user, attribution and journey in parallel, and network monitoring awaited with the platform integrations, so no `$network_status_change` is sent at startup and events at an offline launch wait in the queue. The Expo build still sends `Platform.OS` as is and no default currency on `trackAddToCart` / `trackInitiateCheckout`; those differences are intended.
+
+### Deprecated
+- `getDeferredAttributionData()` (instance and static, bare and Expo) and the `DeferredDeepLinkResult` type. It always returns `null`; deferred web attribution is applied at install and is part of `getAttributionData()`.
+- `HttpClient.testConnection()`. The SDK does not use it.
+
+### Removed
+- Internal code that was never called: the private deferred deep link handlers in both entry points, the unused `src/utils-interface.ts` (not exported) and a commented-out AppState block.
+
+### Fixed
+- Events are no longer dead-lettered by a server outage. A 5xx (503 included), 429, 408, a timeout or a network error keeps the event in the queue with the same `eventId`, uses none of its retry budget, and backs the whole queue off (5 s doubling to 5 minutes with 0.5x to 1.0x jitter; never sooner than the server's `Retry-After`, honoured up to 10 minutes, plus 0 to 25% jitter). Before, three failed flushes (about 1 to 2 minutes of 5xx or 429) moved events to the dead-letter store, and a timeout (`Aborted`) was not recognised as a connectivity failure.
+- `Retry-After` is now honoured on 5xx answers (ingest answers 503 with `Retry-After` when the fault is its own), not only on 429 and 408. A `Retry-After` longer than 30 s is no longer cut short in-request.
+- Any 2xx is a delivered event, whatever its body. Ingest answers 204 with no body for a filtered event; that used to count as a failed send and re-send the event.
+- A final refusal (400, 415, 422) drops the event at once and counts it, instead of re-sending it on three flushes and then replaying it from the dead-letter store. Other 4xx answers (403 and 404 included, which a firewall or captive proxy can give), 401 (10-minute hold) and 413 (parked permanently) keep their existing paths.
+- Un-awaited `track()` calls can no longer push the queue past `maxQueueSize` or lose events: the limit is enforced with no await between push and eviction, writes to the dead-letter store run one at a time, and a dead-letter replay never fills the queue past its limit (the rest stays dead-lettered for the next replay).
+- When a flush stops on a temporary failure, the events it already delivered are removed from disk at once.
+
+### Install change
+- `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` are now peer dependencies, not dependencies. Install them in your app:
+    - Bare React Native: `npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage@^2 react-native-get-random-values` (pin `@^2`: an unpinned install takes 3.x, which is outside the peer range)
+    - Expo: `npx expo install @datalyr/react-native expo-application expo-device expo-network @react-native-async-storage/async-storage react-native-get-random-values`
+
+  Both are native modules. React Native CLI autolinking links only the packages listed in the app's own `package.json`, and Expo before SDK 54 does the same, so as nested dependencies they could load without their native code. An app that already lists both needs no change. AsyncStorage 3.x is not supported yet (it renames `multiRemove` to `removeMany`).
+
 
 ## [1.8.0] - 2026-10-30
 
@@ -31,6 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The iOS privacy manifest declares `NSPrivacyAccessedAPICategoryFileTimestamp` with reason `C617.1` (timestamps of files inside the app container). Raw dates never leave the device; only the age bucket does.
 
 ## [1.7.24] - 2026-10-29
+
+Never published to npm (the changes shipped in 1.8.0).
 
 ### Added
 - `alias(newUserId)` while a provisional id is current (and no explicit `previousId`) is a plain sign-in: it runs the no-reset identify and sends no `$alias`, because the server merges any `$alias` without the guest→account guards.
@@ -188,6 +227,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `match_candidates`, `match_score` and `match_window_minutes`. Deliberately separate from
   `$web_attribution_matched`, which stays the bridge event downstream readers consume and
   still fires only on a real match.
+
+## [1.7.18] - 2026-08-02
+
+(entry added later)
+
+### Fixed
+- The deferred web attribution lookup is retried on a later launch until the server gives a definitive answer. Before, a failed first-launch lookup (for example an offline cold start) was never retried. Retries stop at the end of the server's 60-minute match window or after a capped number of attempts. Devices that already had the SDK are marked resolved on upgrade. `reset()` keeps this state.
+
+## [1.7.17] - 2026-08-02
+
+(entry added later)
+
+### Added
+- `bindProviderIdentity(namespace, providerUserId)` (instance and static, bare and Expo). Sends `$provider_identity_bound` with `external_ids`, so provider webhooks (RevenueCat, Superwall) can be joined to the install without the `datalyr_id` attribute.
+
+### Fixed
+- The RevenueCat attribute key is `datalyr_id`. It was `$datalyrId`, which RevenueCat strips because it reserves the `$` namespace.
 
 ## [1.7.16] - 2026-07-25
 
@@ -380,10 +436,21 @@ React Native and Expo entry points. No native changes.
   enqueue can't strand a just-queued terminal event); and corrupted persisted queue entries
   are filtered on load instead of jamming the queue head.
 
-## [1.7.8] - 2026-05-31
+## [1.7.11] - 2026-06-10
 
-### Changed
-- **Web→app email attribution now emits the canonical `$web_attribution_matched` event** (with `match_method: 'email'`) instead of the separate `$web_attribution_merged`. The email/`identify()` match path and the IP/deferred match path now fire the same event name, distinguished by `match_method` (`'email'` vs `'ip'`). This lets the server-side attribution bridges (Meta CAPI recovery, trackable-link `lyr`) recover web attribution for webhook conversions from email matches — previously only IP matches bridged, because no server reader consumed `$web_attribution_merged`. No API or integration changes required.
+(entry added later)
+
+### Fixed
+- `initialize()` is idempotent. A repeat call (hot reload, double call) no longer adds a second AppState listener and network subscription or sends a duplicate `session_start`.
+- A deep link is handled once. Before, each `AttributionManager.initialize()` added another `Linking` listener.
+- When the event queue is full, the oldest event goes to the dead-letter store with an error log instead of being dropped silently.
+
+## [1.7.10] - 2026-06-10
+
+(entry added later)
+
+### Fixed
+- Events queued before a cold start are no longer sent with an empty API key (401, then dead-lettered). `initialize()` now stops the placeholder queue built in the constructor before it creates the configured one.
 
 ## [1.7.9] - 2026-06-03
 
@@ -408,6 +475,11 @@ network wiring, locale region) that were committed under 1.7.8 but never publish
 
 ### Known (flagged, not changed — require decisions)
 - `mergeWebAttribution` is gap-fill-only despite a "web wins for first-touch" comment.
+
+## [1.7.8] - 2026-05-31
+
+### Changed
+- **Web→app email attribution now emits the canonical `$web_attribution_matched` event** (with `match_method: 'email'`) instead of the separate `$web_attribution_merged`. The email/`identify()` match path and the IP/deferred match path now fire the same event name, distinguished by `match_method` (`'email'` vs `'ip'`). This lets the server-side attribution bridges (Meta CAPI recovery, trackable-link `lyr`) recover web attribution for webhook conversions from email matches — previously only IP matches bridged, because no server reader consumed `$web_attribution_merged`. No API or integration changes required.
 
 ## [1.6.0] - 2026-03
 

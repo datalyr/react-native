@@ -207,6 +207,10 @@ export class Datalyr {
   }
 
   // Platform integration methods
+  /**
+   * @deprecated Always returns null. Deferred web attribution is applied automatically at
+   * install; read it with getAttributionData().
+   */
   static getDeferredAttributionData(): DeferredDeepLinkResult | null {
     return datalyr.getDeferredAttributionData();
   }
@@ -217,6 +221,14 @@ export class Datalyr {
 
   static getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null {
     return datalyr.getAppleSearchAdsAttribution();
+  }
+
+  /**
+   * Get Google Play Install Referrer attribution data (Android only)
+   * Returns referrer data if available, null otherwise
+   */
+  static getPlayInstallReferrer(): Record<string, any> | null {
+    return datalyr.getPlayInstallReferrer();
   }
 
   static async updateTrackingAuthorization(enabled: boolean): Promise<void> {

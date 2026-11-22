@@ -199,7 +199,6 @@ public class DatalyrSKAdNetworkModule: Module {
     AsyncFunction("setPostbackEnvironment") { (environment: String, promise: Promise) in
       if #available(iOS 18.4, *) {
         let isSandbox = environment == "sandbox"
-        NSLog("[Datalyr] Postback environment set to: %@ (note: actual sandbox mode is controlled via device Developer Mode)", environment)
         promise.resolve([
           "environment": environment,
           "isSandbox": isSandbox,

@@ -8,10 +8,11 @@ try {
 } catch (error) {
   console.warn('react-native-device-info not available, using fallback device info');
 }
+import 'react-native-get-random-values'; // Must load before uuid: it installs crypto.getRandomValues
 import { v4 as uuidv4 } from 'uuid';
-import 'react-native-get-random-values'; // Required for uuid
 
 import { DeviceInfo as DeviceInfoType, DeviceContext } from './types';
+import { isDebugLogging } from './debug-log';
 
 // Storage Keys
 export const STORAGE_KEYS = {
@@ -25,6 +26,9 @@ export const STORAGE_KEYS = {
   USER_ID_PROVISIONAL: '@datalyr/user_id_provisional',
   EVENT_QUEUE: '@datalyr/event_queue',
   DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',  // capped store for events that exhausted retries (vs silent drop)
+  // Persisted count of events the SDK gave up on, by reason (queue/dead-letter caps,
+  // final 4xx refusals, expired dead letters). See EventQueue.countDropped().
+  DROPPED_EVENT_COUNTS: '@datalyr/dropped_event_counts',
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
   LAST_SESSION_TIME: '@datalyr/last_session_time',
   // Hash of the last identify() that actually emitted (the stored key string keeps
@@ -616,10 +620,10 @@ export const validateEventData = (eventData: any): boolean => {
 };
 
 /**
- * Debug logging utility
+ * Debug logging utility: prints in a development build or with `debug: true`.
  */
 export const debugLog = (message: string, ...args: any[]): void => {
-  if (__DEV__) {
+  if (isDebugLogging()) {
     console.log(`[Datalyr] ${message}`, ...args);
   }
 };

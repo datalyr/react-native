@@ -55,32 +55,50 @@
     "url": "git+https://github.com/datalyr/react-native.git"
   },
   "peerDependencies": {
+    "@expo/config-plugins": ">=9.0.0",
+    "@react-native-async-storage/async-storage": "^1.17.0 || ^2.0.0",
     "@react-native-community/netinfo": ">=11.0.0",
+    "expo": ">=52.0.0",
+    "expo-application": ">=6.0.0",
+    "expo-device": ">=7.0.0",
     "expo-modules-core": ">=2.0.0",
+    "expo-network": ">=7.0.0",
+    "expo-router": ">=4.0.0",
     "react": ">=18.0.0",
     "react-native": ">=0.72.0",
-    "react-native-device-info": ">=12.0.0"
+    "react-native-device-info": ">=12.0.0",
+    "react-native-get-random-values": "^1.8.0"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "^2.2.0",
-    "react-native-get-random-values": "^1.11.0",
-    "uuid": "^10.0.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@babel/core": "^7.28.4",
     "@babel/preset-env": "^7.29.7",
     "@babel/preset-typescript": "^7.29.7",
+    "@react-native-async-storage/async-storage": "^2.2.0",
     "@types/jest": "^30.0.0",
     "@types/react": "^18.2.0",
     "@types/react-native": "^0.72.8",
-    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
     "expo-modules-core": "^3.0.29",
     "jest": "^30.0.0",
     "react": "^18.2.0",
+    "react-native-get-random-values": "^1.11.0",
     "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "@jest/reporters": {
+      "glob": "^14.0.6"
+    },
+    "jest-config": {
+      "glob": "^14.0.6"
+    },
+    "jest-runtime": {
+      "glob": "^14.0.6"
+    }
   },
   "react-native": "src/index.ts",
   "exports": {
@@ -112,13 +130,13 @@
     "expo-network": {
       "optional": true
     },
-    "expo-tracking-transparency": {
-      "optional": true
-    },
     "react-native-device-info": {
       "optional": true
     },
     "@react-native-community/netinfo": {
+      "optional": true
+    },
+    "expo-router": {
       "optional": true
     }
   }

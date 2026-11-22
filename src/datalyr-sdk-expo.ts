@@ -171,6 +171,10 @@ export class DatalyrExpo {
 
   // Platform integration methods
 
+  /**
+   * @deprecated Always returns null. Deferred web attribution is applied automatically at
+   * install; read it with getAttributionData().
+   */
   static getDeferredAttributionData(): DeferredDeepLinkResult | null {
     return datalyrExpo.getDeferredAttributionData();
   }
