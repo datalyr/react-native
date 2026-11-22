@@ -26,7 +26,7 @@ Use the option that matches your app.
 **Bare React Native:**
 
 ```bash
-npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage react-native-get-random-values
+npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage@^2 react-native-get-random-values
 npx install-expo-modules@latest
 cd ios && pod install
 ```

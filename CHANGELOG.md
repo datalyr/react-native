@@ -7,16 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+Ships as a minor version (1.9.0). Read the install change below before upgrading.
+
 ### Changed
 - `uuid` is now `^11.1.1` (was `^10.0.0`). This clears the one production advisory. The SDK only uses `v4()`; ids keep the same format. `@types/uuid` is gone, since uuid 11 ships its own types.
 - The Expo modules the SDK loads are now declared as optional peer dependencies: `expo-application`, `expo-device`, `expo-network`, `expo-router`, `expo` and `@expo/config-plugins` (Expo SDK 52 or later, the same floor as `expo-modules-core`). Your package manager now warns about a version it cannot work with. Nothing is installed for you. The unused `expo-tracking-transparency` entry is removed.
 
 ### Install change
-- `@react-native-async-storage/async-storage` (2.x) and `react-native-get-random-values` are now peer dependencies, not dependencies. Install them in your app:
-    - Bare React Native: `npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage react-native-get-random-values`
+- `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` are now peer dependencies, not dependencies. Install them in your app:
+    - Bare React Native: `npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage@^2 react-native-get-random-values` (pin `@^2`: an unpinned install takes 3.x, which is outside the peer range)
     - Expo: `npx expo install @datalyr/react-native expo-application expo-device expo-network @react-native-async-storage/async-storage react-native-get-random-values`
 
-  Both are native modules. React Native CLI autolinking links only the packages listed in the app's own `package.json`, and Expo before SDK 54 does the same, so as nested dependencies they could load without their native code. An app that already lists both needs no change. AsyncStorage 3.x is not supported yet (it renames `multiRemove`).
+  Both are native modules. React Native CLI autolinking links only the packages listed in the app's own `package.json`, and Expo before SDK 54 does the same, so as nested dependencies they could load without their native code. An app that already lists both needs no change. AsyncStorage 3.x is not supported yet (it renames `multiRemove` to `removeMany`).
 
 ## [1.8.0] - 2026-10-30
 

@@ -87,8 +87,10 @@ describe('W6 — native modules the app must list itself', () => {
     expect(typeof pkg.devDependencies[name]).toBe('string');
   });
 
-  test('AsyncStorage peer range excludes 3.x (it renames multiRemove, which the SDK calls)', () => {
-    expect(pkg.peerDependencies['@react-native-async-storage/async-storage']).toBe('^2.0.0');
+  test('AsyncStorage peer range is 1.17+ or 2.x, not 3.x (3.x renames multiRemove, which the SDK calls)', () => {
+    // Expo SDK 52 ships AsyncStorage 1.23.1; the SDK calls only getItem,
+    // setItem, removeItem and multiRemove, which 1.x has.
+    expect(pkg.peerDependencies['@react-native-async-storage/async-storage']).toBe('^1.17.0 || ^2.0.0');
   });
 
   test.each(nativeModules)('the README install lines name %s', (name) => {
@@ -97,6 +99,15 @@ describe('W6 — native modules the app must list itself', () => {
       .split('\n')
       .filter((line) => /^(npm install|npx expo install) @datalyr\/react-native/.test(line));
     expect(installLines.length).toBe(2);
-    for (const line of installLines) expect(line.split(' ')).toContain(name);
+    for (const line of installLines) {
+      const packages = line.split(' ').map((word) => word.replace(/(.)@[^/]*$/, '$1'));
+      expect(packages).toContain(name);
+    }
+  });
+
+  test('the bare install line pins AsyncStorage to 2.x (latest is 3.x, outside the peer range)', () => {
+    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+    const bare = readme.split('\n').find((line) => line.startsWith('npm install @datalyr/react-native'));
+    expect(bare?.split(' ')).toContain('@react-native-async-storage/async-storage@^2');
   });
 });
