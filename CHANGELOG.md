@@ -11,6 +11,7 @@ Ships as a minor version (1.9.0). Read the install change below before upgrading
 
 ### Added
 - `Datalyr.getPlayInstallReferrer()` on the bare React Native static facade (the instance and the Expo facade already had it).
+- Every event the SDK gives up on is counted, persisted across launches, by reason: `rejected` (final 4xx), `dead_letter_full` (the 100-entry dead-letter store pushed out its oldest), `dead_letter_expired` (replayed 3 times or older than 7 days). Read them in `getStatus().queueStats.dropped`. `queueStats.retryInMs` shows the current backoff.
 
 ### Changed
 - `uuid` is now `^11.1.1` (was `^10.0.0`). This clears the one production advisory. The SDK only uses `v4()`; ids keep the same format. `@types/uuid` is gone, since uuid 11 ships its own types.
@@ -26,6 +27,14 @@ Ships as a minor version (1.9.0). Read the install change below before upgrading
 
 ### Removed
 - Internal code that was never called: the private deferred deep link handlers in both entry points, the unused `src/utils-interface.ts` (not exported) and a commented-out AppState block.
+
+### Fixed
+- Events are no longer dead-lettered by a server outage. A 5xx (503 included), 429, 408, a timeout or a network error keeps the event in the queue with the same `eventId`, uses none of its retry budget, and backs the whole queue off (5 s doubling to 5 minutes with 0.5x to 1.0x jitter; never sooner than the server's `Retry-After`, honoured up to 10 minutes, plus 0 to 25% jitter). Before, three failed flushes (about 1 to 2 minutes of 5xx or 429) moved events to the dead-letter store, and a timeout (`Aborted`) was not recognised as a connectivity failure.
+- `Retry-After` is now honoured on 5xx answers (ingest answers 503 with `Retry-After` when the fault is its own), not only on 429 and 408. A `Retry-After` longer than 30 s is no longer cut short in-request.
+- Any 2xx is a delivered event, whatever its body. Ingest answers 204 with no body for a filtered event; that used to count as a failed send and re-send the event.
+- A final refusal (400, 415, 422) drops the event at once and counts it, instead of re-sending it on three flushes and then replaying it from the dead-letter store. Other 4xx answers (403 and 404 included, which a firewall or captive proxy can give), 401 (10-minute hold) and 413 (parked permanently) keep their existing paths.
+- Un-awaited `track()` calls can no longer push the queue past `maxQueueSize` or lose events: the limit is enforced with no await between push and eviction, writes to the dead-letter store run one at a time, and a dead-letter replay never fills the queue past its limit (the rest stays dead-lettered for the next replay).
+- When a flush stops on a temporary failure, the events it already delivered are removed from disk at once.
 
 ### Install change
 - `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` are now peer dependencies, not dependencies. Install them in your app:

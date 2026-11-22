@@ -24,6 +24,9 @@ export const STORAGE_KEYS = {
   // key absent here is the same drift that made LAST_IDENTITY_HASH a
   // no-op. Kept in lockstep and enforced by tests/identify-dedupe.test.ts.
   DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',
+  // Persisted count of events the SDK gave up on, by reason (queue/dead-letter caps,
+  // final 4xx refusals, expired dead letters). See EventQueue.countDropped().
+  DROPPED_EVENT_COUNTS: '@datalyr/dropped_event_counts',
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
   INSTALL_TIME: '@datalyr/install_time',
   LAST_APP_VERSION: '@datalyr/last_app_version',

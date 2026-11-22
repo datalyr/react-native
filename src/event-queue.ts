@@ -2,6 +2,20 @@ import { EventPayload, QueuedEvent } from './types';
 import { Storage, STORAGE_KEYS, debugLog, errorLog } from './utils';
 import { HttpClient } from './http-client';
 
+/** Why the SDK gave up on an event. Every such event is counted (getStats().dropped). */
+export type DropReason =
+  | 'rejected'            // the server refused it for good (a final 4xx)
+  | 'dead_letter_full'    // the capped dead-letter store pushed out its oldest entry
+  | 'dead_letter_expired';// replayed too often, or older than 7 days, in the dead-letter store
+
+/** Entries kept in the dead-letter store; older ones are pushed out (and counted). */
+export const DEAD_LETTER_CAP = 100;
+/** Backoff after a temporary failure (5xx, 503, 429, 408, timeout, network): base, cap. */
+export const TRANSIENT_BACKOFF_BASE_MS = 5000;
+export const TRANSIENT_BACKOFF_MAX_MS = 5 * 60 * 1000;
+/** Longest Retry-After the queue honours; a larger value is treated as this. */
+export const MAX_RETRY_AFTER_MS = 10 * 60 * 1000;
+
 interface QueueConfig {
   maxQueueSize: number;
   batchSize: number;
@@ -20,6 +34,15 @@ export class EventQueue {
   // constructor) is destroy()'d once initialize() installs the configured queue; this
   // flag stops its async storage-load and timer from resurrecting it afterwards.
   private destroyed: boolean = false;
+  // Temporary-failure backoff: no send before this time; how many failures in a row.
+  private retryNotBefore: number = 0;
+  private consecutiveTransientFailures: number = 0;
+  // Serialises updates of the persisted drop counter.
+  private dropCountWrite: Promise<void> = Promise.resolve();
+  // Serialises every read-modify-write of the dead-letter store (deadLetter, replay), so
+  // un-awaited track() calls cannot overwrite each other's entries.
+  private deadLetterChain: Promise<void> = Promise.resolve();
+  private droppedCounts: Partial<Record<DropReason, number>> = {};
 
   constructor(httpClient: HttpClient, config: QueueConfig) {
     this.httpClient = httpClient;
@@ -54,6 +77,13 @@ export class EventQueue {
         debugLog(`Loaded ${this.queue.length} events from storage`);
       }
 
+      try {
+        const counts = await Storage.getItem<Partial<Record<DropReason, number>>>(STORAGE_KEYS.DROPPED_EVENT_COUNTS);
+        if (counts && typeof counts === 'object') this.droppedCounts = { ...counts, ...this.droppedCounts };
+      } catch {
+        // Counts are diagnostics; a read failure must not stop the queue.
+      }
+
       // Re-enqueue any dead-lettered events (exhausted retries / overflow) so a transient
       // outage doesn't permanently strand them. Bounded by replayCount + age (see replayDeadLetter).
       await this.replayDeadLetter();
@@ -77,7 +107,18 @@ export class EventQueue {
    * events that exhaust MAX_REPLAYS or exceed MAX_DEAD_LETTER_AGE_MS are dropped for good
    * (genuinely undeliverable), so this can't loop a permanently-bad event forever.
    */
-  private async replayDeadLetter(): Promise<void> {
+  private replayDeadLetter(): Promise<void> {
+    return this.serialDeadLetter(() => this.replayDeadLetterNow());
+  }
+
+  /** Run one dead-letter store operation after every earlier one has finished. */
+  private serialDeadLetter(op: () => Promise<void>): Promise<void> {
+    const run = this.deadLetterChain.then(op, op);
+    this.deadLetterChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async replayDeadLetterNow(): Promise<void> {
     if (this.destroyed) return;
     const MAX_REPLAYS = 3;
     const MAX_DEAD_LETTER_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -87,13 +128,24 @@ export class EventQueue {
 
       const now = Date.now();
       let replayed = 0;
+      let expired = 0;
+      // Entries that are still replayable but do not fit under the queue limit stay in
+      // the dead-letter store for the next replay.
+      const kept: QueuedEvent[] = [];
       for (const event of stored) {
         if (!event || !event.payload || typeof event.payload.eventName !== 'string') continue;
         // Permanent entries (413 payload-too-large) can never deliver; never replay them.
         if (event.permanent) continue;
         const replayCount = event.replayCount || 0;
         const age = now - (event.timestamp || now);
-        if (replayCount >= MAX_REPLAYS || age > MAX_DEAD_LETTER_AGE_MS) continue;
+        if (replayCount >= MAX_REPLAYS || age > MAX_DEAD_LETTER_AGE_MS) {
+          expired++;
+          continue;
+        }
+        if (this.queue.length >= this.config.maxQueueSize) {
+          kept.push(event);
+          continue;
+        }
         // Reset retryCount for a fresh delivery window; bump replayCount to bound retries.
         this.queue.push({ ...event, retryCount: 0, replayCount: replayCount + 1 });
         replayed++;
@@ -101,7 +153,15 @@ export class EventQueue {
 
       // Clear the dead-letter store — anything not replayed was too old / too-often-retried
       // and is intentionally dropped (it would never deliver).
-      await Storage.removeItem(STORAGE_KEYS.DEAD_LETTER_QUEUE);
+      if (kept.length > 0) {
+        await Storage.setItem(STORAGE_KEYS.DEAD_LETTER_QUEUE, kept);
+      } else {
+        await Storage.removeItem(STORAGE_KEYS.DEAD_LETTER_QUEUE);
+      }
+      if (expired > 0) {
+        errorLog(`Dropped ${expired} dead-letter event(s) past their replay limit or age`);
+        await this.countDropped('dead_letter_expired', expired);
+      }
       if (replayed > 0) {
         debugLog(`Replayed ${replayed} dead-letter event(s) back into the queue`);
         await this.persistQueue();
@@ -140,21 +200,22 @@ export class EventQueue {
       retryCount: 0,
     };
 
-    // Check queue size limit
-    if (this.queue.length >= this.config.maxQueueSize) {
-      // Queue full — the OLDEST event is evicted. Don't drop it silently: it's often the
-      // earliest, highest-value event (session_start / app_install / a purchase queued
-      // while offline). Surface it and park it in the capped dead-letter store so it's
-      // recoverable, mirroring the max-retry path.
-      const evicted = this.queue.shift();
-      if (evicted) {
-        errorLog(`Queue full (max ${this.config.maxQueueSize}); oldest event moved to dead-letter: ${evicted.payload.eventName}`);
-        await this.deadLetter(evicted);
-      }
-    }
-
+    // Push and enforce the limit with no await in between, so un-awaited concurrent
+    // enqueues can never take the queue past it. Queue full — the OLDEST events are
+    // evicted. Don't drop them silently: often the earliest, highest-value events
+    // (session_start / app_install / a purchase queued while offline). Park them in the
+    // capped dead-letter store (serialised; its own overflow is counted).
     this.queue.push(queuedEvent);
+    const evicted: QueuedEvent[] = [];
+    while (this.queue.length > Math.max(1, this.config.maxQueueSize)) {
+      const oldest = this.queue.shift();
+      if (oldest) evicted.push(oldest);
+    }
     debugLog(`Event queued: ${payload.eventName} (queue size: ${this.queue.length})`);
+    for (const e of evicted) {
+      errorLog(`Queue full (max ${this.config.maxQueueSize}); oldest event moved to dead-letter: ${e.payload.eventName}`);
+      await this.deadLetter(e);
+    }
 
     // Persist to storage
     await this.persistQueue();
@@ -170,6 +231,11 @@ export class EventQueue {
    */
   private async processQueue(): Promise<void> {
     if (this.destroyed || this.isProcessing || this.queue.length === 0) {
+      return;
+    }
+    if (Date.now() < this.retryNotBefore) {
+      // Backing off after a temporary failure (or the server's Retry-After).
+      debugLog(`Send paused for ${this.retryNotBefore - Date.now()}ms after a temporary failure`);
       return;
     }
 
@@ -196,8 +262,25 @@ export class EventQueue {
 
             if (response.success) {
               debugLog(`Event sent successfully: ${queuedEvent.payload.eventName}`);
+              this.consecutiveTransientFailures = 0;
               this.removeFromQueue(queuedEvent);
               removedThisBatch++;
+            } else if (response.transient) {
+              // 5xx (503 included), 429, 408, a timeout or a network error: the event is
+              // kept as it is (same eventId, no retry burned) and the whole drain backs
+              // off, honouring the server's Retry-After. Sending the rest of the batch
+              // into the same outage would only add load.
+              this.scheduleBackoff(response.retryAfterMs);
+              debugLog(`Temporary failure (status ${response.status}); keeping event queued: ${queuedEvent.payload.eventName}`);
+              // Events delivered earlier in this batch must not stay on disk.
+              await this.persistQueue();
+              return;
+            } else if (response.rejected) {
+              // A final 4xx: the server will never accept this event. Drop it and count it.
+              errorLog(`Event '${queuedEvent.payload.eventName}' refused by the server (HTTP ${response.status}); dropped`);
+              this.removeFromQueue(queuedEvent);
+              removedThisBatch++;
+              await this.countDropped('rejected');
             } else if (response.authPending) {
               // No API key configured yet (a flush fired before initialize() applied the
               // key, or a stray pre-init client). Leave the event queued WITHOUT burning a
@@ -205,6 +288,7 @@ export class EventQueue {
               // $identify, $att_status, the first pageviews) would 401 and dead-letter for a
               // transient missing key. The flush timer retries once the key is set.
               debugLog(`Auth not ready; keeping event queued: ${queuedEvent.payload.eventName}`);
+              await this.persistQueue();
               return;
             } else if (response.payloadTooLarge) {
               // 413: the server will never accept this body. Dead-letter NOW (no retry
@@ -271,7 +355,11 @@ export class EventQueue {
    * Park a permanently-failed event in a capped dead-letter store instead of silently
    * dropping it — surfaced (errorLog) and recoverable for replay/inspection.
    */
-  private async deadLetter(event: QueuedEvent, reason?: string): Promise<void> {
+  private deadLetter(event: QueuedEvent, reason?: string): Promise<void> {
+    return this.serialDeadLetter(() => this.deadLetterNow(event, reason));
+  }
+
+  private async deadLetterNow(event: QueuedEvent, reason?: string): Promise<void> {
     if (reason) {
       errorLog(`Event moved to dead-letter (${reason}): ${event.payload.eventName}`);
     } else {
@@ -280,9 +368,61 @@ export class EventQueue {
     try {
       const existing = (await Storage.getItem<QueuedEvent[]>(STORAGE_KEYS.DEAD_LETTER_QUEUE)) || [];
       existing.push(event);
-      await Storage.setItem(STORAGE_KEYS.DEAD_LETTER_QUEUE, existing.slice(-100));
+      const pushedOut = Math.max(0, existing.length - DEAD_LETTER_CAP);
+      await Storage.setItem(STORAGE_KEYS.DEAD_LETTER_QUEUE, existing.slice(-DEAD_LETTER_CAP));
+      if (pushedOut > 0) {
+        errorLog(`Dead-letter store full (max ${DEAD_LETTER_CAP}); ${pushedOut} oldest event(s) dropped`);
+        await this.countDropped('dead_letter_full', pushedOut);
+      }
     } catch (error) {
       errorLog('Failed to persist dead-letter event:', error as Error);
+    }
+  }
+
+  /**
+   * Back off after a temporary failure: exponential from TRANSIENT_BACKOFF_BASE_MS, with
+   * jitter, capped at TRANSIENT_BACKOFF_MAX_MS; never sooner than the server's Retry-After
+   * (itself capped at MAX_RETRY_AFTER_MS).
+   */
+  private scheduleBackoff(retryAfterMs?: number): void {
+    this.consecutiveTransientFailures++;
+    const exp = TRANSIENT_BACKOFF_BASE_MS * Math.pow(2, Math.min(this.consecutiveTransientFailures - 1, 16));
+    // Jitter spreads phones out after a shared outage: the plain backoff lands anywhere
+    // in 0.5x to 1.0x, and a Retry-After gets 0 to 25% added (never less than asked).
+    const backoff = Math.min(exp, TRANSIENT_BACKOFF_MAX_MS) * (0.5 + Math.random() * 0.5);
+    const serverWait = retryAfterMs != null && Number.isFinite(retryAfterMs)
+      ? Math.min(Math.max(retryAfterMs, 0), MAX_RETRY_AFTER_MS) * (1 + Math.random() * 0.25)
+      : 0;
+    this.retryNotBefore = Date.now() + Math.max(backoff, serverWait);
+  }
+
+  /**
+   * Count events the SDK gave up on, persisted across launches, by reason.
+   */
+  private countDropped(reason: DropReason, n: number = 1): Promise<void> {
+    this.dropCountWrite = this.dropCountWrite.then(async () => {
+      try {
+        const stored = (await Storage.getItem<Partial<Record<DropReason, number>>>(STORAGE_KEYS.DROPPED_EVENT_COUNTS)) || {};
+        const next = { ...stored, [reason]: (stored[reason] || 0) + n };
+        this.droppedCounts = next;
+        await Storage.setItem(STORAGE_KEYS.DROPPED_EVENT_COUNTS, next);
+      } catch (error) {
+        this.droppedCounts = { ...this.droppedCounts, [reason]: (this.droppedCounts[reason] || 0) + n };
+        errorLog('Failed to persist dropped-event count:', error as Error);
+      }
+    });
+    return this.dropCountWrite;
+  }
+
+  /**
+   * Events the SDK gave up on since install, by reason (persisted).
+   */
+  async getDroppedCounts(): Promise<Partial<Record<DropReason, number>>> {
+    await this.dropCountWrite;
+    try {
+      return (await Storage.getItem<Partial<Record<DropReason, number>>>(STORAGE_KEYS.DROPPED_EVENT_COUNTS)) || {};
+    } catch {
+      return { ...this.droppedCounts };
     }
   }
 
@@ -359,6 +499,9 @@ export class EventQueue {
     // If we just came online, replay any dead-lettered events (likely stranded BY the
     // outage we just recovered from) and then drain the queue.
     if (isOnline && !wasOnline) {
+      // The network is back: the backoff was for the outage, not for the server.
+      this.retryNotBefore = 0;
+      this.consecutiveTransientFailures = 0;
       void this.replayDeadLetter().then(() => {
         if (this.isOnline && this.queue.length > 0) {
           this.processQueue();
@@ -375,6 +518,8 @@ export class EventQueue {
     isProcessing: boolean;
     isOnline: boolean;
     oldestEventAge: number | null;
+    dropped: Partial<Record<DropReason, number>>;
+    retryInMs: number;
   } {
     const oldestEvent = this.queue.length > 0 ? this.queue[0] : null;
     const oldestEventAge = oldestEvent ? Date.now() - oldestEvent.timestamp : null;
@@ -384,6 +529,8 @@ export class EventQueue {
       isProcessing: this.isProcessing,
       isOnline: this.isOnline,
       oldestEventAge,
+      dropped: { ...this.droppedCounts },
+      retryInMs: Math.max(0, this.retryNotBefore - Date.now()),
     };
   }
 
