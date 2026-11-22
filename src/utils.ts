@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import 'react-native-get-random-values'; // Required for uuid
 
 import { DeviceInfo as DeviceInfoType, DeviceContext } from './types';
+import { isDebugLogging } from './debug-log';
 
 // Storage Keys
 export const STORAGE_KEYS = {
@@ -616,10 +617,10 @@ export const validateEventData = (eventData: any): boolean => {
 };
 
 /**
- * Debug logging utility
+ * Debug logging utility: prints in a development build or with `debug: true`.
  */
 export const debugLog = (message: string, ...args: any[]): void => {
-  if (__DEV__) {
+  if (isDebugLogging()) {
     console.log(`[Datalyr] ${message}`, ...args);
   }
 };

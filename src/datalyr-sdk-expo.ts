@@ -36,6 +36,7 @@ import {
   STORAGE_KEYS,
 } from './utils-expo';  // <-- KEY DIFFERENCE: uses Expo utilities
 import { warnAboutIgnoredOptions, deviceOsVersion, deviceModelName } from './utils';
+import { setDebugLogging } from './debug-log';
 import {
   purchaseProperties,
   addToCartProperties,
@@ -163,6 +164,7 @@ export class DatalyrSDKExpo {
         return;
       }
       this.initializing = true;
+      setDebugLogging(config.debug === true);
 
       if (!config.apiKey) {
         throw new Error('apiKey is required for Datalyr SDK');
@@ -1364,6 +1366,10 @@ export class DatalyrSDKExpo {
 
   // Platform integration methods
 
+  /**
+   * @deprecated Always returns null. Deferred web attribution is applied automatically at
+   * install; read it with getAttributionData().
+   */
   getDeferredAttributionData(): DeferredDeepLinkResult | null {
     return null;
   }
@@ -1667,38 +1673,6 @@ export class DatalyrSDKExpo {
     // A grant re-opens the deferred lookup the server declined without it. Not awaited:
     // the caller is usually mid-onboarding and must not wait on a network round trip.
     void this.rerunDeferredLookupIfAttGranted();
-  }
-
-  private async handleDeferredDeepLink(data: DeferredDeepLinkResult): Promise<void> {
-    debugLog('Handling deferred deep link:', data);
-
-    // Store attribution data
-    if (data.fbclid || data.utmSource || data.campaignId) {
-      await attributionManager.setAttributionData({
-        fbclid: data.fbclid,
-        ttclid: data.ttclid,
-        utm_source: data.utmSource,
-        utm_medium: data.utmMedium,
-        utm_campaign: data.utmCampaign,
-        utm_content: data.utmContent,
-        utm_term: data.utmTerm,
-        source: data.source,
-      });
-    }
-
-    // Track the deferred deep link event
-    await this.track('$deferred_deep_link', {
-      url: data.url,
-      source: data.source,
-      fbclid: data.fbclid,
-      ttclid: data.ttclid,
-      utm_source: data.utmSource,
-      utm_medium: data.utmMedium,
-      utm_campaign: data.utmCampaign,
-      campaign_id: data.campaignId,
-      adset_id: data.adsetId,
-      ad_id: data.adId,
-    });
   }
 
   getConversionValue(event: string, properties?: Record<string, any>): number | null {
@@ -2133,6 +2107,10 @@ export class DatalyrExpo {
 
   // Platform integration methods
 
+  /**
+   * @deprecated Always returns null. Deferred web attribution is applied automatically at
+   * install; read it with getAttributionData().
+   */
   static getDeferredAttributionData(): DeferredDeepLinkResult | null {
     return datalyrExpo.getDeferredAttributionData();
   }

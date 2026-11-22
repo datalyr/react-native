@@ -12,6 +12,9 @@ export interface AutoEventConfig {
 }
 
 // Deferred Deep Link Result (from Play Install Referrer on Android)
+/**
+ * @deprecated Only returned by getDeferredAttributionData(), which always returns null.
+ */
 export interface DeferredDeepLinkResult {
   url?: string;
   source?: string;

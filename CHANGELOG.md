@@ -5,6 +5,24 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `Datalyr.getPlayInstallReferrer()` on the bare React Native static facade (the instance and the Expo facade already had it).
+
+### Changed
+- `debug: true` now turns on the SDK's debug logs in a release build. Before, they printed only in a development build (`__DEV__`) and the option did nothing else.
+- SKAdNetwork and AdAttributionKit success messages, and failed Apple Search Ads, advertiser-info and Play Install Referrer lookups in the native bridge, now log only when debug logging is on (`__DEV__` or `debug: true`). Warnings for a missing native module and failed SKAdNetwork updates are unchanged.
+- iOS: `setPostbackEnvironment` no longer writes an `NSLog` line; the JS side logs the result when debug logging is on.
+- The error thrown by `initialize()` without an `apiKey` no longer names a version.
+
+### Deprecated
+- `getDeferredAttributionData()` (instance and static, bare and Expo) and the `DeferredDeepLinkResult` type. It always returns `null`; deferred web attribution is applied at install and is part of `getAttributionData()`.
+- `HttpClient.testConnection()`. The SDK does not use it.
+
+### Removed
+- Internal code that was never called: the private deferred deep link handlers in both entry points, the unused `src/utils-interface.ts` (not exported) and a commented-out AppState block.
+
 ## [1.8.0] - 2026-10-30
 
 ### Changed
@@ -25,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The iOS privacy manifest declares `NSPrivacyAccessedAPICategoryFileTimestamp` with reason `C617.1` (timestamps of files inside the app container). Raw dates never leave the device; only the age bucket does.
 
 ## [1.7.24] - 2026-10-29
+
+Never published to npm (the changes shipped in 1.8.0).
 
 ### Added
 - `alias(newUserId)` while a provisional id is current (and no explicit `previousId`) is a plain sign-in: it runs the no-reset identify and sends no `$alias`, because the server merges any `$alias` without the guest→account guards.
@@ -182,6 +202,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `match_candidates`, `match_score` and `match_window_minutes`. Deliberately separate from
   `$web_attribution_matched`, which stays the bridge event downstream readers consume and
   still fires only on a real match.
+
+## [1.7.18] - 2026-08-02
+
+(entry added later)
+
+### Fixed
+- The deferred web attribution lookup is retried on a later launch until the server gives a definitive answer. Before, a failed first-launch lookup (for example an offline cold start) was never retried. Retries stop at the end of the server's 60-minute match window or after a capped number of attempts. Devices that already had the SDK are marked resolved on upgrade. `reset()` keeps this state.
+
+## [1.7.17] - 2026-08-02
+
+(entry added later)
+
+### Added
+- `bindProviderIdentity(namespace, providerUserId)` (instance and static, bare and Expo). Sends `$provider_identity_bound` with `external_ids`, so provider webhooks (RevenueCat, Superwall) can be joined to the install without the `datalyr_id` attribute.
+
+### Fixed
+- The RevenueCat attribute key is `datalyr_id`. It was `$datalyrId`, which RevenueCat strips because it reserves the `$` namespace.
 
 ## [1.7.16] - 2026-07-25
 
@@ -374,10 +411,21 @@ React Native and Expo entry points. No native changes.
   enqueue can't strand a just-queued terminal event); and corrupted persisted queue entries
   are filtered on load instead of jamming the queue head.
 
-## [1.7.8] - 2026-05-31
+## [1.7.11] - 2026-06-10
 
-### Changed
-- **Web→app email attribution now emits the canonical `$web_attribution_matched` event** (with `match_method: 'email'`) instead of the separate `$web_attribution_merged`. The email/`identify()` match path and the IP/deferred match path now fire the same event name, distinguished by `match_method` (`'email'` vs `'ip'`). This lets the server-side attribution bridges (Meta CAPI recovery, trackable-link `lyr`) recover web attribution for webhook conversions from email matches — previously only IP matches bridged, because no server reader consumed `$web_attribution_merged`. No API or integration changes required.
+(entry added later)
+
+### Fixed
+- `initialize()` is idempotent. A repeat call (hot reload, double call) no longer adds a second AppState listener and network subscription or sends a duplicate `session_start`.
+- A deep link is handled once. Before, each `AttributionManager.initialize()` added another `Linking` listener.
+- When the event queue is full, the oldest event goes to the dead-letter store with an error log instead of being dropped silently.
+
+## [1.7.10] - 2026-06-10
+
+(entry added later)
+
+### Fixed
+- Events queued before a cold start are no longer sent with an empty API key (401, then dead-lettered). `initialize()` now stops the placeholder queue built in the constructor before it creates the configured one.
 
 ## [1.7.9] - 2026-06-03
 
@@ -402,6 +450,11 @@ network wiring, locale region) that were committed under 1.7.8 but never publish
 
 ### Known (flagged, not changed — require decisions)
 - `mergeWebAttribution` is gap-fill-only despite a "web wins for first-touch" comment.
+
+## [1.7.8] - 2026-05-31
+
+### Changed
+- **Web→app email attribution now emits the canonical `$web_attribution_matched` event** (with `match_method: 'email'`) instead of the separate `$web_attribution_merged`. The email/`identify()` match path and the IP/deferred match path now fire the same event name, distinguished by `match_method` (`'email'` vs `'ip'`). This lets the server-side attribution bridges (Meta CAPI recovery, trackable-link `lyr`) recover web attribution for webhook conversions from email matches — previously only IP matches bridged, because no server reader consumed `$web_attribution_merged`. No API or integration changes required.
 
 ## [1.6.0] - 2026-03
 
