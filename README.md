@@ -26,17 +26,17 @@ Use the option that matches your app.
 **Bare React Native:**
 
 ```bash
-npm install @datalyr/react-native expo-modules-core
+npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage react-native-get-random-values
 npx install-expo-modules@latest
 cd ios && pod install
 ```
 
-The SDK is built on Expo Modules. You must install `expo-modules-core` in a bare app too.
+The SDK is built on Expo Modules. You must install `expo-modules-core` in a bare app too. AsyncStorage and `react-native-get-random-values` are native modules: React Native links only the packages your app lists, so install them in your app.
 
 **Expo:**
 
 ```bash
-npx expo install @datalyr/react-native expo-application expo-device expo-network
+npx expo install @datalyr/react-native expo-application expo-device expo-network @react-native-async-storage/async-storage react-native-get-random-values
 ```
 
 Add the config plugin to `app.json`:

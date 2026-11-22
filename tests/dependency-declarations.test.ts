@@ -67,3 +67,36 @@ describe('W6 — optional Expo peers', () => {
     }
   });
 });
+
+describe('W6 — native modules the app must list itself', () => {
+  // React Native CLI autolinking links only packages in the app's own
+  // package.json; Expo autolinking did the same before SDK 54. A nested
+  // dependency loads its JavaScript without its native code.
+  const nativeModules = [
+    '@react-native-async-storage/async-storage',
+    'react-native-get-random-values',
+  ];
+
+  test.each(nativeModules)('%s is a required peer, not a dependency', (name) => {
+    expect(pkg.dependencies[name]).toBeUndefined();
+    expect(typeof pkg.peerDependencies[name]).toBe('string');
+    expect(pkg.peerDependenciesMeta?.[name]?.optional).not.toBe(true);
+  });
+
+  test.each(nativeModules)('%s stays in devDependencies for the tests and the build', (name) => {
+    expect(typeof pkg.devDependencies[name]).toBe('string');
+  });
+
+  test('AsyncStorage peer range excludes 3.x (it renames multiRemove, which the SDK calls)', () => {
+    expect(pkg.peerDependencies['@react-native-async-storage/async-storage']).toBe('^2.0.0');
+  });
+
+  test.each(nativeModules)('the README install lines name %s', (name) => {
+    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+    const installLines = readme
+      .split('\n')
+      .filter((line) => /^(npm install|npx expo install) @datalyr\/react-native/.test(line));
+    expect(installLines.length).toBe(2);
+    for (const line of installLines) expect(line.split(' ')).toContain(name);
+  });
+});
