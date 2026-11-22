@@ -53,7 +53,7 @@ export class HttpClient {
   private warnedUnauthorized = false;
 
   constructor(endpoint: string, config: HttpClientConfig) {
-    // Use server-side API if flag is set (default to true for v1.0.0)
+    // Use server-side API unless useServerTracking is explicitly false (the default)
     this.endpoint = config.useServerTracking !== false
       ? 'https://ingest.datalyr.com/track'
       : endpoint;
@@ -357,6 +357,8 @@ export class HttpClient {
 
   /**
    * Test connectivity to the endpoint
+   * @deprecated Not used by the SDK. Sends a real `connection_test` event to the ingest
+   * endpoint; do not call it in production.
    */
   async testConnection(): Promise<boolean> {
     try {
@@ -407,7 +409,7 @@ export const createHttpClient = (endpoint: string, config?: Partial<HttpClientCo
     apiKey: '',
     workspaceId: '',
     debug: false,
-    useServerTracking: true, // Default to server-side API for v1.0.0
+    useServerTracking: true, // Default to the server-side API
   };
 
   return new HttpClient(endpoint, { ...defaultConfig, ...config });
