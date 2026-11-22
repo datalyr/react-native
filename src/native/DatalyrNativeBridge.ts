@@ -12,6 +12,7 @@
 import { NativeModules, Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
 import type { InstallSignals } from '../install-classifier';
+import { sdkDebugLog } from '../debug-log';
 
 /**
  * Apple Search Ads attribution data returned from AdServices API (iOS only)
@@ -150,7 +151,7 @@ export const AppleSearchAdsNativeBridge = {
     try {
       return await DatalyrNative.getAppleSearchAdsAttribution();
     } catch (error) {
-      console.error('[Datalyr/AppleSearchAds] Get attribution failed:', error);
+      sdkDebugLog('[Datalyr/AppleSearchAds] Get attribution failed:', error);
       return null;
     }
   },
@@ -178,7 +179,7 @@ export const AdvertiserInfoBridge = {
     try {
       return await DatalyrNative.getAdvertiserInfo();
     } catch (error) {
-      console.error('[Datalyr/AdvertiserInfo] Get advertiser info failed:', error);
+      sdkDebugLog('[Datalyr/AdvertiserInfo] Get advertiser info failed:', error);
       return null;
     }
   },
@@ -215,7 +216,7 @@ export const PlayInstallReferrerNativeBridge = {
     try {
       return await DatalyrPlayInstallReferrer.getInstallReferrer();
     } catch (error) {
-      console.error('[Datalyr/PlayInstallReferrer] Get referrer failed:', error);
+      sdkDebugLog('[Datalyr/PlayInstallReferrer] Get referrer failed:', error);
       return null;
     }
   },

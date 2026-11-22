@@ -5,6 +5,7 @@ import * as Device from 'expo-device';
 import * as Network from 'expo-network';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
+import { isDebugLogging } from './debug-log';
 
 // Storage keys
 export const STORAGE_KEYS = {
@@ -23,6 +24,9 @@ export const STORAGE_KEYS = {
   // key absent here is the same drift that made LAST_IDENTITY_HASH a
   // no-op. Kept in lockstep and enforced by tests/identify-dedupe.test.ts.
   DEAD_LETTER_QUEUE: '@datalyr/dead_letter_queue',
+  // Persisted count of events the SDK gave up on, by reason (queue/dead-letter caps,
+  // final 4xx refusals, expired dead letters). See EventQueue.countDropped().
+  DROPPED_EVENT_COUNTS: '@datalyr/dropped_event_counts',
   ATTRIBUTION_DATA: '@datalyr/attribution_data',
   INSTALL_TIME: '@datalyr/install_time',
   LAST_APP_VERSION: '@datalyr/last_app_version',
@@ -49,9 +53,9 @@ export const STORAGE_KEYS = {
   DEFERRED_LOOKUP_NEEDS_ATT_STATUS: '@datalyr/deferred_lookup_needs_att_status',
 } as const;
 
-// Debug logging
+// Debug logging: prints in a development build or with `debug: true`.
 export const debugLog = (message: string, ...args: any[]) => {
-  if (__DEV__) {
+  if (isDebugLogging()) {
     console.log(`[Datalyr] ${message}`, ...args);
   }
 };
@@ -71,7 +75,7 @@ export const generateUUID = (): string => {
   return uuidv4();
 };
 
-// TR-20: unify the session-id FORMAT with the bare build (utils.ts) — `sess_<ts>_<rand>` — so
+// unify the session-id FORMAT with the bare build (utils.ts) — `sess_<ts>_<rand>` — so
 // both variants' context.session_id look identical. Expo previously used a bare UUID here.
 export const generateSessionId = (): string => {
   return `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -267,9 +271,9 @@ export const getOrCreateSessionId = async (): Promise<string> => {
     const sessionTimeout = 30 * 60 * 1000; // 30 minutes
     const now = Date.now();
 
-    // LAST_SESSION_TIME tracks the last ACTIVITY: refreshed on every reuse below AND (TR-08) by
+    // LAST_SESSION_TIME tracks the last ACTIVITY: refreshed on every reuse below AND by
     // touchSession() on every tracked event, so the 30-min idle window genuinely slides with
-    // usage — matching the RN build (utils.ts). Before TR-08 this function was the only writer
+    // usage — matching the RN build (utils.ts). Before that change this function was the only writer
     // (init/foreground/reset), so a long continuous-foreground stretch left the stored time
     // stale and the "sliding window" didn't actually slide. SESSION_START is still written for
     // back-compat, but the timeout is anchored to last activity.
@@ -301,7 +305,7 @@ export const getOrCreateSessionId = async (): Promise<string> => {
   }
 };
 
-// TR-08: throttle (see utils.ts). Refresh LAST_SESSION_TIME on real event activity so the idle
+// throttle (see utils.ts). Refresh LAST_SESSION_TIME on real event activity so the idle
 // window actually slides during continuous foreground use — getOrCreateSessionId (init/foreground/
 // reset) was the only writer, so a long active stretch left the stored activity time stale and the
 // next background→foreground rotated the session id mid-use. One write per 60s; best-effort.
@@ -449,7 +453,7 @@ const refreshNetworkType = async (): Promise<void> => {
 };
 
 // Event validation
-// TR-20 / fleet charset (matches iOS + the bare build): alphanumerics + _ - . and $ (system
+// Fleet charset (matches iOS + the bare build): alphanumerics + _ - . and $ (system
 // events like $identify), max 100 chars. Spaces are normalized to underscores below rather than
 // dropping the event — Expo used to silently drop track('Order Completed') while bare accepted it.
 const EVENT_NAME_PATTERN = /^[\p{L}\p{N}_.$-]+$/u;

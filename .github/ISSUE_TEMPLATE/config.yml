@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.datalyr.com/sdk-reference/react-native
+    about: Read the React Native SDK reference.
+  - name: DATALYR
+    url: https://datalyr.com
+    about: Ask other questions.

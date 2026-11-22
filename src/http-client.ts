@@ -25,7 +25,32 @@ interface HttpResponse {
   payloadTooLarge?: boolean;
   // Serialized request body size in bytes (set alongside payloadTooLarge for the log line).
   bodyBytes?: number;
+  // true when the failure is temporary (5xx including 503, 429, 408, a timeout or a
+  // network error): the queue keeps the event, burns no retry, and backs off.
+  transient?: boolean;
+  // true when the server refused the event for good (400, 415, 422): sending it again
+  // can never succeed, so the queue drops it and counts the drop.
+  rejected?: boolean;
+  // The server's Retry-After, in ms, when it sent one with a transient answer.
+  retryAfterMs?: number;
 }
+
+/** Longest a single in-request retry waits; a longer Retry-After goes to the queue. */
+const MAX_INLINE_RETRY_WAIT_MS = 30000;
+
+/** 5xx, 429 and 408 are the server saying "try again later". */
+export const isTransientStatus = (status: number): boolean =>
+  status >= 500 || status === 429 || status === 408;
+
+/**
+ * The 4xx answers ingest gives for an event it will never accept (a malformed or
+ * incomplete body). Every other 4xx keeps the counted-retry-then-dead-letter path: a
+ * firewall or captive proxy can answer 403 or 404 on one network, and that must not
+ * wipe events for good. 401 has its own hold, 413 is parked permanently, 408/429 are
+ * transient.
+ */
+export const isFinalRejectionStatus = (status: number): boolean =>
+  status === 400 || status === 415 || status === 422;
 
 /**
  * UTF-8 byte length of a string without TextEncoder/Buffer (neither is guaranteed in RN).
@@ -53,7 +78,7 @@ export class HttpClient {
   private warnedUnauthorized = false;
 
   constructor(endpoint: string, config: HttpClientConfig) {
-    // Use server-side API if flag is set (default to true for v1.0.0)
+    // Use server-side API unless useServerTracking is explicitly false (the default)
     this.endpoint = config.useServerTracking !== false
       ? 'https://ingest.datalyr.com/track'
       : endpoint;
@@ -138,14 +163,21 @@ export class HttpClient {
         : payload;
 
       const body = JSON.stringify(requestBody);
-      const response = await fetch(this.endpointFor(payload), {
-        method: 'POST',
-        headers,
-        body,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
+      let response: Response;
+      try {
+        response = await fetch(this.endpointFor(payload), {
+          method: 'POST',
+          headers,
+          body,
+          signal: controller.signal,
+        });
+      } catch (transportError) {
+        // Nothing answered: offline, DNS, TLS, reset, or our timeout's abort.
+        if (transportError && typeof transportError === 'object') (transportError as any).transport = true;
+        throw transportError;
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (response.ok) {
         this.firstUnauthorizedAt = null;
@@ -179,18 +211,34 @@ export class HttpClient {
             }
             return { success: false, status: 401, error: 'HTTP 401: Authentication failed', authPending: true };
           }
-          throw new Error(`HTTP 401: Authentication failed. Check your API key and workspace ID.`);
+          const unauthorized = new Error(`HTTP 401: Authentication failed. Check your API key and workspace ID.`);
+          (unauthorized as any).httpStatus = 401;
+          throw unauthorized;
         }
-        if (response.status === 429 || response.status === 408) {
-          // Honor Retry-After (seconds or HTTP-date). Encode it in the message so the
-          // backoff can read it; shouldRetry() treats 429/408 as retryable backpressure.
+        if (isTransientStatus(response.status)) {
+          // 5xx (ingest answers 503 + Retry-After when the fault is its own), 429 and 408:
+          // honor Retry-After (seconds or HTTP-date). Encode it in the message so the
+          // backoff can read it; shouldRetry() treats these as retryable.
           const retryAfterMs = this.parseRetryAfter(response.headers?.get?.('Retry-After'));
-          throw new Error(`HTTP ${response.status}: ${response.statusText || 'rate limited'}${retryAfterMs != null ? ` retry-after=${retryAfterMs}` : ''}`);
+          const err = new Error(`HTTP ${response.status}: ${response.statusText || 'try again later'}${retryAfterMs != null ? ` retry-after=${retryAfterMs}` : ''}`);
+          (err as any).httpStatus = response.status;
+          (err as any).retryAfterMs = retryAfterMs ?? undefined;
+          throw err;
         }
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const err = new Error(`HTTP ${response.status}: ${response.statusText}`);
+        (err as any).httpStatus = response.status;
+        throw err;
       }
 
-      const responseData = await response.json();
+      // Any 2xx is an accepted event, whatever the body: ingest answers 204 with no body
+      // for an event it filters, and a JSON parse failure here used to count as a failed
+      // send and re-send an event the server had already taken.
+      let responseData: any;
+      try {
+        responseData = await response.json();
+      } catch {
+        responseData = undefined;
+      }
       debugLog(`Event sent successfully: ${payload.eventName}`, responseData);
 
       return {
@@ -202,19 +250,35 @@ export class HttpClient {
     } catch (error) {
       errorLog(`Event send failed (attempt ${retryCount + 1}):`, error as Error);
 
-      // Check if we should retry
-      if (retryCount < this.config.maxRetries && this.shouldRetry(error as Error)) {
+      const httpStatus: number | undefined = (error as any)?.httpStatus;
+      const retryAfterMs: number | undefined = (error as any)?.retryAfterMs;
+
+      // Check if we should retry. A Retry-After longer than the in-request cap is not
+      // cut short here: the queue waits it out instead.
+      const retryAfterTooLong = retryAfterMs != null && retryAfterMs > MAX_INLINE_RETRY_WAIT_MS;
+      if (retryCount < this.config.maxRetries && !retryAfterTooLong && this.shouldRetry(error as Error)) {
         const delay = this.calculateRetryDelay(retryCount, error as Error);
         debugLog(`Retrying in ${delay}ms...`);
-        
+
         await this.delay(delay);
+        // Same payload object, so the same eventId: ingest dedupes a retry of an event
+        // whose first answer was lost.
         return this.sendWithRetry(payload, retryCount + 1);
       }
 
+      if (httpStatus === undefined) {
+        // Nothing answered (offline, DNS, TLS, reset, timeout): temporary. Any other
+        // local throw keeps today's path (counted retries, then the dead-letter store).
+        const transport = (error as any)?.transport === true;
+        return { success: false, status: 0, error: (error as Error)?.message, ...(transport ? { transient: true } : {}) };
+      }
       return {
         success: false,
-        status: 0,
+        status: httpStatus,
         error: (error as Error).message,
+        transient: isTransientStatus(httpStatus),
+        rejected: isFinalRejectionStatus(httpStatus),
+        retryAfterMs,
       };
     }
   }
@@ -357,6 +421,8 @@ export class HttpClient {
 
   /**
    * Test connectivity to the endpoint
+   * @deprecated Not used by the SDK. Sends a real `connection_test` event to the ingest
+   * endpoint; do not call it in production.
    */
   async testConnection(): Promise<boolean> {
     try {
@@ -407,7 +473,7 @@ export const createHttpClient = (endpoint: string, config?: Partial<HttpClientCo
     apiKey: '',
     workspaceId: '',
     debug: false,
-    useServerTracking: true, // Default to server-side API for v1.0.0
+    useServerTracking: true, // Default to the server-side API
   };
 
   return new HttpClient(endpoint, { ...defaultConfig, ...config });

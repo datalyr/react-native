@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Validates that the iOS native code compiles successfully.
-# Uses capper-expo (or any Expo app) as a test harness.
+# Uses any Expo app as a test harness.
 #
 # Usage:
 #   ./scripts/validate-ios.sh                          # uses default test app
@@ -16,9 +16,9 @@ export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
 SDK_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TEST_APP="${1:-/Users/czy/Desktop/capper/capper-expo}"
+TEST_APP="${1:-}"
 
-if [ ! -d "$TEST_APP" ]; then
+if [ -z "$TEST_APP" ] || [ ! -d "$TEST_APP" ]; then
   echo "Error: Test app not found at $TEST_APP"
   echo "Usage: $0 /path/to/expo-app"
   exit 1

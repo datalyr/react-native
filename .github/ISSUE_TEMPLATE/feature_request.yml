@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest a change to the DATALYR React Native SDK.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Write what you want to do and what stops you.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Write how the SDK can help.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Write what you tried or what you use now.

@@ -262,7 +262,7 @@ for (const [variant, createSDK] of variants) {
     });
 
     test('a guest id identified while initialize() runs rides app_install and the replayed $identify', async () => {
-      // The QUITTR shape: initialize() (not awaited), then identify(guest) right away.
+      // The reported shape: initialize() (not awaited), then identify(guest) right away.
       // (An identify() issued BEFORE initialize() is even called writes @datalyr/user_id
       // first, which install detection reads as a returning device: no app_install.)
       const sdk = createSDK();

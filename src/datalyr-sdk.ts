@@ -35,6 +35,7 @@ import {
   STORAGE_KEYS,
   warnAboutIgnoredOptions,
 } from './utils';
+import { setDebugLogging } from './debug-log';
 import {
   purchaseProperties,
   addToCartProperties,
@@ -167,10 +168,11 @@ export class DatalyrSDK {
         return;
       }
       this.initializing = true;
+      setDebugLogging(config.debug === true);
 
       // Validate configuration
       if (!config.apiKey) {
-        throw new Error('apiKey is required for Datalyr SDK v1.0.0');
+        throw new Error('apiKey is required for Datalyr SDK');
       }
       
       // workspaceId is now optional (for backward compatibility)
@@ -210,7 +212,7 @@ export class DatalyrSDK {
         maxRetryCount: this.state.config.maxRetries || 3,
       });
 
-      // RN-22 / RN-24: install detection is lifecycle, not attribution — with
+      // install detection is lifecycle, not attribution — with
       // `enableAttribution: false` app_install used to never fire for ANY user.
       // It runs FIRST and alone, deliberately: detectInstall()'s upgrade guard
       // reads @datalyr/visitor_id etc. as evidence of a prior install, so it must
@@ -243,7 +245,7 @@ export class DatalyrSDK {
       const initialAttribution = attributionManager.getAttributionData();
       // Any click id counts (was fbclid/gclid only), so a bare ?li_fat_id= / ?ttclid= /
       // ?aleid= link records a touch. alart is an app-user id, not a click.
-      // Fresh only (port of iOS FSR-34): attribution persists forever, so recording it on
+      // Fresh only (port of the iOS SDK): attribution persists forever, so recording it on
       // every cold start appended a duplicate touchpoint and rolled the 90-day last-touch
       // expiry forward each launch. Record only when the capture time is newer than the last
       // recorded touch; 0 (persisted before this field existed) counts as not new.
@@ -389,7 +391,7 @@ export class DatalyrSDK {
           ...installData,
           ...(attributionManager.getInstallClassification() ?? {}),
         });
-        // TR-21: commit the first-launch marker only AFTER app_install is durably enqueued —
+        // commit the first-launch marker only AFTER app_install is durably enqueued —
         // a crash before this re-fires app_install next launch instead of losing it.
         await attributionManager.markInstallTracked();
       }
@@ -443,7 +445,7 @@ export class DatalyrSDK {
         return;
       }
 
-      // TR-20: normalize (spaces → underscores) then validate against the fleet charset, so the
+      // normalize (spaces → underscores) then validate against the fleet charset, so the
       // rest of this method uses one canonical name and bare/Expo behave identically.
       const name = normalizeEventName(eventName);
       if (!validateEventName(name)) {
@@ -469,7 +471,7 @@ export class DatalyrSDK {
       const payload = await this.createEventPayload(name, eventData);
       await this.eventQueue.enqueue(payload);
 
-      // TR-08: refresh the STORAGE session-activity time on real event activity (throttled to
+      // refresh the STORAGE session-activity time on real event activity (throttled to
       // 60s), so a session doesn't wrongly expire during a long continuous-foreground stretch —
       // getOrCreateSessionId (init/foreground/reset) was the only writer. Fire-and-forget so the
       // (throttled) AsyncStorage write never blocks the track path.
@@ -562,7 +564,7 @@ export class DatalyrSDK {
       // device anonymous/visitor node from being linked to two people when an
       // app forgets to call reset() between accounts.
       // Not from a provisional id: provisional -> real and provisional -> provisional are
-      // the same person on the same install (server §2.10), so there is nothing to reset.
+      // the same person on the same install, so there is nothing to reset.
       // A provisional identify never resets.
       let didReset = false;
       if (
@@ -591,7 +593,7 @@ export class DatalyrSDK {
       // nothing. Measured 2026-07-25: 6.8 identifies/visitor/day on shipped
       // builds, worst single user 129 in 24h. The identity hash includes the visitor id
       // so a rotation (reset/new install) always re-emits and links are never lost.
-      // RN-23: HASH the identity — never persist the raw identity.
+      // HASH the identity — never persist the raw identity.
       //
       // The 1.7.15 version stored this string verbatim in plaintext AsyncStorage,
       // which meant the suppression feature itself wrote PII at rest:
@@ -653,7 +655,7 @@ export class DatalyrSDK {
 
       // Fetch and merge web attribution if email is provided.
       //
-      // RN-19: runs on EVERY identify — redundant or not — and must stay OUTSIDE
+      // runs on EVERY identify — redundant or not — and must stay OUTSIDE
       // the suppression branch above. 1.7.15 returned early on a redundant
       // identify, putting this out of reach: fetchAndMergeWebAttribution marks an
       // email hash checked ONLY after a definitive 200 (see the
@@ -677,7 +679,7 @@ export class DatalyrSDK {
       if (didReset || !isRedundantIdentify || webAttributionMerged) {
         this.notifyProviderAttributeHandlers();
       }
-      // RN-9: removed a dead "Advanced Matching" block here that destructured
+      // removed a dead "Advanced Matching" block here that destructured
       // email/phone/name/dob/gender/city into locals and then discarded them (nothing
       // was forwarded). The identify traits already ship to the backend via the
       // $identify event above; the pixel-side advanced matching is handled server-side.
@@ -1165,7 +1167,7 @@ export class DatalyrSDK {
 
       // A provisional (pre-login) id is not an account to alias from: the server
       // treats any `$alias` as an unconditional merge, while the guest→account
-      // join must go through its §2.10 guards. Signing in from a guest is a
+      // join must go through its guards. Signing in from a guest is a
       // plain identify (same install, no reset, no `$alias`).
       if (!previousId && this.state.currentUserId && this.currentUserProvisional) {
         await this.identify(newUserId);
@@ -1229,7 +1231,7 @@ export class DatalyrSDK {
       // account switch always re-emits (the new identity must relink).
       await Storage.removeItem(STORAGE_KEYS.LAST_IDENTITY_HASH);
 
-      // TR-28: wipe the previous user's attribution + journey BEFORE rotating ids. fbclid/
+      // wipe the previous user's attribution + journey BEFORE rotating ids. fbclid/
       // gclid/fbc/utm/lyr are spread into EVERY event via createEventPayload (feeding Meta
       // CAPI), and the journey is per-identity. Clearing FIRST means a track() that
       // interleaves reset can only ever see old-id+old-attr (pre-reset) or new-id+cleared
@@ -1253,14 +1255,14 @@ export class DatalyrSDK {
       // Force a genuinely new session. getOrCreateSessionId() resumes any session <30min
       // old (always true at logout), so clear the stored session first — otherwise the next
       // user's events would share the previous user's session id. auto-events reads the id via
-      // its getSessionId callback, so it picks up the rotation automatically (TR-28 sync).
+      // its getSessionId callback, so it picks up the rotation automatically.
       await clearSession();
       this.state.sessionId = await getOrCreateSessionId();
 
       // 9.C.1: drop the once-per-install web-attribution-checked marker. It dedupes the
       // identify(email) lookup against attribution we just wiped; leaving it would
       // permanently block re-recovery when a user re-identifies on this install
-      // (logout/login, QA flows). (Mirrors iOS FSR-93.)
+      // (logout/login, QA flows). (Mirrors the iOS SDK.)
       await Storage.removeItem(WEB_ATTRIBUTION_CHECKED_KEY);
 
       // 9.C.2: a new user identity starts a fresh SKAN conversion-value window — clear
@@ -1439,7 +1441,7 @@ export class DatalyrSDK {
     currency = 'USD',
     productId?: string
   ): Promise<void> {
-    // Shared builder (A3-14c): value+revenue both emitted so a rule's value_path='value'
+    // Shared builder: value+revenue both emitted so a rule's value_path='value'
     // never yields $0; product_id + canonical content_id alias for cross-build parity.
     await this.trackWithSKAdNetwork('purchase', purchaseProperties(value, currency, productId));
   }
@@ -1473,7 +1475,7 @@ export class DatalyrSDK {
     productId?: string,
     productName?: string
   ): Promise<void> {
-    // A3-14c: shared builder emits content_id/content_name (canonical) + product_id/product_name
+    // shared builder emits content_id/content_name (canonical) + product_id/product_name
     // (legacy alias) so bare + Expo produce one shape.
     await this.trackWithSKAdNetwork('add_to_cart', addToCartProperties(value, currency, productId, productName));
   }
@@ -1500,7 +1502,7 @@ export class DatalyrSDK {
     numItems?: number,
     productIds?: string[]
   ): Promise<void> {
-    // A3-14c: emits content_ids (canonical) + product_ids (legacy alias).
+    // emits content_ids (canonical) + product_ids (legacy alias).
     await this.trackWithSKAdNetwork('initiate_checkout', initiateCheckoutProperties(value, currency, numItems, productIds));
   }
 
@@ -1508,7 +1510,7 @@ export class DatalyrSDK {
    * Track complete registration event
    */
   async trackCompleteRegistration(method?: string): Promise<void> {
-    // A3-14c: emits registration_method (canonical, Meta standard) + method (legacy alias).
+    // emits registration_method (canonical, Meta standard) + method (legacy alias).
     await this.trackWithSKAdNetwork('complete_registration', completeRegistrationProperties(method));
   }
 
@@ -1516,7 +1518,7 @@ export class DatalyrSDK {
    * Track search event
    */
   async trackSearch(query: string, resultIds?: string[]): Promise<void> {
-    // A3-14c: emits search_string/content_ids (canonical) + query/result_ids (legacy alias).
+    // emits search_string/content_ids (canonical) + query/result_ids (legacy alias).
     await this.track('search', searchProperties(query, resultIds));
   }
 
@@ -1538,6 +1540,8 @@ export class DatalyrSDK {
 
   /**
    * Get deferred attribution data from platform SDKs
+   * @deprecated Always returns null. Deferred web attribution is applied automatically at
+   * install; read it with getAttributionData().
    */
   getDeferredAttributionData(): DeferredDeepLinkResult | null {
     return null;
@@ -1573,7 +1577,7 @@ export class DatalyrSDK {
   // MARK: - Third-Party Integration Methods
 
   /**
-   * Bind a provider-side user id to this install (person contract §8).
+   * Bind a provider-side user id to this install.
    *
    * Call this with EXACTLY the id you hand the provider — e.g.
    * `bindProviderIdentity('revenuecat', await Purchases.getAppUserID())` or
@@ -1865,46 +1869,6 @@ export class DatalyrSDK {
   }
 
   /**
-   * Handle deferred deep link data from platform SDKs
-   */
-  private async handleDeferredDeepLink(data: DeferredDeepLinkResult): Promise<void> {
-    try {
-      debugLog('Processing deferred deep link:', data);
-
-      // Track deferred attribution event
-      await this.track('$deferred_deep_link', {
-        url: data.url,
-        source: data.source,
-        fbclid: data.fbclid,
-        ttclid: data.ttclid,
-        utm_source: data.utmSource,
-        utm_medium: data.utmMedium,
-        utm_campaign: data.utmCampaign,
-        utm_content: data.utmContent,
-        utm_term: data.utmTerm,
-        campaign_id: data.campaignId,
-        adset_id: data.adsetId,
-        ad_id: data.adId,
-      });
-
-      // Merge into attribution manager
-      await attributionManager.mergeWebAttribution({
-        fbclid: data.fbclid,
-        ttclid: data.ttclid,
-        utm_source: data.utmSource,
-        utm_medium: data.utmMedium,
-        utm_campaign: data.utmCampaign,
-        utm_content: data.utmContent,
-        utm_term: data.utmTerm,
-      });
-
-      debugLog('Deferred deep link processed successfully');
-    } catch (error) {
-      errorLog('Error processing deferred deep link:', error as Error);
-    }
-  }
-
-  /**
    * Get conversion value for testing (doesn't send to Apple)
    */
   getConversionValue(event: string, properties?: Record<string, any>): number | null {
@@ -1941,7 +1905,7 @@ export class DatalyrSDK {
     // Use cached advertiser info (IDFA/GAID, ATT status) — cached at init, refreshed on ATT change
     const advertiserInfo = this.cachedAdvertiserInfo;
 
-    // TR-18: honor a caller-supplied idempotency key. A non-empty string properties.event_id
+    // honor a caller-supplied idempotency key. A non-empty string properties.event_id
     // becomes the wire eventId (the source's dedup key — e.g. a Stripe/RevenueCat webhook event
     // id for a client that double-tracks a purchase alongside a server webhook), mirroring the
     // iOS/Node semantics, and is stripped from properties so it isn't duplicated. Else a UUID.
@@ -1990,7 +1954,7 @@ export class DatalyrSDK {
         carrier: deviceInfo.carrier,
         network_type: getNetworkType(),
         sdk_version: SDK_VERSION,
-        schema_version: 1, // A3-25: versioned-envelope stamp (see web SDK)
+        schema_version: 1, // versioned-envelope stamp (see web SDK)
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
           idfa: advertiserInfo.idfa,
@@ -2013,7 +1977,7 @@ export class DatalyrSDK {
           ? {}
           : playInstallReferrerIntegration.getAttributionData()),
         // Caller-supplied event properties WIN over all auto/attribution fields above.
-        // TR-18: cleanedEventData is eventData minus a consumed event_id (now the wire eventId).
+        // cleanedEventData is eventData minus a consumed event_id (now the wire eventId).
         ...cleanedEventData,
         // Always SDK-stamped (not caller-overridable).
         timestamp: Date.now(),
@@ -2044,7 +2008,7 @@ export class DatalyrSDK {
     }
 
     // Provisional (pre-login) user id: mark every event that carries it, so the server
-    // can treat it as a guest id (§2.10) rather than a signed-in account. Matched on the
+    // can treat it as a guest id rather than a signed-in account. Matched on the
     // event's own userId, so a $alias naming a different id is not marked.
     // SDK-owned: a caller-set value is removed.
     if (payload.eventData) {
@@ -2183,7 +2147,7 @@ export class DatalyrSDK {
             this.autoEventsManager.handleAppBackground();
           }
         } else if (nextAppState === 'active') {
-          // TR-19: AWAIT the session refresh BEFORE notifying auto-events. Running them
+          // AWAIT the session refresh BEFORE notifying auto-events. Running them
           // concurrently (unawaited) raced: on a genuine expiry, session_start could emit with
           // the OLD id while subsequent events carried the NEW one. Awaiting rotates
           // this.state.sessionId first, so session_start + everything after share the new id.
@@ -2427,6 +2391,10 @@ export class Datalyr {
   }
 
   // Platform integration methods
+  /**
+   * @deprecated Always returns null. Deferred web attribution is applied automatically at
+   * install; read it with getAttributionData().
+   */
   static getDeferredAttributionData(): DeferredDeepLinkResult | null {
     return datalyr.getDeferredAttributionData();
   }
@@ -2437,6 +2405,14 @@ export class Datalyr {
 
   static getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null {
     return datalyr.getAppleSearchAdsAttribution();
+  }
+
+  /**
+   * Get Google Play Install Referrer attribution data (Android only)
+   * Returns referrer data if available, null otherwise
+   */
+  static getPlayInstallReferrer(): Record<string, any> | null {
+    return datalyr.getPlayInstallReferrer();
   }
 
   static async updateTrackingAuthorization(enabled: boolean): Promise<void> {

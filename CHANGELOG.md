@@ -5,11 +5,46 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## Unreleased
+
+Ships as a minor version (1.9.0). Read the install change below before upgrading.
+
+### Added
+- `Datalyr.getPlayInstallReferrer()` on the bare React Native static facade (the instance and the Expo facade already had it).
+- Every event the SDK gives up on is counted, persisted across launches, by reason: `rejected` (final 4xx), `dead_letter_full` (the 100-entry dead-letter store pushed out its oldest), `dead_letter_expired` (replayed 3 times or older than 7 days). Read them in `getStatus().queueStats.dropped`. `queueStats.retryInMs` shows the current backoff.
 
 ### Changed
+- `uuid` is now `^11.1.1` (was `^10.0.0`). This clears the one production advisory. The SDK only uses `v4()`; ids keep the same format. `@types/uuid` is gone, since uuid 11 ships its own types.
+- The Expo modules the SDK loads are now declared as optional peer dependencies: `expo-application`, `expo-device`, `expo-network`, `expo-router`, `expo` and `@expo/config-plugins` (Expo SDK 52 or later, the same floor as `expo-modules-core`). Your package manager now warns about a version it cannot work with. Nothing is installed for you. The unused `expo-tracking-transparency` entry is removed.
+- `debug: true` now turns on the SDK's debug logs in a release build. Before, they printed only in a development build (`__DEV__`) and the option did nothing else.
+- SKAdNetwork and AdAttributionKit success messages, and failed Apple Search Ads, advertiser-info and Play Install Referrer lookups in the native bridge, now log only when debug logging is on (`__DEV__` or `debug: true`). Warnings for a missing native module and failed SKAdNetwork updates are unchanged.
+- iOS: `setPostbackEnvironment` no longer writes an `NSLog` line; the JS side logs the result when debug logging is on.
+- The error thrown by `initialize()` without an `apiKey` no longer names a version.
 - The deferred web-to-app install lookup (`POST /attribution/deferred-lookup`) now sends the SDK's `anonymous_id`, so the server can record an ad-click claim as owned by this install and recognise the install's own retries.
 - A failed install lookup now reports why on its `$attribution_match` event (`reason: request_failed`): `error_class` (`timeout`, `network`, `http_4xx`, `http_5xx`, `http_other`, `decode`), `elapsed_ms`, and `http_status` for HTTP failures. HTTP and unparseable-body failures used to send no event; they now send this one. Retry behaviour is unchanged.
+
+### Deprecated
+- `getDeferredAttributionData()` (instance and static, bare and Expo) and the `DeferredDeepLinkResult` type. It always returns `null`; deferred web attribution is applied at install and is part of `getAttributionData()`.
+- `HttpClient.testConnection()`. The SDK does not use it.
+
+### Removed
+- Internal code that was never called: the private deferred deep link handlers in both entry points, the unused `src/utils-interface.ts` (not exported) and a commented-out AppState block.
+
+### Fixed
+- Events are no longer dead-lettered by a server outage. A 5xx (503 included), 429, 408, a timeout or a network error keeps the event in the queue with the same `eventId`, uses none of its retry budget, and backs the whole queue off (5 s doubling to 5 minutes with 0.5x to 1.0x jitter; never sooner than the server's `Retry-After`, honoured up to 10 minutes, plus 0 to 25% jitter). Before, three failed flushes (about 1 to 2 minutes of 5xx or 429) moved events to the dead-letter store, and a timeout (`Aborted`) was not recognised as a connectivity failure.
+- `Retry-After` is now honoured on 5xx answers (ingest answers 503 with `Retry-After` when the fault is its own), not only on 429 and 408. A `Retry-After` longer than 30 s is no longer cut short in-request.
+- Any 2xx is a delivered event, whatever its body. Ingest answers 204 with no body for a filtered event; that used to count as a failed send and re-send the event.
+- A final refusal (400, 415, 422) drops the event at once and counts it, instead of re-sending it on three flushes and then replaying it from the dead-letter store. Other 4xx answers (403 and 404 included, which a firewall or captive proxy can give), 401 (10-minute hold) and 413 (parked permanently) keep their existing paths.
+- Un-awaited `track()` calls can no longer push the queue past `maxQueueSize` or lose events: the limit is enforced with no await between push and eviction, writes to the dead-letter store run one at a time, and a dead-letter replay never fills the queue past its limit (the rest stays dead-lettered for the next replay).
+- When a flush stops on a temporary failure, the events it already delivered are removed from disk at once.
+
+### Install change
+- `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` are now peer dependencies, not dependencies. Install them in your app:
+    - Bare React Native: `npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage@^2 react-native-get-random-values` (pin `@^2`: an unpinned install takes 3.x, which is outside the peer range)
+    - Expo: `npx expo install @datalyr/react-native expo-application expo-device expo-network @react-native-async-storage/async-storage react-native-get-random-values`
+
+  Both are native modules. React Native CLI autolinking links only the packages listed in the app's own `package.json`, and Expo before SDK 54 does the same, so as nested dependencies they could load without their native code. An app that already lists both needs no change. AsyncStorage 3.x is not supported yet (it renames `multiRemove` to `removeMany`).
+
 
 ## [1.8.0] - 2026-10-30
 
@@ -17,8 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The first SDK launch on a device is now classified before the SDK creates any id. The test is whether a run of the app already happened here:
     - iOS: app folders and files (WebKit, Cookies, HTTPStorages, the URL cache, the preferences plist, the top level of Documents and Application Support) were created before this process started. StoreKit 2 `AppTransaction` (iOS 16+, production only, 3 s hard cap, never `refresh()`) and the app bundle's date against the data container's are cross-checks.
     - Android: `PackageInfo` `lastUpdateTime` is later than `firstInstallTime`, and app files predate this process.
-  The class is stored, so a kill before the event is queued re-fires the same class. This also fixes the RN-24 race: a kill between id creation and the install marker used to turn a real install into a silent upgrade.
-- An existing user who updated into a build with the SDK no longer sends `app_install`. That launch sends `$sdk_first_launch_existing` with `install_type: existing_user`, `detection_method` and a coarse `prior_install_age`. It carries no click ids, UTMs, Play referrer or Search Ads data. Devices that ran an older DATALYR build without the marker (RN-24) also send this event now, instead of nothing.
+  The class is stored, so a kill before the event is queued re-fires the same class. This also fixes a race: a kill between id creation and the install marker used to turn a real install into a silent upgrade.
+- An existing user who updated into a build with the SDK no longer sends `app_install`. That launch sends `$sdk_first_launch_existing` with `install_type: existing_user`, `detection_method` and a coarse `prior_install_age`. It carries no click ids, UTMs, Play referrer or Search Ads data. Devices that ran an older DATALYR build without the marker also send this event now, instead of nothing.
 - `app_install` now carries `install_type` (`new`, `reinstall` or `unknown`) and `detection_method`. An earlier run less than a day before this launch is `unknown`, and is still sent like an install: this covers apps that start the SDK only after consent or login.
 - Android: a second install marker lives in `noBackupFilesDir`, which Auto Backup never restores. A restored DATALYR state on a fresh install (a reinstall, or a new phone, set up in the last 30 days and never updated in place) now sends `app_install` with `install_type: reinstall`. Before, it sent nothing. The restored click ids, UTMs, journey and lookup state belong to the old install and are cleared first. An upgrade into 1.8.0 (including a phone move made on an older SDK) only gets the new marker. On later launches the check reads only the marker and the install times, with no file scan.
 - For an existing user, the deferred web-to-app IP lookup is marked resolved and never runs.
@@ -32,9 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.7.24] - 2026-10-29
 
+Never published to npm (the changes shipped in 1.8.0).
+
 ### Added
 - `alias(newUserId)` while a provisional id is current (and no explicit `previousId`) is a plain sign-in: it runs the no-reset identify and sends no `$alias`, because the server merges any `$alias` without the guest→account guards.
-- `identify(userId, properties, { provisional: true })` (instance and static, bare and Expo) for an app's own pre-login (guest) id. While a provisional id is the current user, every event (including `$identify` and `app_install`) carries `$provisional_user_id: true`. The marker is SDK-owned: a `$provisional_user_id` passed in properties is dropped. The server reads the marker in a later release; until then the guest-to-account join runs only on workspaces where it is turned on. A provisional identify is ignored while a signed-in user is current (it never resets). The next real `identify()` replaces it without the account-switch reset (same device ids, attribution and session); replacing one provisional id with another does not reset either. The flag is stored bound to the user id (`@datalyr/user_id_provisional` = `provisional:<hash of the id>`, so a stale flag never marks a different, real user) and survives a restart; `reset()` clears it. No `$alias` is sent.
+- `identify(userId, properties, { provisional: true })` (instance and static, bare and Expo) for an app's own pre-login (guest) id. While a provisional id is the current user, every event (including `$identify` and `app_install`) carries `$provisional_user_id: true`. The marker is SDK-owned: a `$provisional_user_id` passed in properties is dropped. A provisional identify is ignored while a signed-in user is current (it never resets). The next real `identify()` replaces it without the account-switch reset (same device ids, attribution and session); replacing one provisional id with another does not reset either. The flag is stored bound to the user id (`@datalyr/user_id_provisional` = `provisional:<hash of the id>`, so a stale flag never marks a different, real user) and survives a restart; `reset()` clears it. No `$alias` is sent.
 - `syncRevenueCatAttributes(handler)` and `syncSuperwallAttributes(handler)` (instance and static, bare and Expo). The handler receives `getRevenueCatAttributes()` / `getSuperwallAttributes()` once `initialize()` has finished and again, once per call, after every `reset()`, after an `identify()` that sent `$identify`, switched accounts or merged web attribution, and after `bindProviderIdentity()`. Calls run on a microtask after the DATALYR method completes. Before, `datalyr_id` set once at launch went stale after `reset()` rotated the anonymous id. Returns an unsubscribe function; registering again replaces the handler; handler errors are logged, never thrown. On login call `Purchases.logIn()` / `Superwall.shared.identify()` first, then `Datalyr.identify()`; on logout call `Purchases.logOut()` / `Superwall.shared.reset()` first, then `Datalyr.reset()`.
 - `bindProviderIdentity()` knows the `iclosed`, `commas`, `hubspot` and `calendly` namespaces (13 in all, matching the server). One list is shared by both entry points.
 
@@ -75,8 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A link with only a click id (any of the above, no `utm_source` / `lyr`) now records the first/last touch at startup. The gate checked only `utm_source`, `fbclid`, `gclid` and `lyr`, so e.g. a bare `?ttclid=` or `?li_fat_id=` link recorded no touch. `alart` alone still records none.
 
 ### Fixed
-- The first/last touch is recorded at startup only when the attribution is newer than the last recorded touch (port of iOS FSR-34). It used to be recorded on every cold start, appending a duplicate touchpoint and rolling the 90-day last-touch expiry forward each launch; with every click id now counting, any stored click id would have done this. Deep-link capture and the web→app merge stamp `attribution_captured_at` (SDK bookkeeping, never sent). Attribution persisted before this release has no stamp and records no new touch until the next deep link or web match.
-- Attribution persisted before TR-24 (only `li_click_id`) now fills `li_fat_id` on load, so LinkedIn clicks from those installs reach ingest under the key it reads. `li_click_id` is still read and still stored.
+- The first/last touch is recorded at startup only when the attribution is newer than the last recorded touch (port of the iOS SDK fix). It used to be recorded on every cold start, appending a duplicate touchpoint and rolling the 90-day last-touch expiry forward each launch; with every click id now counting, any stored click id would have done this. Deep-link capture and the web→app merge stamp `attribution_captured_at` (SDK bookkeeping, never sent). Attribution persisted before this release has no stamp and records no new touch until the next deep link or web match.
+- Attribution persisted by older releases (only `li_click_id`) now fills `li_fat_id` on load, so LinkedIn clicks from those installs reach ingest under the key it reads. `li_click_id` is still read and still stored.
 
 ### Notes
 - Raw `sccid` / `ScCid` / `li_click_id` keys (from older SDK builds or `$deep_link` params) are normalised to `sclid` / `li_fat_id` server-side by ingest. No SDK change is needed for them.
@@ -105,8 +142,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `bindProviderIdentity()` warns once per unknown namespace (anything outside the server's `KNOWN_EXTERNAL_NAMESPACES`) that no webhook will join it; the event is still sent.
 - iOS: `initialize()` warns once, unconditionally, when the native modules are not linked (Expo Go, or a build without `pod install`) so SKAdNetwork / IDFA / Apple Search Ads being disabled is no longer silent.
 - `getSuperwallAttributes()` / `getRevenueCatAttributes()` set `datalyr_id` to the internal `visitorId`, which is never sent to the server (the wire carries `anonymousId`, stored as `visitor_id`). The webhook visitor-id leg could therefore never match. Now sends `anonymousId`.
-- `alias()` defaulted `previousId` to `visitorId` (never on the wire); now `currentUserId` or `anonymousId`, so prior anonymous events actually link (port of iOS FSR-32).
-- SKAdNetwork registration on iOS 17.4+ sent a `0/low` postback value on every cold launch, resetting any in-window high-water value. Registration is now once per install (persisted flag; port of iOS FSR-3).
+- `alias()` defaulted `previousId` to `visitorId` (never on the wire); now `currentUserId` or `anonymousId`, so prior anonymous events actually link (port of the iOS SDK fix).
+- SKAdNetwork registration on iOS 17.4+ sent a `0/low` postback value on every cold launch, resetting any in-window high-water value. Registration is now once per install (persisted flag; port of the iOS SDK fix).
 - `PrivacyInfo.xcprivacy` no longer lists `ingest.datalyr.com` / `api.datalyr.com` under `NSPrivacyTrackingDomains`: iOS fails requests to listed domains until ATT is granted, which would block event ingest for un-prompted and denied users.
 - `errorLog` (dropped events, dead-letter moves, bad keys) is now visible in release builds, not only under `__DEV__`. The Expo build (`utils-expo.ts`) had its own `__DEV__`-gated copy; it now matches.
 - Event queue load now merges with events enqueued while the async load was in flight instead of replacing them.
@@ -189,6 +226,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `$web_attribution_matched`, which stays the bridge event downstream readers consume and
   still fires only on a real match.
 
+## [1.7.18] - 2026-08-02
+
+(entry added later)
+
+### Fixed
+- The deferred web attribution lookup is retried on a later launch until the server gives a definitive answer. Before, a failed first-launch lookup (for example an offline cold start) was never retried. Retries stop at the end of the server's 60-minute match window or after a capped number of attempts. Devices that already had the SDK are marked resolved on upgrade. `reset()` keeps this state.
+
+## [1.7.17] - 2026-08-02
+
+(entry added later)
+
+### Added
+- `bindProviderIdentity(namespace, providerUserId)` (instance and static, bare and Expo). Sends `$provider_identity_bound` with `external_ids`, so provider webhooks (RevenueCat, Superwall) can be joined to the install without the `datalyr_id` attribute.
+
+### Fixed
+- The RevenueCat attribute key is `datalyr_id`. It was `$datalyrId`, which RevenueCat strips because it reserves the `$` namespace.
+
 ## [1.7.16] - 2026-07-25
 
 ### Fixed
@@ -244,17 +298,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.7.13] - 2026-07-12
 
 ### Added
-- **A3-25: `schema_version` envelope stamp.** Every event now carries `schema_version: 1`,
+- **`schema_version` envelope stamp.** Every event now carries `schema_version: 1`,
   the first canonical envelope version shared across the SDK fleet, on both the bare and Expo
   entry points, so the ingest contract layer can key on one version marker.
-- **TR-18: caller-supplied `event_id` for idempotent delivery.** A non-empty string
+- **Caller-supplied `event_id` for idempotent delivery.** A non-empty string
   `properties.event_id` becomes the wire `eventId` (and is stripped from properties), mirroring
   the iOS/Node SDKs — a deterministic dedup key for a client that double-tracks a purchase
   alongside a Stripe/RevenueCat webhook. Omitted/empty → a fresh UUID. Both bare + Expo.
 
 ### Fixed
 - **Track-3 review P2: event-name validation no longer silently drops previously-valid names.**
-  The TR-20a tightening (`/^[A-Za-z0-9_.$-]+$/`) plus a whitespace-only `normalizeEventName` meant an
+  The earlier tightening (`/^[A-Za-z0-9_.$-]+$/`) plus a whitespace-only `normalizeEventName` meant an
   existing app calling `track('checkout:step_1')` — or any non-ASCII name like `購入完了` — had the
   event DROPPED on upgrade (and the reject log was `__DEV__`-only, so prod was silent). The charset
   now matches iOS's Unicode alphanumerics (`/^[\p{L}\p{N}_.$-]+$/u`), and `normalizeEventName` maps
@@ -268,7 +322,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `identify(email)` retries. (Verified `checkAppVersion` is a no-op parity concern — it's an
   exported consumer helper that the SDK never auto-invokes, and both builds already ship the same
   manual `trackAppUpdate`.)
-- **TR-20: the Expo and bare entry points silently diverged.** (a) Event-name validation:
+- **The Expo and bare entry points silently diverged.** (a) Event-name validation:
   bare accepted any non-empty string while Expo rejected anything with a space, so
   `track('Order Completed')` recorded on bare and was silently DROPPED on Expo. Both now
   normalize spaces→underscores (with a warn) and validate against one fleet charset
@@ -284,10 +338,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The per-event property shaping is now a single pure module (`src/ecommerce-properties.ts`)
   imported by **both** entry points, and each builder emits BOTH the canonical Meta key (which
   the server's postback `fromAny()` reads first, and forwards verbatim to Pixel/CAPI) AND the
-  legacy alias (emit-both, like the web SDK's `utm_*` / FSR-13), so every existing dashboard/rule
+  legacy alias (emit-both, like the web SDK's `utm_*`), so every existing dashboard/rule
   keeps working. `viewContent` also now defaults `content_type` to `"product"` on Expo (bare
   already did). +7 tests, 57/57.
-- **TR-24: LinkedIn clicks were never captured; Impact clicks used a non-canonical name.** The
+- **LinkedIn clicks were never captured; Impact clicks used a non-canonical name.** The
   capture whitelist had `li_click_id` (a param LinkedIn never sends) instead of `li_fat_id`
   (LinkedIn's real param), and `irclickid` had no mapping. Now captures `li_fat_id`/`irclid`
   (canonical wire names), maps legacy `li_click_id`→`li_fat_id` and `irclickid`→`irclid`, and
@@ -298,31 +352,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **9.C.3: SKAdNetwork/AdAttributionKit registration now runs at init** (`registerForAttribution()`,
   iOS-only, swallow-and-log) so the first conversion-value update isn't dropped for not being
   registered. Both variants.
-- **TR-21 (data loss): `app_install` could be permanently lost.** The first-launch marker
+- **Data loss: `app_install` could be permanently lost.** The first-launch marker
   (`@datalyr/first_launch_time`) was persisted during attribution init — *before* `app_install`
   was tracked — so a crash/kill in between made the next launch look like a returning user and
   `app_install` was never sent. The marker is now committed by `markInstallTracked()` only AFTER
   `app_install` is enqueued (in-memory `install_time`/`isInstall()` are unaffected), so an
   interrupted first launch re-fires `app_install`. Both bare + Expo.
-- **TR-28 (identity bleed): `reset()` cleared attribution AFTER rotating ids, and left the
+- **Identity bleed: `reset()` cleared attribution AFTER rotating ids, and left the
   journey.** A `track()` interleaving reset could emit the NEW visitor id with the OLD click-ids
   (crediting the new user to the old user's ad click), and the per-identity journey carried A→B.
   `reset()` now wipes attribution + `journeyManager.clearJourney()` BEFORE rotating anon/visitor/
   session ids (auto-events re-reads the id via its `getSessionId` callback). Both bare + Expo.
-- **TR-08 (session corruption): the session id could rotate mid-session with no `session_start`.**
+- **Session corruption: the session id could rotate mid-session with no `session_start`.**
   `LAST_SESSION_TIME` was refreshed only by `getOrCreateSessionId` (init / foreground / reset) —
   never by `track()` — so after >30 min of continuous foreground use the next background→foreground
   wrongly rotated `session_id` while auto-events resumed the old session: events carried a session
   id that never got a `session_start`, and `session_end` fired with the old id, corrupting every
   session join >30 min. `track()` now refreshes `LAST_SESSION_TIME` via a throttled `touchSession()`
   (one write per 60s) in both the bare and Expo variants.
-- **TR-19 (session race): `session_start` could carry the stale session id on foreground.** The
+- **Session race: `session_start` could carry the stale session id on foreground.** The
   AppState `active` handler ran `refreshSession()` and `handleAppForeground()` concurrently and
   unawaited, so on a genuine expiry `session_start` could emit with the OLD id while later events
   carried the NEW one. It now `await`s `refreshSession()` before notifying auto-events (both variants).
 
 ### Changed
-- **TR-26: `ios/PrivacyInfo.xcprivacy` now accurately declares tracking.** It said
+- **`ios/PrivacyInfo.xcprivacy` now accurately declares tracking.** It said
   `NSPrivacyTracking=false` with empty domains and every data type `Linked/Tracking=false`,
   while the SDK reads the IDFA when ATT-authorized, attaches it to events, and forwards
   click-ids / hashed email+phone / purchases to third-party ad CAPI. Now declares
@@ -337,53 +391,64 @@ Full-stack review (FULL_STACK_REVIEW_2026-06-10) fixes. JS-only, applied to BOTH
 React Native and Expo entry points. No native changes.
 
 ### Fixed
-- **Deep-link & Play Install Referrer parsing on bare React Native (FSR-8, FSR-43).** Hermes
+- **Deep-link & Play Install Referrer parsing on bare React Native.** Hermes
   ships throwing stubs for `URL.searchParams` / `URLSearchParams`, so deep-link and
   Play-referrer attribution params (lyr, fbclid, gclid, ttclid, utm_*, gbraid, wbraid) were
   silently dropped on bare RN. Replaced with a dependency-free query-string parser
   (`parseQueryString`) that decodes per component; the Play referrer is now parsed raw
   (no whole-string pre-decode that corrupted encoded `&`/`=` and threw on a stray `%`).
-- **`destroy()` no longer permanently bricks the SDK (FSR-9).** `initializing` is now cleared
+- **`destroy()` no longer permanently bricks the SDK.** `initializing` is now cleared
   in a `finally` and reset in `destroy()`, which also tears down the attribution + auto-events
   managers. A `destroy()` → `initialize()` cycle re-initializes and delivers events again.
-- **`$alias` writes the correct identity link (FSR-10, FSR-40).** `createEventPayload` no
+- **`$alias` writes the correct identity link.** `createEventPayload` no
   longer clobbers the `$alias` event's `userId` with a stale identified user, and a pre-init
   `alias()` now backfills a truthy `previousId` at payload time — so `visitor_user_links` is
   written for the intended user (ingest reads camelCase `ed.userId`/`ed.previousId`).
-- **Dead-letter replay (FSR-11, FSR-42).** Events that exhaust retries or evict on overflow
+- **Dead-letter replay.** Events that exhaust retries or evict on overflow
   are now replayed on init and on offline→online reconnect (bounded by a replay counter +
   age cap), instead of being write-only-lost. Connectivity-class failures no longer burn the
   retry budget. HTTP 429/408 are treated as retryable backpressure and honor `Retry-After`.
-- **Network online-ness change detection (FSR-12).** The network manager now notifies on a
+- **Network online-ness change detection.** The network manager now notifies on a
   change in the *derived* online value (`isConnected && isInternetReachable !== false`), so
   reachability-only transitions (captive portals, WiFi-without-internet) no longer leave the
   queue stuck offline or stuck online.
-- **Web attribution merge completeness (FSR-37).** `mergeWebAttribution` now gap-fills
+- **Web attribution merge completeness.** `mergeWebAttribution` now gap-fills
   gbraid/wbraid/fbp/_fbp/fbc/_fbc/lyr (previously dropped) and awaits the save.
-- **Session correctness (FSR-38, FSR-39, FSR-98).** `session_start`/`session_end` now use the
+- **Session correctness.** `session_start`/`session_end` now use the
   canonical wire `session_id`; `session_start` fires only on a genuinely new session;
   `session_end` duration is measured to last activity (excludes the background gap) and the
   `events` count is wired. Expo session timeout is now an idle/sliding window like RN.
-- **`reset()` rotates the anonymous id and forces a new session (FSR-41).** Prevents logout→
+- **`reset()` rotates the anonymous id and forces a new session.** Prevents logout→
   login on one device merging two users in the identity graph.
-- **Journey records click-id-only deep links (FSR-44).** First/last-touch now record for the
+- **Journey records click-id-only deep links.** First/last-touch now record for the
   default Meta-ad shape (`?fbclid=...` with no UTMs).
-- **Degraded device-info fallback (FSR-45).** Uses the real runtime locale instead of a
+- **Degraded device-info fallback.** Uses the real runtime locale instead of a
   hardcoded `en-US` (which fabricated `country=US` for every event), and persists a stable
   fallback device id.
-- **Caller event fields win over persisted attribution (FSR-85).** `createEventPayload` spreads
+- **Caller event fields win over persisted attribution.** `createEventPayload` spreads
   attribution first and caller `eventData` last; the email web-attribution path now merges
   before tracking (matching the IP path).
-- **Identity / lookup robustness (FSR-94, FSR-95, FSR-96, FSR-97).** A mid-init `identify()` is
+- **Identity / lookup robustness.** A mid-init `identify()` is
   no longer overwritten by the persisted user; the web-attribution lookup is marked checked
   only after the body parses; the queue drain measures progress by removals (so a concurrent
   enqueue can't strand a just-queued terminal event); and corrupted persisted queue entries
   are filtered on load instead of jamming the queue head.
 
-## [1.7.8] - 2026-05-31
+## [1.7.11] - 2026-06-10
 
-### Changed
-- **Web→app email attribution now emits the canonical `$web_attribution_matched` event** (with `match_method: 'email'`) instead of the separate `$web_attribution_merged`. The email/`identify()` match path and the IP/deferred match path now fire the same event name, distinguished by `match_method` (`'email'` vs `'ip'`). This lets the server-side attribution bridges (Meta CAPI recovery, trackable-link `lyr`) recover web attribution for webhook conversions from email matches — previously only IP matches bridged, because no server reader consumed `$web_attribution_merged`. No API or integration changes required.
+(entry added later)
+
+### Fixed
+- `initialize()` is idempotent. A repeat call (hot reload, double call) no longer adds a second AppState listener and network subscription or sends a duplicate `session_start`.
+- A deep link is handled once. Before, each `AttributionManager.initialize()` added another `Linking` listener.
+- When the event queue is full, the oldest event goes to the dead-letter store with an error log instead of being dropped silently.
+
+## [1.7.10] - 2026-06-10
+
+(entry added later)
+
+### Fixed
+- Events queued before a cold start are no longer sent with an empty API key (401, then dead-lettered). `initialize()` now stops the placeholder queue built in the constructor before it creates the configured one.
 
 ## [1.7.9] - 2026-06-03
 
@@ -408,6 +473,11 @@ network wiring, locale region) that were committed under 1.7.8 but never publish
 
 ### Known (flagged, not changed — require decisions)
 - `mergeWebAttribution` is gap-fill-only despite a "web wins for first-touch" comment.
+
+## [1.7.8] - 2026-05-31
+
+### Changed
+- **Web→app email attribution now emits the canonical `$web_attribution_matched` event** (with `match_method: 'email'`) instead of the separate `$web_attribution_merged`. The email/`identify()` match path and the IP/deferred match path now fire the same event name, distinguished by `match_method` (`'email'` vs `'ip'`). This lets the server-side attribution bridges (Meta CAPI recovery, trackable-link `lyr`) recover web attribution for webhook conversions from email matches — previously only IP matches bridged, because no server reader consumed `$web_attribution_merged`. No API or integration changes required.
 
 ## [1.6.0] - 2026-03
 
