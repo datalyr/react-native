@@ -83,7 +83,15 @@
     "typescript": "^5.7.0"
   },
   "overrides": {
-    "glob@^10": "^14.0.6"
+    "@jest/reporters": {
+      "glob": "^14.0.6"
+    },
+    "jest-config": {
+      "glob": "^14.0.6"
+    },
+    "jest-runtime": {
+      "glob": "^14.0.6"
+    }
   },
   "react-native": "src/index.ts",
   "exports": {
