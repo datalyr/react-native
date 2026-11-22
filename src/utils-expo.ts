@@ -71,7 +71,7 @@ export const generateUUID = (): string => {
   return uuidv4();
 };
 
-// TR-20: unify the session-id FORMAT with the bare build (utils.ts) — `sess_<ts>_<rand>` — so
+// unify the session-id FORMAT with the bare build (utils.ts) — `sess_<ts>_<rand>` — so
 // both variants' context.session_id look identical. Expo previously used a bare UUID here.
 export const generateSessionId = (): string => {
   return `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -267,9 +267,9 @@ export const getOrCreateSessionId = async (): Promise<string> => {
     const sessionTimeout = 30 * 60 * 1000; // 30 minutes
     const now = Date.now();
 
-    // LAST_SESSION_TIME tracks the last ACTIVITY: refreshed on every reuse below AND (TR-08) by
+    // LAST_SESSION_TIME tracks the last ACTIVITY: refreshed on every reuse below AND by
     // touchSession() on every tracked event, so the 30-min idle window genuinely slides with
-    // usage — matching the RN build (utils.ts). Before TR-08 this function was the only writer
+    // usage — matching the RN build (utils.ts). Before that change this function was the only writer
     // (init/foreground/reset), so a long continuous-foreground stretch left the stored time
     // stale and the "sliding window" didn't actually slide. SESSION_START is still written for
     // back-compat, but the timeout is anchored to last activity.
@@ -301,7 +301,7 @@ export const getOrCreateSessionId = async (): Promise<string> => {
   }
 };
 
-// TR-08: throttle (see utils.ts). Refresh LAST_SESSION_TIME on real event activity so the idle
+// throttle (see utils.ts). Refresh LAST_SESSION_TIME on real event activity so the idle
 // window actually slides during continuous foreground use — getOrCreateSessionId (init/foreground/
 // reset) was the only writer, so a long active stretch left the stored activity time stale and the
 // next background→foreground rotated the session id mid-use. One write per 60s; best-effort.
@@ -449,7 +449,7 @@ const refreshNetworkType = async (): Promise<void> => {
 };
 
 // Event validation
-// TR-20 / fleet charset (matches iOS + the bare build): alphanumerics + _ - . and $ (system
+// Fleet charset (matches iOS + the bare build): alphanumerics + _ - . and $ (system
 // events like $identify), max 100 chars. Spaces are normalized to underscores below rather than
 // dropping the event — Expo used to silently drop track('Order Completed') while bare accepted it.
 const EVENT_NAME_PATTERN = /^[\p{L}\p{N}_.$-]+$/u;

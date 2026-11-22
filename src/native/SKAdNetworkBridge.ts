@@ -13,7 +13,7 @@ const SKAN_HIGH_COARSE_KEY = '@datalyr/skan_high_coarse'; // rank: 0=low 1=mediu
 const SKAN_WINDOW_LOCKED_KEY = '@datalyr/skan_window_locked';
 // Registration is once per install. On iOS 17.4+ the native call sends a real
 // 0/low postback value; re-sending it on every cold launch would reset any
-// in-window high-water value (same bug the iOS SDK fixed as FSR-3).
+// in-window high-water value (same bug the iOS SDK fixed).
 const SKAN_REGISTERED_KEY = '@datalyr/skan_registered';
 
 const coarseRank = (coarse: string): number => {

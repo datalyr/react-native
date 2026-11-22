@@ -44,7 +44,7 @@ import {
   completeRegistrationProperties,
   searchProperties,
   leadProperties,
-} from './ecommerce-properties';  // shared with bare build — single source of truth (A3-14c)
+} from './ecommerce-properties';  // shared with bare build — single source of truth
 import { SDK_VERSION } from './version';
 import { createHttpClient, HttpClient, utf8ByteLength } from './http-client';
 import { createEventQueue, EventQueue } from './event-queue';
@@ -201,7 +201,7 @@ export class DatalyrSDKExpo {
         maxRetryCount: this.state.config.maxRetries || 3,
       });
 
-      // RN-22 / RN-24: must run BEFORE id creation — detectInstall()'s upgrade
+      // must run BEFORE id creation — detectInstall()'s upgrade
       // guard uses @datalyr/visitor_id etc. as evidence of a prior install, so
       // reading it after the lines below would see this launch's own fresh id.
       attributionManager.setDeepLinkHandler((params, url) => {
@@ -226,7 +226,7 @@ export class DatalyrSDKExpo {
       const initialAttribution = attributionManager.getAttributionData();
       // Any click id counts (was fbclid/gclid only), so a bare ?li_fat_id= / ?ttclid= /
       // ?aleid= link records a touch. alart is an app-user id, not a click.
-      // Fresh only (port of iOS FSR-34): attribution persists forever, so recording it on
+      // Fresh only (port of the iOS SDK): attribution persists forever, so recording it on
       // every cold start appended a duplicate touchpoint and rolled the 90-day last-touch
       // expiry forward each launch. Record only when the capture time is newer than the last
       // recorded touch; 0 (persisted before this field existed) counts as not new.
@@ -280,7 +280,7 @@ export class DatalyrSDKExpo {
         }
       }, 50);
 
-      // RN-18: wire network status into the event queue. Expo previously had NO network
+      // wire network status into the event queue. Expo previously had NO network
       // monitoring, so the queue stayed isOnline=true forever — offline events failed,
       // burned their retries, and were dropped, and nothing re-sent on reconnect.
       void this.initializeNetworkMonitoring();
@@ -364,7 +364,7 @@ export class DatalyrSDKExpo {
           ...installData,
           ...(attributionManager.getInstallClassification() ?? {}),
         });
-        // TR-21: commit the first-launch marker only AFTER app_install is durably enqueued.
+        // commit the first-launch marker only AFTER app_install is durably enqueued.
         await attributionManager.markInstallTracked();
       }
 
@@ -413,7 +413,7 @@ export class DatalyrSDKExpo {
         return;
       }
 
-      // TR-20: normalize (spaces → underscores) then validate against the fleet charset, so the
+      // normalize (spaces → underscores) then validate against the fleet charset, so the
       // rest of this method uses one canonical name and bare/Expo behave identically (Expo used
       // to silently DROP a name with a space that bare accepted).
       const name = normalizeEventName(eventName);
@@ -440,7 +440,7 @@ export class DatalyrSDKExpo {
       const payload = await this.createEventPayload(name, eventData);
       await this.eventQueue.enqueue(payload);
 
-      // TR-08: refresh the STORAGE session-activity time on real event activity (throttled to
+      // refresh the STORAGE session-activity time on real event activity (throttled to
       // 60s) so the idle window actually slides during continuous foreground use — getOrCreate
       // SessionId (init/foreground/reset) was the only writer. Fire-and-forget.
       void touchSession();
@@ -528,7 +528,7 @@ export class DatalyrSDKExpo {
       // Match the bare RN entrypoint: a direct identify(A) -> identify(B) transition is
       // an implicit logout, so B cannot inherit A's visitor graph or click attribution.
       // Not from a provisional id: provisional -> real and provisional -> provisional are
-      // the same person on the same install (server §2.10), so there is nothing to reset.
+      // the same person on the same install, so there is nothing to reset.
       // A provisional identify never resets.
       let didReset = false;
       if (
@@ -553,7 +553,7 @@ export class DatalyrSDKExpo {
       // nothing. Measured 2026-07-25: 6.8 identifies/visitor/day on shipped
       // builds, worst single user 129 in 24h. The identity hash includes the visitor id
       // so a rotation (reset/new install) always re-emits and links are never lost.
-      // RN-23: HASH the identity — never persist the raw identity.
+      // HASH the identity — never persist the raw identity.
       //
       // The 1.7.15 version stored this string verbatim in plaintext AsyncStorage,
       // which meant the suppression feature itself wrote PII at rest:
@@ -613,7 +613,7 @@ export class DatalyrSDKExpo {
 
       // Fetch and merge web attribution if email is provided.
       //
-      // RN-19: runs on EVERY identify — redundant or not — and must stay OUTSIDE
+      // runs on EVERY identify — redundant or not — and must stay OUTSIDE
       // the suppression branch above. 1.7.15 returned early on a redundant
       // identify, putting this out of reach: fetchAndMergeWebAttribution marks an
       // email hash checked ONLY after a definitive 200, precisely so a transient
@@ -1096,7 +1096,7 @@ export class DatalyrSDKExpo {
 
       // A provisional (pre-login) id is not an account to alias from: the server
       // treats any `$alias` as an unconditional merge, while the guest→account
-      // join must go through its §2.10 guards. Signing in from a guest is a
+      // join must go through its guards. Signing in from a guest is a
       // plain identify (same install, no reset, no `$alias`).
       if (!previousId && this.state.currentUserId && this.currentUserProvisional) {
         await this.identify(newUserId);
@@ -1153,7 +1153,7 @@ export class DatalyrSDKExpo {
       // account switch always re-emits (the new identity must relink).
       await Storage.removeItem(STORAGE_KEYS.LAST_IDENTITY_HASH);
 
-      // TR-28: wipe the previous user's attribution + journey BEFORE rotating ids, so a
+      // wipe the previous user's attribution + journey BEFORE rotating ids, so a
       // track() that interleaves reset can never emit the NEW visitor id WITH the OLD
       // click-ids (fbclid/gclid/fbc/utm/lyr ride EVERY event via createEventPayload and feed
       // Meta CAPI; the journey is per-identity). Preserves the install marker (wiping it would
@@ -1323,8 +1323,8 @@ export class DatalyrSDKExpo {
   // Standard e-commerce events with platform forwarding
 
   async trackAddToCart(value: number, currency: string, contentId?: string, contentName?: string): Promise<void> {
-    // A3-14c: shared builder emits content_id/content_name (canonical) + product_id/product_name
-    // (legacy alias). TR-20(b): route through SKAN like bare (was plain track() → mid-funnel
+    // shared builder emits content_id/content_name (canonical) + product_id/product_name
+    // (legacy alias). route through SKAN like bare (was plain track() → mid-funnel
     // conversion values never updated on Expo).
     await this.trackWithSKAdNetwork('add_to_cart', addToCartProperties(value, currency, contentId, contentName));
   }
@@ -1334,24 +1334,24 @@ export class DatalyrSDKExpo {
   }
 
   async trackInitiateCheckout(value?: number, currency?: string, numItems?: number, contentIds?: string[]): Promise<void> {
-    // A3-14c: emits content_ids (canonical) + product_ids (legacy alias).
-    // TR-20(b): route mid-funnel events through SKAN like the bare build (was plain track()).
+    // emits content_ids (canonical) + product_ids (legacy alias).
+    // route mid-funnel events through SKAN like the bare build (was plain track()).
     await this.trackWithSKAdNetwork('initiate_checkout', initiateCheckoutProperties(value, currency, numItems, contentIds));
   }
 
   async trackCompleteRegistration(registrationMethod?: string): Promise<void> {
-    // A3-14c: emits registration_method (canonical) + method (legacy alias).
-    // TR-20(b): route through SKAN like the bare build.
+    // emits registration_method (canonical) + method (legacy alias).
+    // route through SKAN like the bare build.
     await this.trackWithSKAdNetwork('complete_registration', completeRegistrationProperties(registrationMethod));
   }
 
   async trackSearch(searchString: string, contentIds?: string[]): Promise<void> {
-    // A3-14c: emits search_string/content_ids (canonical) + query/result_ids (legacy alias).
+    // emits search_string/content_ids (canonical) + query/result_ids (legacy alias).
     await this.track('search', searchProperties(searchString, contentIds));
   }
 
   async trackLead(value?: number, currency?: string): Promise<void> {
-    // TR-20(b): route through SKAN like the bare build.
+    // route through SKAN like the bare build.
     await this.trackWithSKAdNetwork('lead', leadProperties(value, currency));
   }
 
@@ -1394,7 +1394,7 @@ export class DatalyrSDKExpo {
   // MARK: - Third-Party Integration Methods
 
   /**
-   * Bind a provider-side user id to this install (person contract §8).
+   * Bind a provider-side user id to this install.
    * Mirror of datalyr-sdk.ts — call with exactly the id you hand the
    * provider (RevenueCat appUserID, Superwall appUserId). Idempotent.
    */
@@ -1575,7 +1575,7 @@ export class DatalyrSDKExpo {
     set('ttclid', attribution.ttclid);
     set('idfa', advertiser?.idfa);
     set('gaid', advertiser?.gaid);
-    // RN-13: map the numeric ATT status to the same string the RN build sends, so
+    // map the numeric ATT status to the same string the RN build sends, so
     // Superwall audiences are consistent across the two builds (was raw number on Expo).
     if (advertiser?.att_status != null) {
       const statusMap: Record<number, string> = { 0: 'notDetermined', 1: 'restricted', 2: 'denied', 3: 'authorized' };
@@ -1731,7 +1731,7 @@ export class DatalyrSDKExpo {
     // Use cached advertiser info (IDFA/GAID, ATT status) — cached at init, refreshed on ATT change
     const advertiserInfo = this.cachedAdvertiserInfo;
 
-    // TR-18: honor a caller-supplied idempotency key (non-empty string properties.event_id) as
+    // honor a caller-supplied idempotency key (non-empty string properties.event_id) as
     // the wire eventId, stripping it from properties. Mirrors iOS/Node semantics. Else a UUID.
     const callerEventId = (typeof eventData?.event_id === 'string' && eventData.event_id.trim().length > 0)
       ? eventData.event_id
@@ -1773,7 +1773,7 @@ export class DatalyrSDKExpo {
         carrier: deviceInfo.carrier,
         network_type: networkType,
         sdk_version: SDK_VERSION,
-        schema_version: 1, // A3-25: versioned-envelope stamp (see web SDK)
+        schema_version: 1, // versioned-envelope stamp (see web SDK)
         sdk_variant: 'expo',
         // Advertiser data (IDFA/GAID, ATT status) for server-side postback
         ...(advertiserInfo ? {
@@ -1796,7 +1796,7 @@ export class DatalyrSDKExpo {
           ? {}
           : playInstallReferrerIntegration.getAttributionData()),
         // Caller-supplied event properties WIN over all auto/attribution fields above.
-        // TR-18: cleanedEventData is eventData minus a consumed event_id (now the wire eventId).
+        // cleanedEventData is eventData minus a consumed event_id (now the wire eventId).
         ...cleanedEventData,
         // Always SDK-stamped (not caller-overridable).
         timestamp: Date.now(),
@@ -1826,7 +1826,7 @@ export class DatalyrSDKExpo {
     }
 
     // Provisional (pre-login) user id: mark every event that carries it, so the server
-    // can treat it as a guest id (§2.10) rather than a signed-in account. Matched on the
+    // can treat it as a guest id rather than a signed-in account. Matched on the
     // event's own userId, so a $alias naming a different id is not marked.
     // SDK-owned: a caller-set value is removed.
     if (payload.eventData) {
@@ -1910,7 +1910,7 @@ export class DatalyrSDKExpo {
             this.autoEventsManager.handleAppBackground();
           }
         } else if (nextAppState === 'active') {
-          // TR-19: AWAIT the session refresh before notifying auto-events so a genuine expiry
+          // AWAIT the session refresh before notifying auto-events so a genuine expiry
           // rotates this.state.sessionId first — the unawaited version raced, letting
           // session_start emit with the OLD id while subsequent events carried the NEW one.
           await this.refreshSession();

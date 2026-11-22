@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Validates that the iOS native code compiles successfully.
-# Uses capper-expo (or any Expo app) as a test harness.
+# Uses any Expo app as a test harness.
 #
 # Usage:
 #   ./scripts/validate-ios.sh                          # uses default test app

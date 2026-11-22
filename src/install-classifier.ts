@@ -3,8 +3,8 @@
  *
  * The SDK used to fire `app_install` on its first launch, keyed only on its own
  * storage marker, so an app that added DATALYR in an update reported every
- * existing user as an install (Clema 2026-10: ~3,300 of 3,563, 952 sent to Meta).
- * RN-24 only caught devices that had run an OLDER DATALYR build. The question is
+ * existing user as an install (thousands of existing users in one app).
+ * The earlier guard only caught devices that had run an OLDER DATALYR build. The question is
  * "did a build of this app already run here before this process": files the app
  * wrote in an earlier process predate this process's start, and on Android an
  * app updated in place has lastUpdateTime > firstInstallTime.
@@ -77,7 +77,7 @@ function classification(install_type: InstallType, detection_method: string, ext
 }
 
 /**
- * The decision. `priorSdk` = keys an older DATALYR build left (RN-24); `hint` =
+ * The decision. `priorSdk` = keys an older DATALYR build left; `hint` =
  * the app's own existingUserHint.
  */
 export function classifyInstall(

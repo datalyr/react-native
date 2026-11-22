@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- TR-26: this SDK DOES track. When ATT-authorized it reads the IDFA and attaches it to
+    <!-- This SDK DOES track. When ATT-authorized it reads the IDFA and attaches it to
          events, and it forwards click-ids / hashed email+phone / purchases to third-party ad
          platforms (Meta/Google/TikTok/Snap CAPI) for cross-app attribution. NSPrivacyTracking
          is therefore true, and the collected data types are flagged Linked (associated with

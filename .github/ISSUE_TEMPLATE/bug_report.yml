@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a problem with the DATALYR React Native SDK.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include API keys, user data or other secrets. Report security problems as described in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: SDK version
+      placeholder: "1.8.0"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Platform, OS version, React Native or Expo version.
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Write what you expected and what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest code sample that shows the problem.
+      render: typescript
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Set `debug` to true. Then paste the related log lines.
+      render: shell
