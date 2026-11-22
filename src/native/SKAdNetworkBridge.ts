@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { requireNativeModule } from 'expo-modules-core';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sdkDebugLog } from '../debug-log';
 
 // 9.C.2: persisted SKAN high-water state (cross-launch monotonic guard). SKAN 4 accepts
 // DECREASING conversion values, so an unguarded low-funnel event after a high-funnel one
@@ -154,7 +155,7 @@ export class SKAdNetworkBridge {
   private static async passesHighWater(result: SKANConversionResult): Promise<boolean> {
     const state = await this.readConversionState();
     if (state.locked) {
-      console.log('[Datalyr] SKAN: skipping update (conversion window locked)');
+      sdkDebugLog('[Datalyr] SKAN: skipping update (conversion window locked)');
       return false;
     }
     const newRank = coarseRank(result.coarseValue);
@@ -162,7 +163,7 @@ export class SKAdNetworkBridge {
       result.fineValue > state.fine ||
       (result.fineValue === state.fine && newRank > state.coarseRank);
     if (!isHigher) {
-      console.log(`[Datalyr] SKAN: skipping update (fine=${result.fineValue}, coarse=${result.coarseValue} not higher than persisted high-water fine=${state.fine})`);
+      sdkDebugLog(`[Datalyr] SKAN: skipping update (fine=${result.fineValue}, coarse=${result.coarseValue} not higher than persisted high-water fine=${state.fine})`);
     }
     return isHigher;
   }
@@ -234,7 +235,7 @@ export class SKAdNetworkBridge {
 
     try {
       const success = await DatalyrSKAdNetwork.updateConversionValue(value);
-      console.log(`[Datalyr] SKAdNetwork conversion value updated: ${value}`);
+      sdkDebugLog(`[Datalyr] SKAdNetwork conversion value updated: ${value}`);
       return success;
     } catch (error) {
       console.warn('[Datalyr] Failed to update SKAdNetwork conversion value:', error);
@@ -279,9 +280,9 @@ export class SKAdNetworkBridge {
 
         const isSKAN4 = await SKAdNetworkBridge.isSKAN4Available();
         if (isSKAN4) {
-          console.log(`[Datalyr] SKAN 4.0 postback updated: fineValue=${result.fineValue}, coarseValue=${result.coarseValue}, lockWindow=${result.lockWindow}`);
+          sdkDebugLog(`[Datalyr] SKAN 4.0 postback updated: fineValue=${result.fineValue}, coarseValue=${result.coarseValue}, lockWindow=${result.lockWindow}`);
         } else {
-          console.log(`[Datalyr] SKAN 3.0 fallback: conversionValue=${result.fineValue}`);
+          sdkDebugLog(`[Datalyr] SKAN 3.0 fallback: conversionValue=${result.fineValue}`);
         }
 
         if (response.success) {
@@ -377,7 +378,7 @@ export class SKAdNetworkBridge {
       if (result?.registered) {
         await AsyncStorage.setItem(SKAN_REGISTERED_KEY, String(result.framework || 'skadnetwork'));
       }
-      console.log(`[Datalyr] Registered for attribution: ${result.framework}`);
+      sdkDebugLog(`[Datalyr] Registered for attribution: ${result.framework}`);
       return result;
     } catch (error) {
       console.warn('[Datalyr] Failed to register for attribution:', error);
@@ -473,7 +474,7 @@ export class SKAdNetworkBridge {
         result.lockWindow
       );
 
-      console.log(`[Datalyr] AdAttributionKit re-engagement updated: fineValue=${result.fineValue}, coarseValue=${result.coarseValue}, lockWindow=${result.lockWindow}`);
+      sdkDebugLog(`[Datalyr] AdAttributionKit re-engagement updated: fineValue=${result.fineValue}, coarseValue=${result.coarseValue}, lockWindow=${result.lockWindow}`);
       return response;
     } catch (error) {
       console.warn('[Datalyr] Failed to update re-engagement conversion value:', error);
@@ -561,7 +562,7 @@ export class SKAdNetworkBridge {
 
     try {
       const result = await DatalyrSKAdNetwork.setPostbackEnvironment(environment);
-      console.log(`[Datalyr] Postback environment: ${result.environment}`);
+      sdkDebugLog(`[Datalyr] Postback environment: ${result.environment}`);
       return result;
     } catch (error) {
       console.warn('[Datalyr] Failed to set postback environment:', error);
@@ -638,7 +639,7 @@ export class SKAdNetworkBridge {
         windowIndex
       );
 
-      console.log(`[Datalyr] Postback updated for window ${windowIndex}: fineValue=${result.fineValue}, overlapping=${response.overlappingWindows}`);
+      sdkDebugLog(`[Datalyr] Postback updated for window ${windowIndex}: fineValue=${result.fineValue}, overlapping=${response.overlappingWindows}`);
       return response;
     } catch (error) {
       console.warn('[Datalyr] Failed to update postback with window:', error);

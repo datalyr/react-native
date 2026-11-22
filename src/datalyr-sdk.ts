@@ -35,6 +35,7 @@ import {
   STORAGE_KEYS,
   warnAboutIgnoredOptions,
 } from './utils';
+import { setDebugLogging } from './debug-log';
 import {
   purchaseProperties,
   addToCartProperties,
@@ -166,10 +167,11 @@ export class DatalyrSDK {
         return;
       }
       this.initializing = true;
+      setDebugLogging(config.debug === true);
 
       // Validate configuration
       if (!config.apiKey) {
-        throw new Error('apiKey is required for Datalyr SDK v1.0.0');
+        throw new Error('apiKey is required for Datalyr SDK');
       }
       
       // workspaceId is now optional (for backward compatibility)
@@ -1533,6 +1535,8 @@ export class DatalyrSDK {
 
   /**
    * Get deferred attribution data from platform SDKs
+   * @deprecated Always returns null. Deferred web attribution is applied automatically at
+   * install; read it with getAttributionData().
    */
   getDeferredAttributionData(): DeferredDeepLinkResult | null {
     return null;
@@ -1857,46 +1861,6 @@ export class DatalyrSDK {
     // A grant re-opens the deferred lookup the server declined without it. Not awaited:
     // the caller is usually mid-onboarding and must not wait on a network round trip.
     void this.rerunDeferredLookupIfAttGranted();
-  }
-
-  /**
-   * Handle deferred deep link data from platform SDKs
-   */
-  private async handleDeferredDeepLink(data: DeferredDeepLinkResult): Promise<void> {
-    try {
-      debugLog('Processing deferred deep link:', data);
-
-      // Track deferred attribution event
-      await this.track('$deferred_deep_link', {
-        url: data.url,
-        source: data.source,
-        fbclid: data.fbclid,
-        ttclid: data.ttclid,
-        utm_source: data.utmSource,
-        utm_medium: data.utmMedium,
-        utm_campaign: data.utmCampaign,
-        utm_content: data.utmContent,
-        utm_term: data.utmTerm,
-        campaign_id: data.campaignId,
-        adset_id: data.adsetId,
-        ad_id: data.adId,
-      });
-
-      // Merge into attribution manager
-      await attributionManager.mergeWebAttribution({
-        fbclid: data.fbclid,
-        ttclid: data.ttclid,
-        utm_source: data.utmSource,
-        utm_medium: data.utmMedium,
-        utm_campaign: data.utmCampaign,
-        utm_content: data.utmContent,
-        utm_term: data.utmTerm,
-      });
-
-      debugLog('Deferred deep link processed successfully');
-    } catch (error) {
-      errorLog('Error processing deferred deep link:', error as Error);
-    }
   }
 
   /**
@@ -2422,6 +2386,10 @@ export class Datalyr {
   }
 
   // Platform integration methods
+  /**
+   * @deprecated Always returns null. Deferred web attribution is applied automatically at
+   * install; read it with getAttributionData().
+   */
   static getDeferredAttributionData(): DeferredDeepLinkResult | null {
     return datalyr.getDeferredAttributionData();
   }
@@ -2432,6 +2400,14 @@ export class Datalyr {
 
   static getAppleSearchAdsAttribution(): AppleSearchAdsAttribution | null {
     return datalyr.getAppleSearchAdsAttribution();
+  }
+
+  /**
+   * Get Google Play Install Referrer attribution data (Android only)
+   * Returns referrer data if available, null otherwise
+   */
+  static getPlayInstallReferrer(): Record<string, any> | null {
+    return datalyr.getPlayInstallReferrer();
   }
 
   static async updateTrackingAuthorization(enabled: boolean): Promise<void> {
