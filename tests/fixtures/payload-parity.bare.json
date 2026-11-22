@@ -1,0 +1,2867 @@
+{
+  "main": {
+    "initialize (one event queued before init)": [
+      {
+        "url": "https://api.datalyr.com/attribution/deferred-lookup",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Datalyr-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "platform": "ios",
+          "os_version": "17.0",
+          "device_model": "iPhone15,2",
+          "language": "en-US",
+          "timezone": "<machine>",
+          "anonymous_id": "<id1>"
+        }
+      },
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$attribution_match",
+          "eventId": "<id2>",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "provider": "mmp",
+            "match_method": "ip",
+            "matched": false,
+            "reason": "no_candidates",
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      },
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "app_install",
+          "eventId": "<id5>",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "event_type": "install",
+            "install_id": "<id6>",
+            "install_type": "unknown",
+            "detection_method": "none",
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      },
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "pre_init_event",
+          "eventId": "<id7>",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "early": true,
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "track(custom, nested props)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "custom_event",
+          "eventId": "<id8>",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "a": 1,
+            "b": "two",
+            "nested": {
+              "c": [
+                1,
+                2
+              ]
+            },
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "track(name with space)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "Order_Completed",
+          "eventId": "<id9>",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "total": 3,
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "track(caller event_id)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "dedup_event",
+          "eventId": "evt_fixed_1",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "x": true,
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "screen": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "pageview",
+          "eventId": "<id10>",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "screen": "Home",
+            "tab": "feed",
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "identify(provisional)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$identify",
+          "eventId": "<id11>",
+          "userId": "guest_1",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "userId": "guest_1",
+            "plan": "free",
+            "timestamp": "<epoch-ms>",
+            "$provisional_user_id": true,
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "track while provisional": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "guest_action",
+          "eventId": "<id12>",
+          "userId": "guest_1",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "timestamp": "<epoch-ms>",
+            "userId": "guest_1",
+            "$provisional_user_id": true,
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "identify(real user, traits)": [
+      {
+        "url": "https://api.datalyr.com/attribution/lookup",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Datalyr-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "email": "person@example.com"
+        }
+      },
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$identify",
+          "eventId": "<id13>",
+          "userId": "user_1",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "userId": "user_1",
+            "email": "person@example.com",
+            "firstName": "Ada",
+            "lastName": "L",
+            "phone": "+15550000000",
+            "first_name": "Ada",
+            "last_name": "L",
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "identify(same again, suppressed)": [],
+    "alias": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$alias",
+          "eventId": "<id14>",
+          "userId": "user_1",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "newUserId": "user_1_canonical",
+            "userId": "user_1_canonical",
+            "previousId": "user_1",
+            "visitorId": "<id15>",
+            "anonymousId": "<id1>",
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      },
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$identify",
+          "eventId": "<id16>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "userId": "user_1_canonical",
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "setAttributionData then track": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "after_attribution",
+          "eventId": "<id17>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "updateTrackingAuthorization(false)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$att_status",
+          "eventId": "<id18>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "authorized": false,
+            "status": 2,
+            "status_name": "denied",
+            "att_status": 2,
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "updateTrackingAuthorization(true)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$att_status",
+          "eventId": "<id19>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "authorized": true,
+            "status": 3,
+            "status_name": "authorized",
+            "att_status": 3,
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackPurchase(value, currency, product)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "purchase",
+          "eventId": "<id20>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 9.99,
+            "revenue": 9.99,
+            "currency": "EUR",
+            "product_id": "sku_1",
+            "content_id": "sku_1",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackPurchase(value only)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "purchase",
+          "eventId": "<id21>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 5,
+            "revenue": 5,
+            "currency": "USD",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackSubscription(value, currency, plan)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "subscribe",
+          "eventId": "<id22>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 4.99,
+            "revenue": 4.99,
+            "currency": "GBP",
+            "plan": "pro_monthly",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackSubscription(value only)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "subscribe",
+          "eventId": "<id23>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 1,
+            "revenue": 1,
+            "currency": "USD",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackAddToCart(all args)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "add_to_cart",
+          "eventId": "<id24>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 3,
+            "currency": "USD",
+            "content_id": "sku_2",
+            "product_id": "sku_2",
+            "content_name": "Shoe",
+            "product_name": "Shoe",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackAddToCart(value only)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "add_to_cart",
+          "eventId": "<id25>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 3,
+            "currency": "USD",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackViewContent(id, name)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "view_content",
+          "eventId": "<id26>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "content_type": "product",
+            "content_id": "sku_3",
+            "product_id": "sku_3",
+            "content_name": "Hat",
+            "product_name": "Hat",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackViewContent(all args)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "view_content",
+          "eventId": "<id27>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "content_type": "article",
+            "content_id": "post_1",
+            "product_id": "post_1",
+            "content_name": "Post",
+            "product_name": "Post",
+            "value": 2,
+            "currency": "USD",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackViewContent(no args)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "view_content",
+          "eventId": "<id28>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "content_type": "product",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackInitiateCheckout(all args)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "initiate_checkout",
+          "eventId": "<id29>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 20,
+            "currency": "EUR",
+            "num_items": 2,
+            "content_ids": [
+              "a",
+              "b"
+            ],
+            "product_ids": [
+              "a",
+              "b"
+            ],
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackInitiateCheckout(value only)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "initiate_checkout",
+          "eventId": "<id30>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 20,
+            "currency": "USD",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackInitiateCheckout(no args)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "initiate_checkout",
+          "eventId": "<id31>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "currency": "USD",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackCompleteRegistration(method)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "complete_registration",
+          "eventId": "<id32>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "registration_method": "email",
+            "method": "email",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackCompleteRegistration()": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "complete_registration",
+          "eventId": "<id33>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackSearch(query, ids)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "search",
+          "eventId": "<id34>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "search_string": "shoes",
+            "query": "shoes",
+            "content_ids": [
+              "r1",
+              "r2"
+            ],
+            "result_ids": [
+              "r1",
+              "r2"
+            ],
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackLead(value, currency)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "lead",
+          "eventId": "<id35>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "value": 10,
+            "currency": "USD",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackLead()": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "lead",
+          "eventId": "<id36>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackAddPaymentInfo()": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "add_payment_info",
+          "eventId": "<id37>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "success": true,
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackAddPaymentInfo(false)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "add_payment_info",
+          "eventId": "<id38>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "success": false,
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackWithSKAdNetwork": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "level_complete",
+          "eventId": "<id39>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "level": 2,
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "trackAppUpdate": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "app_update",
+          "eventId": "<id40>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "previous_version": "1.0.0",
+            "current_version": "1.1.0",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "bindProviderIdentity": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$provider_identity_bound",
+          "eventId": "<id41>",
+          "userId": "user_1_canonical",
+          "anonymousId": "<id1>",
+          "properties": {
+            "anonymous_id": "<id1>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "utm_source": "newsletter",
+            "utm_campaign": "nov",
+            "fbclid": "fb_click_1",
+            "external_ids": {
+              "revenuecat": "rc_user_1"
+            },
+            "provider_namespace": "revenuecat",
+            "timestamp": "<epoch-ms>",
+            "userId": "user_1_canonical",
+            "sessionId": "<id3>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id3>",
+            "userProperties": {
+              "plan": "free",
+              "email": "person@example.com",
+              "firstName": "Ada",
+              "lastName": "L",
+              "phone": "+15550000000"
+            }
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "endSession (auto-events off)": [],
+    "reset": [],
+    "track after reset": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "after_reset",
+          "eventId": "<id42>",
+          "anonymousId": "<id43>",
+          "properties": {
+            "anonymous_id": "<id43>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "n": 1,
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id44>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id44>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "identify(new user after reset)": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "$identify",
+          "eventId": "<id45>",
+          "userId": "user_2",
+          "anonymousId": "<id43>",
+          "properties": {
+            "anonymous_id": "<id43>",
+            "platform": "ios",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "userId": "user_2",
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id44>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id4>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id44>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "flush": []
+  },
+  "otherOs": {
+    "initialize": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "app_install",
+          "eventId": "<id1>",
+          "anonymousId": "<id2>",
+          "properties": {
+            "anonymous_id": "<id2>",
+            "platform": "android",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "event_type": "install",
+            "install_id": "<id3>",
+            "install_type": "unknown",
+            "detection_method": "none",
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id4>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id5>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id4>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ],
+    "track": [
+      {
+        "url": "https://ingest.datalyr.com/track",
+        "method": "POST",
+        "headers": {
+          "Content-Type": "application/json",
+          "User-Agent": "@datalyr/react-native/<sdk-version>",
+          "X-API-Key": "dk_test_parity"
+        },
+        "body": {
+          "event": "custom_event",
+          "eventId": "<id6>",
+          "anonymousId": "<id2>",
+          "properties": {
+            "anonymous_id": "<id2>",
+            "platform": "android",
+            "os_version": "17.0",
+            "device_model": "iPhone15,2",
+            "app_version": "1.0.0",
+            "app_build": "1",
+            "app_name": "com.test.app",
+            "app_namespace": "com.test.app",
+            "screen_width": 390,
+            "screen_height": 844,
+            "locale": "<machine>",
+            "timezone": "<machine>",
+            "country": "<machine>",
+            "network_type": "<platform-module>",
+            "sdk_version": "<sdk-version>",
+            "schema_version": 1,
+            "install_time": "<iso-time>",
+            "first_open_time": "<iso-time>",
+            "a": 1,
+            "timestamp": "<epoch-ms>",
+            "sessionId": "<id4>",
+            "source": "mobile_app",
+            "device_context": {
+              "deviceId": "<id5>",
+              "deviceInfo": {
+                "model": "iPhone15,2",
+                "manufacturer": "Apple",
+                "osVersion": "17.0",
+                "screenSize": "390x844",
+                "timezone": "<machine>",
+                "locale": "<machine>",
+                "isEmulator": false
+              }
+            }
+          },
+          "context": {
+            "library": "@datalyr/react-native",
+            "version": "<sdk-version>",
+            "source": "mobile_app",
+            "session_id": "<id4>"
+          },
+          "timestamp": "<iso-time>"
+        }
+      }
+    ]
+  }
+}

@@ -32,9 +32,11 @@ test('the namespace list equals the server list (13)', () => {
 });
 
 test('both entry points use the shared constant, not their own copy', () => {
-  for (const file of ['datalyr-sdk.ts', 'datalyr-sdk-expo.ts']) {
+  // Both builds run the shared core (sdk-core.ts); the entry points hold no copy.
+  const core = fs.readFileSync(path.join(__dirname, '..', 'src', 'sdk-core.ts'), 'utf8');
+  expect(core).toContain("import { KNOWN_EXTERNAL_NAMESPACES } from './provider-namespaces';");
+  for (const file of ['sdk-core.ts', 'datalyr-sdk.ts', 'datalyr-sdk-expo.ts']) {
     const source = fs.readFileSync(path.join(__dirname, '..', 'src', file), 'utf8');
-    expect(source).toContain("import { KNOWN_EXTERNAL_NAMESPACES } from './provider-namespaces';");
     expect(source).not.toMatch(/const KNOWN_EXTERNAL_NAMESPACES/);
   }
 });
