@@ -5,6 +5,11 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+- The bare React Native build and the Expo build now run one shared SDK core (`src/sdk-core.ts`); only the platform utilities differ (`utils.ts` vs `utils-expo.ts`). Public API and exports of `@datalyr/react-native` and `@datalyr/react-native/expo` are unchanged, and the bare build sends exactly what it sent before (pinned by `tests/payload-parity.test.ts`).
+
 ## [1.8.0] - 2026-10-30
 
 ### Changed
