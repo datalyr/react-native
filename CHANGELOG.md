@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The bare React Native build and the Expo build now run one shared SDK core (`src/sdk-core.ts`); only the platform utilities differ (`utils.ts` vs `utils-expo.ts`). Public API and exports of `@datalyr/react-native` and `@datalyr/react-native/expo` are unchanged, and the bare build sends exactly what it sent before (pinned by `tests/payload-parity.test.ts`).
+- Expo build: `trackAddPaymentInfo()` without an argument now sends `success: true`, as the bare build does (it sent no `success`). Startup now runs as in the bare build: ids, persisted user, attribution and journey in parallel, and network monitoring awaited with the platform integrations, so no `$network_status_change` is sent at startup and events at an offline launch wait in the queue. The Expo build still sends `Platform.OS` as is and no default currency on `trackAddToCart` / `trackInitiateCheckout`; those differences are intended.
 
 ## [1.8.0] - 2026-10-30
 

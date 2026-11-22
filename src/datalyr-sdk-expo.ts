@@ -15,9 +15,6 @@ import {
 } from './types';
 import * as expoUtils from './utils-expo';
 import { AttributionData, attributionManager } from './attribution';
-import { journeyManager } from './journey';
-import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
-import { appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
 import { AppleSearchAdsAttribution } from './native/DatalyrNativeBridge';
 import { DatalyrSDKCore } from './sdk-core';
 
@@ -40,42 +37,8 @@ export class DatalyrSDKExpo extends DatalyrSDKCore {
     };
   }
 
-  // MARK: - Where the Expo build still differs from the bare build
-  //
-  // Platform and currency differences are SDKPlatform options (see the constructor).
-  // The overrides below keep the rest of what the Expo build did before the two builds
-  // shared one core. tests/payload-parity.test.ts lists the payload differences.
-
-  /** IDs, persisted user, attribution and journey, one after another. */
-  protected async initializeIdsAndManagers(): Promise<void> {
-    this.state.visitorId = await expoUtils.getOrCreateVisitorId();
-    this.state.anonymousId = await expoUtils.getOrCreateAnonymousId();
-    this.state.sessionId = await expoUtils.getOrCreateSessionId();
-
-    await this.loadPersistedUserData();
-
-    if (this.state.config.enableAttribution) {
-      await attributionManager.initialize();
-    }
-
-    // Initialize journey tracking (for first-touch, last-touch, touchpoints)
-    await journeyManager.initialize();
-  }
-
-  /** Network monitoring in the background; platform integrations one after another. */
-  protected async initializePlatformIntegrations(config: DatalyrConfig): Promise<void> {
-    void this.initializeNetworkMonitoring();
-
-    // Initialize Apple Search Ads attribution (iOS only, auto-fetches on init)
-    await appleSearchAdsIntegration.initialize(config.debug);
-
-    // Initialize Play Install Referrer (Android only)
-    await playInstallReferrerIntegration.initialize();
-
-    // 9.C.3: register for SKAdNetwork / AdAttributionKit attribution once at init (iOS-only;
-    // the bridge no-ops off-iOS and swallows-and-logs any failure).
-    await SKAdNetworkBridge.registerForAttribution();
-  }
+  // Where the Expo build differs from the bare build: SDKPlatform options only (see the
+  // constructor). tests/payload-parity.test.ts lists the payload differences.
 
   // Expo's own signatures; the currency default comes from SDKPlatform (none on Expo).
   async trackAddToCart(value: number, currency: string, contentId?: string, contentName?: string): Promise<void> {
@@ -90,12 +53,8 @@ export class DatalyrSDKExpo extends DatalyrSDKCore {
     await super.trackInitiateCheckout(value as number, currency, numItems, contentIds);
   }
 
-  /** `success` only when passed (bare sends `success: true` by default). */
   async trackAddPaymentInfo(success?: boolean): Promise<void> {
-    const properties: Record<string, any> = {};
-    if (success !== undefined) properties.success = success;
-
-    await this.track('add_payment_info', properties);
+    await super.trackAddPaymentInfo(success);
   }
 }
 

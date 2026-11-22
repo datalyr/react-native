@@ -22,8 +22,8 @@
 // refactor (tests/fixtures/payload-parity.bare.json), so the refactor provably leaves
 // what bare apps send unchanged, byte for byte (key order included).
 //
-// EXPECTED_DRIFT lists every difference the Expo build has today, exactly. A new
-// difference, or a listed one that disappears, fails the test.
+// EXPECTED_DRIFT lists every difference between the builds, exactly; each is intended
+// and explained there. A new difference, or a listed one that disappears, fails.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -134,30 +134,36 @@ const OTHER_OS_SCRIPT: Step[] = [
   { name: 'track', run: (sdk) => sdk.track('custom_event', { a: 1 }) },
 ];
 
-// Every payload difference between the two builds today. Paths are into the list of
-// requests one step sent. `undefined` means the field is absent from that build's body.
+// Every payload difference between the two builds, exactly. All are INTENDED: they
+// come from the per-build SDKPlatform options in src/sdk-core.ts.
+// Paths are into the list of requests one step sent. `undefined` means the field is
+// absent from that build's body.
+//
+// - currency: bare sends 'USD' when trackAddToCart / trackInitiateCheckout get no
+//   currency; Expo sends none. A client-side 'USD' overrides a conversion rule's own
+//   currency on the server (postback/core/conversion-currency.js), so Expo keeps
+//   leaving it out.
+// - platform: bare sends any Platform.OS other than ios/android as 'android'; Expo
+//   sends it as is. On the server 'android' makes macOS/Windows/web events Android app
+//   events for Meta, blocks iOS rules and inflates Android installs
+//   (postback/platforms/meta.js, core/event-scope.js, ingest/index.js), so Expo keeps
+//   the real value.
+// Whether the bare build should match Expo on both is a separate, owner-level decision.
+const CURRENCY_DEFAULT: Drift[] = [
+  { path: '[0].body.properties.currency', bare: 'USD', expo: undefined },
+];
+const PLATFORM_AS_IS: Drift[] = [
+  { path: '[0].body.properties.platform', bare: 'android', expo: 'macos' },
+];
 const EXPECTED_DRIFT: Record<string, Record<string, Drift[]>> = {
   main: {
-    'trackAddToCart(value only)': [
-      { path: '[0].body.properties.currency', bare: 'USD', expo: undefined },
-    ],
-    'trackInitiateCheckout(value only)': [
-      { path: '[0].body.properties.currency', bare: 'USD', expo: undefined },
-    ],
-    'trackInitiateCheckout(no args)': [
-      { path: '[0].body.properties.currency', bare: 'USD', expo: undefined },
-    ],
-    'trackAddPaymentInfo()': [
-      { path: '[0].body.properties.success', bare: true, expo: undefined },
-    ],
+    'trackAddToCart(value only)': CURRENCY_DEFAULT,
+    'trackInitiateCheckout(value only)': CURRENCY_DEFAULT,
+    'trackInitiateCheckout(no args)': CURRENCY_DEFAULT,
   },
   otherOs: {
-    initialize: [
-      { path: '[0].body.properties.platform', bare: 'android', expo: 'macos' },
-    ],
-    track: [
-      { path: '[0].body.properties.platform', bare: 'android', expo: 'macos' },
-    ],
+    initialize: PLATFORM_AS_IS,
+    track: PLATFORM_AS_IS,
   },
 };
 
