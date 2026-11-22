@@ -1,7 +1,7 @@
 {
   "name": "@datalyr/react-native",
   "version": "1.8.0",
-  "description": "Datalyr SDK for React Native & Expo - Server-side attribution tracking for iOS and Android",
+  "description": "DATALYR SDK for React Native and Expo: attribution and event tracking for iOS and Android apps",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
@@ -32,30 +32,27 @@
     "tracking",
     "mobile",
     "datalyr",
-    "appsflyer",
-    "adjust",
-    "mixpanel",
-    "automatic-events",
     "session-tracking",
     "utm-tracking",
     "server-side-attribution",
-    "google-attribution",
     "ios-attribution",
     "android-attribution",
     "apple-search-ads",
     "play-install-referrer",
     "gclid",
     "conversion-tracking",
-    "revenue-optimization",
     "fbclid",
     "ttclid"
   ],
   "author": "Datalyr",
   "license": "MIT",
-  "homepage": "https://datalyr.com",
+  "homepage": "https://docs.datalyr.com/sdk-reference/react-native",
+  "bugs": {
+    "url": "https://github.com/datalyr/react-native/issues"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/datalyr/react-native.git"
+    "url": "git+https://github.com/datalyr/react-native.git"
   },
   "peerDependencies": {
     "@react-native-community/netinfo": ">=11.0.0",

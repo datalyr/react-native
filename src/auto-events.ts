@@ -73,7 +73,7 @@ export class AutoEventsManager {
           await Storage.setItem('@datalyr/current_session', this.currentSession);
           debugLog('Session resumed (context session unchanged):', canonicalId);
         } else {
-          // RN-21: close out the PREVIOUS session before opening a new one.
+          // close out the PREVIOUS session before opening a new one.
           //
           // A stored session with a different canonical id is one that already
           // ended — the app was backgrounded and then killed, or simply left for

@@ -210,7 +210,7 @@ export const getOrCreateAnonymousId = async (): Promise<string> => {
  * anonymousId. Without rotation, reset()+identify(userB) links the SAME anon_xxx to
  * BOTH users in visitor_user_links, and the Meta CAPI identity bridge then resolves
  * across both — leaking click-ids/PII between users. (RN analog of the web SDK's
- * privacy rotation and Node's NODE-6 fix.) Returns the new id (memory-only on failure).
+ * privacy rotation and the Node SDK.) Returns the new id (memory-only on failure).
  */
 export const rotateAnonymousId = async (): Promise<string> => {
   const anonymousId = `anon_${generateUUID()}`;
@@ -292,7 +292,7 @@ export const getOrCreateSessionId = async (): Promise<string> => {
   }
 };
 
-// TR-08: in-memory throttle so track() refreshes the session-activity time at most once per 60s
+// in-memory throttle so track() refreshes the session-activity time at most once per 60s
 // (avoids an AsyncStorage write per event while keeping the idle-timeout window honest).
 let lastSessionTouchAt = 0;
 
@@ -581,7 +581,7 @@ export const getNetworkType = (): string => {
 /**
  * Validate event name
  */
-// TR-20 / fleet charset (matches iOS): alphanumerics + _ - . and $ (system events like
+// Fleet charset (matches iOS): alphanumerics + _ - . and $ (system events like
 // $identify), max 100 chars. The bare build silently ACCEPTED any string while Expo silently
 // DROPPED anything with a space — track('Order Completed') recorded on bare, vanished on Expo.
 const EVENT_NAME_PATTERN = /^[\p{L}\p{N}_.$-]+$/u;

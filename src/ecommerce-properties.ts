@@ -1,5 +1,5 @@
 /**
- * Shared e-commerce property builders (A3-14c / TR-20c).
+ * Shared e-commerce property builders.
  *
  * The bare (`datalyr-sdk.ts`) and Expo (`datalyr-sdk-expo.ts`) entry points historically
  * shaped the SAME conversion event with DIFFERENT property keys:
@@ -24,7 +24,7 @@
  *
  * Each builder emits BOTH the canonical Meta key (server-preferred, forwarded verbatim to
  * Pixel/CAPI) AND the legacy alias, so existing dashboards / rules keyed on either spelling
- * keep working — the same emit-both-names strategy the web SDK uses for `utm_*` (FSR-13).
+ * keep working — the same emit-both-names strategy the web SDK uses for `utm_*`.
  */
 
 type Props = Record<string, any>;

@@ -32,7 +32,7 @@ const ATTRIBUTION_PARAMS = [
   // Partner tracking parameters
   'partner_id', 'affiliate_id', 'referrer_id', 'source_id',
   
-  // Other platforms. TR-24: li_fat_id is LinkedIn's REAL URL param (li_click_id was never
+  // Other platforms. li_fat_id is LinkedIn's REAL URL param (li_click_id was never
   // sent by LinkedIn — it captured nothing), and irclid is the canonical Impact name. Keep
   // the legacy li_click_id/irclickid whitelisted for one release so nothing in flight is lost.
   'twclid', 'li_click_id', 'li_fat_id', 'msclkid', 'irclickid', 'irclid',
@@ -198,9 +198,9 @@ export interface AttributionData {
   gclid?: string;                 // Google Click ID
   oppref?: string;                // OpenAI Ads Click ID
   twclid?: string;                // Twitter Click ID
-  li_click_id?: string;           // LinkedIn Click ID (legacy; TR-24 — never populated by LinkedIn)
+  li_click_id?: string;           // LinkedIn Click ID (legacy; never populated by LinkedIn)
   li_fat_id?: string;             // LinkedIn's real click id (canonical)
-  irclickid?: string;             // Impact click id (raw URL param; TR-24 legacy)
+  irclickid?: string;             // Impact click id (raw URL param; legacy)
   irclid?: string;                // Impact click id (canonical)
   msclkid?: string;               // Microsoft Click ID
   sclid?: string;                 // Snapchat click id (canonical; captured from ScCid/sccid/sclid)
@@ -302,7 +302,7 @@ export class AttributionManager {
   }
 
   /**
-   * RN-22: detect first launch WITHOUT initializing attribution.
+   * detect first launch WITHOUT initializing attribution.
    *
    * Install detection is app lifecycle, not attribution — but it lived only
    * inside initialize(), which the SDK skips entirely when
@@ -349,10 +349,10 @@ export class AttributionManager {
     // No install tracked yet: classify this launch once, before any id exists. A class
     // stored by an earlier launch that died before the event was queued is reused, so
     // the files and ids that launch left behind cannot turn a real install into an
-    // "existing user" (the old RN-24 guard did exactly that after a kill).
+    // "existing user" (the old guard did exactly that after a kill).
     let classification = await Storage.getItem<InstallClassification>(INSTALL_CLASS_KEY);
     if (!classification?.install_type) {
-      // RN-24: keys an older DATALYR build left behind. Read RAW, not through Storage:
+      // keys an older DATALYR build left behind. Read RAW, not through Storage:
       // `@datalyr/visitor_id` / `@datalyr/anonymous_id` are written raw by utils.ts, so
       // Storage.getItem's JSON.parse would report a real uuid as absent. Presence is
       // the signal, not the value.
@@ -424,7 +424,7 @@ export class AttributionManager {
         this.attributionData.first_open_time = installTime;
         this.installTimeMs = Date.parse(installTime);
 
-        // TR-21: do NOT persist the first-launch marker here. It is committed by
+        // do NOT persist the first-launch marker here. It is committed by
         // markInstallTracked() AFTER app_install is enqueued — so a crash/kill between init and
         // the app_install track re-detects the install next launch instead of losing it forever.
         // (install_time above is in-memory; the isInstall() gate reads isFirstLaunch, not storage.)
@@ -449,7 +449,7 @@ export class AttributionManager {
       const savedData = await Storage.getItem<AttributionData>(STORAGE_KEYS.ATTRIBUTION_DATA);
       if (savedData) {
         this.attributionData = { ...this.attributionData, ...savedData };
-        // Installs from before TR-24 persisted only `li_click_id`. Keep reading it and fill
+        // Installs from older releases persisted only `li_click_id`. Keep reading it and fill
         // the canonical `li_fat_id` (the only LinkedIn key ingest reads) when that is empty.
         if (this.attributionData.li_click_id && !this.attributionData.li_fat_id) {
           this.attributionData.li_fat_id = this.attributionData.li_click_id;
@@ -646,7 +646,7 @@ export class AttributionManager {
             case 'twclid':
               this.attributionData.twclid = value;
               break;
-            // TR-24: LinkedIn — li_fat_id is the real param and the canonical wire name.
+            // LinkedIn — li_fat_id is the real param and the canonical wire name.
             // A legacy li_click_id maps to the canonical field too (store both for one release).
             case 'li_fat_id':
               this.attributionData.li_fat_id = value;
@@ -655,7 +655,7 @@ export class AttributionManager {
               this.attributionData.li_click_id = value;
               this.attributionData.li_fat_id = this.attributionData.li_fat_id || value;
               break;
-            // TR-24: Impact — irclid is canonical; irclickid is the raw URL param (rename it).
+            // Impact — irclid is canonical; irclickid is the raw URL param (rename it).
             case 'irclid':
               this.attributionData.irclid = value;
               break;
@@ -741,7 +741,7 @@ export class AttributionManager {
         // Store timestamp of when attribution was captured
         this.attributionData.attribution_timestamp = new Date().toISOString();
         // Numeric capture time so the init-time journey recorder can tell a fresh touch from
-        // a relaunch over stale persisted attribution (iOS FSR-34).
+        // a relaunch over stale persisted attribution (as in the iOS SDK).
         this.attributionData.attribution_captured_at = Date.now();
         
         debugLog('Updated attribution data:', this.attributionData);
@@ -767,7 +767,7 @@ export class AttributionManager {
   }
 
   /**
-   * TR-21: commit the first-launch marker AFTER app_install has been enqueued. Until this runs,
+   * commit the first-launch marker AFTER app_install has been enqueued. Until this runs,
    * a relaunch re-detects the install (checkFirstLaunch finds no marker → isFirstLaunch=true) and
    * re-fires app_install — so a crash between init and the app_install track can't permanently
    * lose install attribution (the single most valuable mobile event).
@@ -966,7 +966,7 @@ export class AttributionManager {
       this.attributionData.web_visitor_id = webAttribution.visitor_id;
     }
 
-    // A web→app merge is a fresh attribution event (iOS FSR-34): stamp the capture time so
+    // A web→app merge is a fresh attribution event (as in the iOS SDK): stamp the capture time so
     // the next journey record treats it as new rather than a relaunch over stale data.
     this.attributionData.attribution_captured_at = Date.now();
 
