@@ -32,3 +32,38 @@ describe('W6 — uuid', () => {
     expect(a).not.toBe(b);
   });
 });
+
+describe('W6 — optional Expo peers', () => {
+  // src/utils-expo.ts imports these three statically (the Expo entry);
+  // src/expo.ts requires expo-router lazily; app.plugin.js requires
+  // expo/config-plugins, falling back to @expo/config-plugins.
+  const expoPeers = [
+    'expo-application',
+    'expo-device',
+    'expo-network',
+    'expo-router',
+    'expo',
+    '@expo/config-plugins',
+  ];
+
+  test.each(expoPeers)('%s is an optional peer dependency', (name) => {
+    expect(typeof pkg.peerDependencies[name]).toBe('string');
+    expect(pkg.peerDependenciesMeta[name]).toEqual({ optional: true });
+  });
+
+  test('every peerDependenciesMeta entry has a peerDependencies entry (npm ignores it otherwise)', () => {
+    const orphans = Object.keys(pkg.peerDependenciesMeta).filter(
+      (name) => !(name in pkg.peerDependencies),
+    );
+    expect(orphans).toEqual([]);
+  });
+
+  test('every Expo module imported statically by the Expo entry is declared', () => {
+    const src = readFileSync(join(repoRoot, 'src', 'utils-expo.ts'), 'utf8');
+    const imported = [...src.matchAll(/^import [^;]* from '(expo-[^']+)';$/gm)].map((m) => m[1]);
+    expect(imported.length).toBeGreaterThan(0);
+    for (const name of imported) {
+      expect(pkg.peerDependencies[name]).toBeDefined();
+    }
+  });
+});

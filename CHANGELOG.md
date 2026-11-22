@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `uuid` is now `^11.1.1` (was `^10.0.0`). This clears the one production advisory. The SDK only uses `v4()`; ids keep the same format. `@types/uuid` is gone, since uuid 11 ships its own types.
+- The Expo modules the SDK loads are now declared as optional peer dependencies: `expo-application`, `expo-device`, `expo-network`, `expo-router`, `expo` and `@expo/config-plugins` (Expo SDK 52 or later, the same floor as `expo-modules-core`). Your package manager now warns about a version it cannot work with. Nothing is installed for you. The unused `expo-tracking-transparency` entry is removed.
 
 ## [1.8.0] - 2026-10-30
 
