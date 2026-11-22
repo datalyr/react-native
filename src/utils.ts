@@ -8,8 +8,8 @@ try {
 } catch (error) {
   console.warn('react-native-device-info not available, using fallback device info');
 }
+import 'react-native-get-random-values'; // Must load before uuid: it installs crypto.getRandomValues
 import { v4 as uuidv4 } from 'uuid';
-import 'react-native-get-random-values'; // Required for uuid
 
 import { DeviceInfo as DeviceInfoType, DeviceContext } from './types';
 import { isDebugLogging } from './debug-log';
