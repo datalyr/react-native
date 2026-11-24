@@ -1,6 +1,6 @@
 {
   "name": "@datalyr/react-native",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "DATALYR SDK for React Native and Expo: attribution and event tracking for iOS and Android apps",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

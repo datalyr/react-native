@@ -5,9 +5,9 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [1.9.0]
 
-Ships as a minor version (1.9.0). Read the install change below before upgrading.
+Minor version. Read the install change below before upgrading.
 
 ### Added
 - `Datalyr.getPlayInstallReferrer()` on the bare React Native static facade (the instance and the Expo facade already had it).
