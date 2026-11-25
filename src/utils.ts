@@ -45,6 +45,8 @@ export const STORAGE_KEYS = {
   // Set when the server declined the lookup for ATT while the native module was missing
   // (no ATT status to send); lookups are skipped until the module reports a status.
   DEFERRED_LOOKUP_NEEDS_ATT_STATUS: '@datalyr/deferred_lookup_needs_att_status',
+  // iOS: tracking was allowed mid-launch, so that launch's events went without the IDFA.
+  ATT_ID_WITHHELD: '@datalyr/att_id_withheld',
 };
 
 // Constants

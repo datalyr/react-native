@@ -3,10 +3,41 @@ import AdServices
 import AppTrackingTransparency
 import AdSupport
 
+// The ATT status when this app process started. iOS lifts its block on the privacy
+// manifest's tracking domains only for processes started after tracking was allowed, so the
+// JS side may use the tracking host only when this reads authorized. Process-wide (a JS
+// reload keeps it), in memory only.
+final class DatalyrProcessStartATT: @unchecked Sendable {
+  static let shared = DatalyrProcessStartATT()
+  private let lock = NSLock()
+  private var status: Int?
+
+  /// Records the status the first time it is called in this process; later calls keep it.
+  func record() {
+    lock.lock(); defer { lock.unlock() }
+    if status != nil { return }
+    if #available(iOS 14, *) {
+      status = Int(ATTrackingManager.trackingAuthorizationStatus.rawValue)
+    } else {
+      status = 3
+    }
+  }
+
+  var value: Int? {
+    lock.lock(); defer { lock.unlock() }
+    return status
+  }
+}
+
 public class DatalyrNativeModule: Module {
 
   public func definition() -> ModuleDefinition {
     Name("DatalyrNative")
+
+    // Created with the app's module registry at start-up, before the app can ask for ATT.
+    OnCreate {
+      DatalyrProcessStartATT.shared.record()
+    }
 
     // MARK: - SDK Availability Check
 
@@ -57,6 +88,10 @@ public class DatalyrNativeModule: Module {
         if idfa != zeroUUID {
           result["idfa"] = idfa
         }
+      }
+
+      if let startStatus = DatalyrProcessStartATT.shared.value {
+        result["att_status_at_process_start"] = startStatus
       }
 
       promise.resolve(result)
