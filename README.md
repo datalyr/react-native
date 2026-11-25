@@ -31,13 +31,17 @@ npx install-expo-modules@latest
 cd ios && pod install
 ```
 
-The SDK is built on Expo Modules. You must install `expo-modules-core` in a bare app too. AsyncStorage and `react-native-get-random-values` are native modules: React Native links only the packages your app lists, so install them in your app. On React Native older than 0.81, install `react-native-get-random-values@^1` (2.x needs React Native 0.81 or later).
+The SDK is built on Expo Modules. You must install `expo-modules-core` in a bare app too. AsyncStorage and `react-native-get-random-values` are native modules: React Native links only the packages your app lists, so install them in your app.
+
+`react-native-get-random-values` 2.x works only on React Native 0.81 or later with the New Architecture on. On an older React Native, or with the New Architecture off, install `react-native-get-random-values@^1` instead. 2.x installs there without a warning, but its iOS native module is registered only for the New Architecture, so the SDK fails at start and sends no events.
 
 **Expo:**
 
 ```bash
 npx expo install @datalyr/react-native expo-application expo-device expo-network @react-native-async-storage/async-storage react-native-get-random-values
 ```
+
+`npx expo install` picks the `react-native-get-random-values` version your Expo SDK expects. If you add it another way, use 2.x only on Expo SDK 54 or later with the New Architecture on; otherwise install `react-native-get-random-values@^1`.
 
 Add the config plugin to `app.json`:
 

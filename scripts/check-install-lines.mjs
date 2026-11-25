@@ -4,8 +4,10 @@
 //
 // - Bare: a throwaway app with react-native@latest, then the README's bare
 //   `npm install` line, with the packed SDK in place of @datalyr/react-native.
-// - Expo: a throwaway app with expo@latest and the react / react-native it
-//   bundles, then the README's `npx expo install` line, each package at the
+// - Bare, React Native below 0.81: the same line with the README's
+//   react-native-get-random-values@^1 advice, on react-native@~0.80.0.
+// - Expo: throwaway apps with expo@latest and expo@^52 (the oldest the SDK
+//   supports) and the react / react-native each bundles, then the README's `npx expo install` line, each package at the
 //   version expo@latest's bundledNativeModules.json names (what
 //   `expo install` picks), or latest when it names none.
 //
@@ -103,29 +105,72 @@ function scenario(title, fn) {
   }
 }
 
-scenario('bare README line on react-native@latest', () => {
-  const dir = newApp('bare-app');
-  npmInstall(['react-native@latest'], dir);
-  const specs = packagesOf(bareLine, 'npm install');
-  const args = specs.map((spec) => (spec === '@datalyr/react-native' ? tarball : spec));
-  npmInstall(args, dir);
-  checkTree(dir);
+// The versions the lockfile resolved, so the log shows what was checked.
+function logResolved(dir) {
+  const lock = JSON.parse(readFileSync(join(dir, 'package-lock.json'), 'utf8'));
+  const names = [
+    'react-native',
+    'expo',
+    'expo-modules-core',
+    '@react-native-async-storage/async-storage',
+    'react-native-get-random-values',
+  ];
+  const found = names
+    .map((name) => [name, lock.packages[`node_modules/${name}`]?.version])
+    .filter(([, version]) => version)
+    .map(([name, version]) => `${name}@${version}`);
+  console.log(`RESOLVED: ${found.join(' ')}`);
+}
+
+function bareScenario(title, reactNative, replace = {}) {
+  scenario(title, () => {
+    const dir = newApp(`bare-${reactNative.replace(/[^\w.]/g, '_')}`);
+    npmInstall([`react-native@${reactNative}`], dir);
+    const specs = packagesOf(bareLine, 'npm install');
+    const args = specs.map((spec) =>
+      spec === '@datalyr/react-native' ? tarball : (replace[nameOf(spec)] ?? spec),
+    );
+    npmInstall(args, dir);
+    checkTree(dir);
+    logResolved(dir);
+  });
+}
+
+bareScenario('bare README line on react-native@latest', 'latest');
+
+// The README's advice for React Native below 0.81 (or the New Architecture
+// off): the same line with react-native-get-random-values@^1.
+const pinOne = readme.join('\n').match(/`(react-native-get-random-values@\^1)`/);
+if (!pinOne) {
+  console.error('README: could not find the react-native-get-random-values@^1 advice');
+  process.exit(1);
+}
+bareScenario(`bare README line with ${pinOne[1]} on react-native@~0.80.0`, '~0.80.0', {
+  'react-native-get-random-values': pinOne[1],
 });
 
-scenario('Expo README line on expo@latest (versions as expo install picks them)', () => {
-  const dir = newApp('expo-app');
-  const expoVersion = run('npm', ['view', 'expo@latest', 'version'], dir).trim();
-  const bundled = fetchBundled(expoVersion);
-  // `expo install` passes the bundled version, or the bare name when expo
-  // names none (npm then takes the latest).
-  const pin = (name) => (bundled[name] ? `${name}@${bundled[name]}` : name);
-  npmInstall([`expo@${expoVersion}`, pin('react'), pin('react-native')], dir);
-  const specs = packagesOf(expoLine, 'npx expo install');
-  const args = specs.map((spec) => (spec === '@datalyr/react-native' ? tarball : pin(nameOf(spec))));
-  console.log(`expo ${expoVersion} picks: ${args.filter((a) => a !== tarball).join(' ')}`);
-  npmInstall(args, dir);
-  checkTree(dir);
-});
+function expoScenario(range) {
+  scenario(`Expo README line on expo@${range} (versions as expo install picks them)`, () => {
+    const dir = newApp(`expo-${range.replace(/[^\w.]/g, '_')}`);
+    const versions = JSON.parse(run('npm', ['view', `expo@${range}`, 'version', '--json'], dir));
+    const expoVersion = Array.isArray(versions) ? versions[versions.length - 1] : versions;
+    const bundled = fetchBundled(expoVersion);
+    // `expo install` passes the bundled version, or the bare name when expo
+    // names none (npm then takes the latest).
+    const pin = (name) => (bundled[name] ? `${name}@${bundled[name]}` : name);
+    npmInstall([`expo@${expoVersion}`, pin('react'), pin('react-native')], dir);
+    const specs = packagesOf(expoLine, 'npx expo install');
+    const args = specs.map((spec) => (spec === '@datalyr/react-native' ? tarball : pin(nameOf(spec))));
+    console.log(`expo ${expoVersion} picks: ${args.filter((a) => a !== tarball).join(' ')}`);
+    npmInstall(args, dir);
+    checkTree(dir);
+    logResolved(dir);
+  });
+}
+
+// The newest Expo SDK, and the oldest the SDK supports (expo >=52).
+expoScenario('latest');
+expoScenario('^52.0.0');
 
 // expo's bundledNativeModules.json is a file in the package, not in its
 // registry metadata: read that one file from a package CDN.

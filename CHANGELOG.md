@@ -41,13 +41,13 @@ Minor version. Read the install change below before upgrading.
 - When a flush stops on a temporary failure, the events it already delivered are removed from disk at once.
 
 ### Install change
-- `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` (1.8 or later, or 2.x) are now peer dependencies, not dependencies. Install them in your app:
+- `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` (1.11 or later, or 2.x) are now peer dependencies, not dependencies. Install them in your app:
     - Bare React Native: `npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage@^2 react-native-get-random-values` (pin `@^2`: an unpinned install takes 3.x, which is outside the peer range)
     - Expo: `npx expo install @datalyr/react-native expo-application expo-device expo-network @react-native-async-storage/async-storage react-native-get-random-values`
 
   Both are native modules. React Native CLI autolinking links only the packages listed in the app's own `package.json`, and Expo before SDK 54 does the same, so as nested dependencies they could load without their native code. An app that already lists both needs no change. AsyncStorage 3.x is not supported yet (it renames `multiRemove` to `removeMany`).
 
-  `react-native-get-random-values` 2.x needs React Native 0.81 or later (Expo SDK 54 or later). On an older React Native, install `react-native-get-random-values@^1`. The unpinned install line takes 2.x today; the peer range accepted only 1.x in the 1.9.0 release candidate, so the README lines failed with `ERESOLVE`. CI now resolves both README install lines with strict peer rules, on every pull request and weekly.
+  `react-native-get-random-values` 2.x works only on React Native 0.81 or later with the New Architecture on (Expo SDK 54 or later with it on). On an older React Native, or with the New Architecture off, install `react-native-get-random-values@^1`: 2.x installs there without a warning, but its iOS native module is registered only for the New Architecture, so the SDK fails at start and sends no events. `npx expo install` picks the version your Expo SDK expects.
 
 
 ## [1.8.0] - 2026-10-30

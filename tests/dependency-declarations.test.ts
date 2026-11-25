@@ -93,10 +93,12 @@ describe('W6 — native modules the app must list itself', () => {
     expect(pkg.peerDependencies['@react-native-async-storage/async-storage']).toBe('^1.17.0 || ^2.0.0');
   });
 
-  test('get-random-values peer range is 1.8+ or 2.x (the unpinned README lines take 2.x)', () => {
-    // 2.x needs React Native 0.81+; the SDK only imports it for its
-    // crypto.getRandomValues polyfill, which 1.x and 2.x install the same way.
-    expect(pkg.peerDependencies['react-native-get-random-values']).toBe('^1.8.0 || ^2.0.0');
+  test('get-random-values peer range is 1.11+ or 2.x (the unpinned README lines take 2.x)', () => {
+    // 2.x needs React Native 0.81+ with the New Architecture; 1.11 is the first
+    // 1.x with bridgeless support, and Expo SDK 52-57 bundle ~1.11.0. The SDK
+    // only imports it for its crypto.getRandomValues polyfill, which 1.x and
+    // 2.x install the same way.
+    expect(pkg.peerDependencies['react-native-get-random-values']).toBe('^1.11.0 || ^2.0.0');
   });
 
   test.each(nativeModules)('the README install lines name %s', (name) => {
