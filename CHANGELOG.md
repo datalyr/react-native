@@ -33,6 +33,7 @@ Minor version. Read the install change below before upgrading.
 - Internal code that was never called: the private deferred deep link handlers in both entry points, the unused `src/utils-interface.ts` (not exported) and a commented-out AppState block.
 
 ### Fixed
+- Expo: an app without `expo-router` can now bundle `@datalyr/react-native/expo`. The entry's lazy `require('expo-router')` had no try/catch, so Metro could not treat it as optional and stopped with `Unable to resolve module expo-router` (also in 1.8.0). Now only `useDatalyrScreenTracking()` needs expo-router, and without it the hook throws a clear error.
 - Events are no longer dead-lettered by a server outage. A 5xx (503 included), 429, 408, a timeout or a network error keeps the event in the queue with the same `eventId`, uses none of its retry budget, and backs the whole queue off (5 s doubling to 5 minutes with 0.5x to 1.0x jitter; never sooner than the server's `Retry-After`, honoured up to 10 minutes, plus 0 to 25% jitter). Before, three failed flushes (about 1 to 2 minutes of 5xx or 429) moved events to the dead-letter store, and a timeout (`Aborted`) was not recognised as a connectivity failure.
 - `Retry-After` is now honoured on 5xx answers (ingest answers 503 with `Retry-After` when the fault is its own), not only on 429 and 408. A `Retry-After` longer than 30 s is no longer cut short in-request.
 - Any 2xx is a delivered event, whatever its body. Ingest answers 204 with no body for a filtered event; that used to count as a failed send and re-send the event.
