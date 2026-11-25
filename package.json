@@ -63,7 +63,6 @@
     "expo-device": ">=7.0.0",
     "expo-modules-core": ">=2.0.0",
     "expo-network": ">=7.0.0",
-    "expo-router": ">=4.0.0",
     "react": ">=18.0.0",
     "react-native": ">=0.72.0",
     "react-native-device-info": ">=12.0.0",
@@ -134,9 +133,6 @@
       "optional": true
     },
     "@react-native-community/netinfo": {
-      "optional": true
-    },
-    "expo-router": {
       "optional": true
     }
   }

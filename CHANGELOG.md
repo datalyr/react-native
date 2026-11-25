@@ -15,7 +15,7 @@ Minor version. Read the install change below before upgrading.
 
 ### Changed
 - `uuid` is now `^11.1.1` (was `^10.0.0`). This clears the one production advisory. The SDK only uses `v4()`; ids keep the same format. `@types/uuid` is gone, since uuid 11 ships its own types.
-- The Expo modules the SDK loads are now declared as optional peer dependencies: `expo-application`, `expo-device`, `expo-network`, `expo-router`, `expo` and `@expo/config-plugins` (Expo SDK 52 or later, the same floor as `expo-modules-core`). Your package manager now warns about a version it cannot work with. Nothing is installed for you. The unused `expo-tracking-transparency` entry is removed.
+- The Expo modules the SDK loads are now declared as optional peer dependencies: `expo-application`, `expo-device`, `expo-network`, `expo` and `@expo/config-plugins` (Expo SDK 52 or later, the same floor as `expo-modules-core`). Your package manager now warns about a version it cannot work with. Nothing is installed for you. The unused `expo-tracking-transparency` entry is removed. `expo-router` is not declared: npm checks an optional peer against its newest version even when it is not installed, and expo-router's own peers then conflict with an older Expo SDK (`ERESOLVE`). The SDK loads it only when you use the Expo Router screen-tracking hook.
 - `debug: true` now turns on the SDK's debug logs in a release build. Before, they printed only in a development build (`__DEV__`) and the option did nothing else.
 - SKAdNetwork and AdAttributionKit success messages, and failed Apple Search Ads, advertiser-info and Play Install Referrer lookups in the native bridge, now log only when debug logging is on (`__DEV__` or `debug: true`). Warnings for a missing native module and failed SKAdNetwork updates are unchanged.
 - iOS: `setPostbackEnvironment` no longer writes an `NSLog` line; the JS side logs the result when debug logging is on.
@@ -42,12 +42,14 @@ Minor version. Read the install change below before upgrading.
 
 ### Install change
 - `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` (1.11 or later, or 2.x) are now peer dependencies, not dependencies. Install them in your app:
-    - Bare React Native: `npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage@^2 react-native-get-random-values` (pin `@^2`: an unpinned install takes 3.x, which is outside the peer range)
+    - Bare React Native: `npx install-expo-modules@latest`, then `npx expo install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage react-native-get-random-values`, then `cd ios && pod install`. Run `install-expo-modules` first: it adds the Expo SDK that matches your React Native, and `npx expo install` then picks versions for it. A plain `npm install` takes the newest `expo-modules-core` (and AsyncStorage 3.x), which an older Expo SDK cannot use.
     - Expo: `npx expo install @datalyr/react-native expo-application expo-device expo-network @react-native-async-storage/async-storage react-native-get-random-values`
 
   Both are native modules. React Native CLI autolinking links only the packages listed in the app's own `package.json`, and Expo before SDK 54 does the same, so as nested dependencies they could load without their native code. An app that already lists both needs no change. AsyncStorage 3.x is not supported yet (it renames `multiRemove` to `removeMany`).
 
-  `react-native-get-random-values` 2.x works only on React Native 0.81 or later with the New Architecture on (Expo SDK 54 or later with it on). On an older React Native, or with the New Architecture off, install `react-native-get-random-values@^1`: 2.x installs there without a warning, but its iOS native module is registered only for the New Architecture, so the SDK fails at start and sends no events. `npx expo install` picks the version your Expo SDK expects.
+  `react-native-get-random-values` 2.x works only on React Native 0.81 or later with the New Architecture on (Expo SDK 54 or later with it on). On an older React Native, or with the New Architecture off, install `react-native-get-random-values@^1`: 2.x installs there without a warning, but its iOS native module is registered only for the New Architecture, so the SDK fails at start and sends no events. `npx expo install` picks the version your Expo SDK expects (1.11 for Expo SDK 52 to 57, 2.x for SDK 58).
+
+  Bare apps on Expo SDK 54: `install-expo-modules` does not add `bindReactNativeFactory(factory)` to `AppDelegate.swift`, and the app crashes at start without it. Add it after `reactNativeFactory = factory` (Expo's manual installation steps show it).
 
 
 ## [1.8.0] - 2026-10-30
