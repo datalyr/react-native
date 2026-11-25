@@ -99,11 +99,20 @@ import type { ExpoRouterTrackingConfig as _ExpoRouterConfig } from './expo-route
 
 // Lazy-resolved expo-router hook. Resolved once at first call, not inside the
 // hook body, so that hook call count stays stable across renders.
+//
+// The require must stay inside try/catch: Metro resolves every literal
+// require when it bundles, and only treats one inside a try block as optional
+// (allowOptionalDependencies, on in Metro's, React Native's and Expo's default
+// config). Without it, an app without expo-router cannot bundle this entry.
 let _usePathname: (() => string) | null = null;
 function getUsePathname(): () => string {
   if (!_usePathname) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    _usePathname = (require('expo-router') as { usePathname: () => string }).usePathname;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      _usePathname = (require('expo-router') as { usePathname: () => string }).usePathname;
+    } catch {
+      throw new Error('[Datalyr] useDatalyrScreenTracking needs expo-router. Install it, or call datalyr.screen() yourself.');
+    }
   }
   return _usePathname;
 }
