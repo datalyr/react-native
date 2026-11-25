@@ -7,9 +7,10 @@
 // - Bare, React Native below 0.81: the same line with the README's
 //   react-native-get-random-values@^1 advice, on react-native@~0.80.0.
 // - Expo: throwaway apps with expo@latest and expo@^52 (the oldest the SDK
-//   supports) and the react / react-native each bundles, then the README's `npx expo install` line, each package at the
-//   version expo@latest's bundledNativeModules.json names (what
-//   `expo install` picks), or latest when it names none.
+//   supports) and the react / react-native each bundles, then the README's
+//   `npx expo install` line, each package at the version that expo's
+//   bundledNativeModules.json names (what `expo install` picks), or latest
+//   when it names none.
 //
 // Only a lockfile is written (--package-lock-only): nothing is downloaded
 // beyond package metadata, and no React Native app is built. A peer conflict
