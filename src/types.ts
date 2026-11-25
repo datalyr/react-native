@@ -234,6 +234,9 @@ export interface QueuedEvent {
   // Set on dead-letter entries that can never deliver (e.g. server 413 payload too
   // large). replayDeadLetter skips them; they are kept only for inspection.
   permanent?: boolean;
+  // Network failures in a row on the tracking host; past TRACKING_HOST_FALLBACK_AFTER the
+  // event is also tried on the normal host without its IDFA (see EventQueue).
+  trackingHostFailures?: number;
 }
 
 // App State - Updated for React Native 0.80

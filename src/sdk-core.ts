@@ -276,6 +276,12 @@ export class DatalyrSDKCore {
         debug: this.state.config.debug || false,
         useServerTracking: this.state.config.useServerTracking ?? true,
       });
+      // iOS blocks the privacy manifest's tracking domain unless tracking is authorized
+      // when the request is sent, so the client reads the status then (before the queue
+      // below loads and drains the stored events). Not on Android: no such block there.
+      if (Platform.OS === 'ios') {
+        this.httpClient.setTrackingAuthorizationProvider(() => this.liveTrackingStatus());
+      }
 
       // Initialize event queue
       this.eventQueue = new EventQueue(this.httpClient, {
@@ -1154,6 +1160,17 @@ export class DatalyrSDKCore {
     }
     if (!this.deferredLookupAwaitingAtt) return;
     await this.runDeferredLookupIfEligible();
+  }
+
+  /**
+   * The ATT status right now, from the native module (a cheap read), for the send-time
+   * host choice. Also refreshes the cache, so events built next carry the current IDFA.
+   * Undefined when the module is unavailable or the read fails: never authorized.
+   */
+  private async liveTrackingStatus(): Promise<number | undefined> {
+    const info = await AdvertiserInfoBridge.getAdvertiserInfo();
+    if (info) this.cachedAdvertiserInfo = info;
+    return attStatusFrom(info);
   }
 
   /** Re-read IDFA/IDFV/ATT status from the native module into the cache. */

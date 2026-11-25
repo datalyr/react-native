@@ -15,6 +15,12 @@ export const TRANSIENT_BACKOFF_BASE_MS = 5000;
 export const TRANSIENT_BACKOFF_MAX_MS = 5 * 60 * 1000;
 /** Longest Retry-After the queue honours; a larger value is treated as this. */
 export const MAX_RETRY_AFTER_MS = 10 * 60 * 1000;
+/**
+ * Network failures in a row on the tracking host (tracking.datalyr.com) before the event
+ * is also tried on the normal host without its IDFA, so a host that keeps failing cannot
+ * hold the queue. During a real outage that try fails too and the event keeps its IDFA.
+ */
+export const TRACKING_HOST_FALLBACK_AFTER = 2;
 
 interface QueueConfig {
   maxQueueSize: number;
@@ -258,7 +264,18 @@ export class EventQueue {
 
         for (const queuedEvent of eventsToProcess) {
           try {
-            const response = await this.httpClient.sendEvent(queuedEvent.payload);
+            let response = await this.httpClient.sendEvent(queuedEvent.payload);
+            if (response.viaTrackingHost && !response.success && response.transient && response.status === 0) {
+              // Nothing answered on the tracking host. iOS blocks it whenever tracking is
+              // not authorized; the status is read just before the send, but if the block
+              // or the host keeps failing, send to the normal host without the IDFA rather
+              // than hold every later event behind this one.
+              queuedEvent.trackingHostFailures = (queuedEvent.trackingHostFailures || 0) + 1;
+              if (queuedEvent.trackingHostFailures >= TRACKING_HOST_FALLBACK_AFTER) {
+                debugLog(`Tracking host keeps failing; sending without the IDFA to the normal host: ${queuedEvent.payload.eventName}`);
+                response = await this.httpClient.sendEvent(queuedEvent.payload, { avoidTrackingHost: true });
+              }
+            }
 
             if (response.success) {
               debugLog(`Event sent successfully: ${queuedEvent.payload.eventName}`);
