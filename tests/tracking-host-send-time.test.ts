@@ -96,6 +96,9 @@ const authorizedFields = (extra: Record<string, any> = {}) => ({
 const newClient = () => {
   const client = new HttpClient(INGEST, { apiKey: 'test_key_not_real', maxRetries: 0, retryDelay: 1, timeout: 50, debug: false, useServerTracking: true });
   (client as any).setTrackingAuthorizationProvider?.(async () => { providerCalls++; return liveStatus; });
+  // Tracking was already authorized when this process started (see
+  // tracking-host-process-start.test.ts for the other case).
+  (client as any).setTrackingStatusAtProcessStartProvider?.(async () => 3);
   return client;
 };
 
