@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Weekly, so a new major of a peer that the README installs unpinned fails
+  # here before a customer's install does.
+  schedule:
+    - cron: '17 13 * * 1'
 
 # A newer commit on the same PR cancels the older run; each push to main keeps
 # its own run.
@@ -58,3 +62,18 @@ jobs:
           if-no-files-found: error
       # scripts/validate-ios.sh compiles the native module inside a local Expo
       # app; it stays a manual pre-release step.
+
+  install-lines:
+    # The README install lines, resolved with npm's strict peer rules against
+    # today's published versions. `test` above installs with
+    # --legacy-peer-deps and so cannot see a peer conflict. Lockfile only: no
+    # node_modules, no app build.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: README install lines resolve without peer conflicts
+        run: node scripts/check-install-lines.mjs

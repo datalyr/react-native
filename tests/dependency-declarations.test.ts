@@ -35,16 +35,25 @@ describe('W6 — uuid', () => {
 
 describe('W6 — optional Expo peers', () => {
   // src/utils-expo.ts imports these three statically (the Expo entry);
-  // src/expo.ts requires expo-router lazily; app.plugin.js requires
-  // expo/config-plugins, falling back to @expo/config-plugins.
+  // app.plugin.js requires expo/config-plugins, falling back to
+  // @expo/config-plugins.
   const expoPeers = [
     'expo-application',
     'expo-device',
     'expo-network',
-    'expo-router',
     'expo',
     '@expo/config-plugins',
   ];
+
+  test('expo-router is not a peer (an optional peer still makes npm check the newest expo-router)', () => {
+    // npm resolves an optional peer that is not installed against its newest
+    // version: expo-router 58 wants expo-constants 58, and a bare app on Expo
+    // SDK 54 then fails `npx expo install @datalyr/react-native` with ERESOLVE.
+    // src/expo.ts requires expo-router only when the app calls
+    // useDatalyrScreenTracking, so only apps that have it load it.
+    expect(pkg.peerDependencies['expo-router']).toBeUndefined();
+    expect(pkg.peerDependenciesMeta['expo-router']).toBeUndefined();
+  });
 
   test.each(expoPeers)('%s is an optional peer dependency', (name) => {
     expect(typeof pkg.peerDependencies[name]).toBe('string');
@@ -93,6 +102,14 @@ describe('W6 — native modules the app must list itself', () => {
     expect(pkg.peerDependencies['@react-native-async-storage/async-storage']).toBe('^1.17.0 || ^2.0.0');
   });
 
+  test('get-random-values peer range is 1.11+ or 2.x (the unpinned README lines take 2.x)', () => {
+    // 2.x needs React Native 0.81+ with the New Architecture; 1.11 is the first
+    // 1.x with bridgeless support, and Expo SDK 52-57 bundle ~1.11.0. The SDK
+    // only imports it for its crypto.getRandomValues polyfill, which 1.x and
+    // 2.x install the same way.
+    expect(pkg.peerDependencies['react-native-get-random-values']).toBe('^1.11.0 || ^2.0.0');
+  });
+
   test.each(nativeModules)('the README install lines name %s', (name) => {
     const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
     const installLines = readme
@@ -105,9 +122,21 @@ describe('W6 — native modules the app must list itself', () => {
     }
   });
 
-  test('the bare install line pins AsyncStorage to 2.x (latest is 3.x, outside the peer range)', () => {
+  test('the bare steps add the matching Expo SDK first, then install with expo install (SDK-matched versions)', () => {
+    // A plain npm install takes the newest expo-modules-core (pod install then
+    // fails on an older Expo SDK) and AsyncStorage 3.x (outside the peer range).
     const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
-    const bare = readme.split('\n').find((line) => line.startsWith('npm install @datalyr/react-native'));
-    expect(bare?.split(' ')).toContain('@react-native-async-storage/async-storage@^2');
+    const lines = readme.split('\n');
+    const bareStart = lines.indexOf('**Bare React Native:**');
+    const expoStart = lines.indexOf('**Expo:**');
+    expect(bareStart).toBeGreaterThan(-1);
+    expect(expoStart).toBeGreaterThan(bareStart);
+    const bare = lines.slice(bareStart, expoStart);
+    const addExpo = bare.indexOf('npx install-expo-modules@latest');
+    const install = bare.findIndex((line) => line.startsWith('npx expo install @datalyr/react-native '));
+    expect(addExpo).toBeGreaterThan(-1);
+    expect(install).toBeGreaterThan(addExpo);
+    expect(bare[install].split(' ')).toContain('expo-modules-core');
+    expect(lines.some((line) => /^(npm install|yarn add|pnpm add) .*@datalyr\/react-native/.test(line))).toBe(false);
   });
 });

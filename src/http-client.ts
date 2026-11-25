@@ -33,7 +33,25 @@ interface HttpResponse {
   rejected?: boolean;
   // The server's Retry-After, in ms, when it sent one with a transient answer.
   retryAfterMs?: number;
+  // true when the request went to the tracking host (tracking.datalyr.com).
+  viaTrackingHost?: boolean;
 }
+
+/** Options for one send. */
+export interface SendOptions {
+  // Send to the normal host with the tracking-only fields removed, even when tracking is
+  // authorized. The queue uses it when the tracking host keeps failing.
+  avoidTrackingHost?: boolean;
+}
+
+/**
+ * Reads the app's App Tracking Transparency status NOW (0 notDetermined, 1 restricted,
+ * 2 denied, 3 authorized; undefined when unknown). Set on iOS only.
+ */
+export type TrackingAuthorizationProvider = () => Promise<number | undefined>;
+
+/** Event fields that may be sent only while tracking is authorized. */
+const TRACKING_ONLY_KEYS = ['idfa', 'alart'] as const;
 
 /** Longest a single in-request retry waits; a longer Retry-After goes to the queue. */
 const MAX_INLINE_RETRY_WAIT_MS = 30000;
@@ -88,21 +106,111 @@ export class HttpClient {
   // Apple privacy manifest: NSPrivacyTracking=true REQUIRES a non-empty
   // NSPrivacyTrackingDomains, and iOS fails every request to a listed host until the
   // user grants ATT. So the manifest lists ONLY tracking.datalyr.com, and only events
-  // that actually carry the IDFA (i.e. ATT already authorized) are sent there; all
-  // other events go to ingest.datalyr.com and are never blocked. Same backend handler.
+  // that carry the IDFA while ATT is authorized AT SEND TIME, and was already authorized
+  // when the app process started, are sent there (routeFor);
+  // all other events go to ingest.datalyr.com and are never blocked. Same backend handler.
   static readonly TRACKING_ENDPOINT = 'https://tracking.datalyr.com/track';
 
-  private endpointFor(payload: EventPayload): string {
-    if (this.config.useServerTracking === false) return this.endpoint;
-    const idfa = (payload.eventData as Record<string, unknown> | undefined)?.idfa;
-    return typeof idfa === 'string' && idfa.length > 0 ? HttpClient.TRACKING_ENDPOINT : this.endpoint;
+  // iOS: reads the live ATT status at send time. Null elsewhere (Android has no tracking
+  // domain block), which keeps the routing below exactly as it was.
+  private trackingAuthorizationProvider: TrackingAuthorizationProvider | null = null;
+
+  setTrackingAuthorizationProvider(provider: TrackingAuthorizationProvider | null): void {
+    this.trackingAuthorizationProvider = provider;
+  }
+
+  // iOS: the status when this app process started. iOS lifts the tracking-domain block only
+  // for processes started after tracking was allowed. Not set (or unknown) = not authorized
+  // at start, so the tracking host is never used.
+  private statusAtProcessStartProvider: TrackingAuthorizationProvider | null = null;
+
+  setTrackingStatusAtProcessStartProvider(provider: TrackingAuthorizationProvider | null): void {
+    this.statusAtProcessStartProvider = provider;
+  }
+
+  // While set and in the future, IDFA events skip the tracking host (sent to the normal host
+  // without the IDFA): it failed while the normal host answered (see avoidTrackingHostFor).
+  private trackingHostAvoidedUntil = 0;
+
+  /** The tracking host failed and the normal host answered: skip it for `ms`, then try again. */
+  avoidTrackingHostFor(ms: number): void {
+    this.trackingHostAvoidedUntil = Date.now() + ms;
+  }
+
+  private async authorizedAtProcessStart(): Promise<boolean> {
+    if (!this.statusAtProcessStartProvider) return false;
+    try {
+      return (await this.statusAtProcessStartProvider()) === 3;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Where to send `payload`, and what to send. iOS checks the tracking domain when the
+   * request is SENT, but the IDFA was copied into the event when it was BUILT: an event
+   * queued while tracking was allowed and sent after the user turned it off would go to a
+   * blocked host. So the tracking host is used only when the event carries an IDFA AND the
+   * live status is authorized (3); otherwise the event goes to the normal host with the
+   * IDFA and the other tracking-only fields removed (from a copy; the queued event keeps
+   * them for a later authorized send).
+   *
+   * iOS also keeps blocking the tracking host for the rest of the launch in which the user
+   * allowed tracking. So it is used only when tracking was ALREADY authorized when this
+   * process started; until the next launch an authorized event goes to the normal host
+   * without the IDFA (its status fields stay true). The same applies during the cool-down
+   * after the tracking host failed while the normal host answered.
+   */
+  private async routeFor(payload: EventPayload, options?: SendOptions): Promise<{ url: string; payload: EventPayload; viaTrackingHost: boolean }> {
+    if (this.config.useServerTracking === false) return { url: this.endpoint, payload, viaTrackingHost: false };
+    const data = payload.eventData as Record<string, unknown> | undefined;
+    const idfa = data?.idfa;
+    const hasIdfa = typeof idfa === 'string' && idfa.length > 0;
+    const provider = this.trackingAuthorizationProvider;
+    if (!provider) {
+      return hasIdfa
+        ? { url: HttpClient.TRACKING_ENDPOINT, payload, viaTrackingHost: true }
+        : { url: this.endpoint, payload, viaTrackingHost: false };
+    }
+    if (!data || !TRACKING_ONLY_KEYS.some((k) => data[k] !== undefined)) {
+      return { url: this.endpoint, payload, viaTrackingHost: false };
+    }
+    let status: number | undefined;
+    try {
+      status = await provider();
+    } catch {
+      status = undefined; // unknown can never read as authorized
+    }
+    // Authorization-only fields (a real IDFA, `alart`) go only to the tracking host.
+    if (status === 3 && !hasIdfa && data.alart === undefined) {
+      return { url: this.endpoint, payload, viaTrackingHost: false };
+    }
+    if (
+      status === 3 &&
+      !options?.avoidTrackingHost &&
+      Date.now() >= this.trackingHostAvoidedUntil &&
+      (await this.authorizedAtProcessStart())
+    ) {
+      return { url: HttpClient.TRACKING_ENDPOINT, payload, viaTrackingHost: true };
+    }
+    const stripped: Record<string, unknown> = { ...data };
+    for (const key of TRACKING_ONLY_KEYS) delete stripped[key];
+    if (status !== 3) {
+      // The event must not claim tracking is allowed: report the status at send time.
+      stripped.advertiser_tracking_enabled = false;
+      if (status === undefined) delete stripped.att_status;
+      else stripped.att_status = status;
+    }
+    return { url: this.endpoint, payload: { ...payload, eventData: stripped as EventPayload['eventData'] }, viaTrackingHost: false };
   }
 
   /**
    * Send a single event with retry logic
    */
-  async sendEvent(payload: EventPayload): Promise<HttpResponse> {
-    return this.sendWithRetry(payload, 0);
+  async sendEvent(payload: EventPayload, options?: SendOptions): Promise<HttpResponse> {
+    const route = await this.routeFor(payload, options);
+    const response = await this.sendWithRetry(route.payload, 0, route.url);
+    return route.viaTrackingHost ? { ...response, viaTrackingHost: true } : response;
   }
 
   /**
@@ -117,7 +225,7 @@ export class HttpClient {
   /**
    * Send request with exponential backoff retry
    */
-  private async sendWithRetry(payload: EventPayload, retryCount: number): Promise<HttpResponse> {
+  private async sendWithRetry(payload: EventPayload, retryCount: number, url: string): Promise<HttpResponse> {
     try {
       // Defense-in-depth: never fire a server-tracking request without an API key — it
       // would 401 and (after retries) permanently dead-letter the event. Signal the queue
@@ -165,7 +273,7 @@ export class HttpClient {
       const body = JSON.stringify(requestBody);
       let response: Response;
       try {
-        response = await fetch(this.endpointFor(payload), {
+        response = await fetch(url, {
           method: 'POST',
           headers,
           body,
@@ -263,7 +371,7 @@ export class HttpClient {
         await this.delay(delay);
         // Same payload object, so the same eventId: ingest dedupes a retry of an event
         // whose first answer was lost.
-        return this.sendWithRetry(payload, retryCount + 1);
+        return this.sendWithRetry(payload, retryCount + 1, url);
       }
 
       if (httpStatus === undefined) {

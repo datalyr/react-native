@@ -41,7 +41,7 @@ import { AutoEventsManager } from './auto-events';
 import { ConversionValueEncoder, ConversionTemplates } from './ConversionValueEncoder';
 import { SKAdNetworkBridge } from './native/SKAdNetworkBridge';
 import { appleSearchAdsIntegration, playInstallReferrerIntegration } from './integrations';
-import { AppleSearchAdsAttribution, AdvertiserInfoBridge, isNativeModuleAvailable } from './native/DatalyrNativeBridge';
+import { AppleSearchAdsAttribution, AdvertiserInfoBridge, TrackingStartBridge, isNativeModuleAvailable } from './native/DatalyrNativeBridge';
 import { networkStatusManager } from './network-status';
 // Provider namespaces the server's webhooks join on `external_ids` (one list shared by
 // both entry points; MUST match the server's person-contract.js).
@@ -84,6 +84,7 @@ export interface PlatformUtils {
     USER_ID_PROVISIONAL: string;
     LAST_IDENTITY_HASH: string;
     DEFERRED_LOOKUP_NEEDS_ATT_STATUS: string;
+    ATT_ID_WITHHELD: string;
   };
 }
 
@@ -276,6 +277,14 @@ export class DatalyrSDKCore {
         debug: this.state.config.debug || false,
         useServerTracking: this.state.config.useServerTracking ?? true,
       });
+      // iOS blocks the privacy manifest's tracking domain unless tracking is authorized
+      // when the request is sent, so the client reads the status then (before the queue
+      // below loads and drains the stored events). Not on Android: no such block there.
+      if (Platform.OS === 'ios') {
+        this.httpClient.setTrackingAuthorizationProvider(() => this.liveTrackingStatus());
+        // ...and lifts it only for processes started after tracking was allowed.
+        this.httpClient.setTrackingStatusAtProcessStartProvider(() => TrackingStartBridge.statusAtProcessStart());
+      }
 
       // Initialize event queue
       this.eventQueue = new EventQueue(this.httpClient, {
@@ -449,6 +458,8 @@ export class DatalyrSDKCore {
         this.build.nativeModulesMissingWarned = true;
         console.warn('[Datalyr] Native modules not linked — SKAdNetwork, IDFA and Apple Search Ads are disabled. Expo Go does not support them; use a development build and re-run pod install.');
       }
+
+      await this.resendAttStatusIfIdWithheld();
 
       // Handlers registered before initialize() finished get their first push now (ids
       // and any deferred web attribution are in place).
@@ -1154,6 +1165,56 @@ export class DatalyrSDKCore {
     }
     if (!this.deferredLookupAwaitingAtt) return;
     await this.runDeferredLookupIfEligible();
+  }
+
+  /**
+   * The ATT status right now, from the native module (a cheap read), for the send-time
+   * host choice. Also refreshes the cache, so events built next carry the current IDFA.
+   * Undefined when the module is unavailable or the read fails: never authorized.
+   */
+  private async liveTrackingStatus(): Promise<number | undefined> {
+    const info = await AdvertiserInfoBridge.getAdvertiserInfo();
+    if (info) this.cachedAdvertiserInfo = info;
+    const status = attStatusFrom(info);
+    if (status === 3 && !this.idWithheldNoted && (await TrackingStartBridge.statusAtProcessStart()) !== 3) {
+      // Allowed during this launch: the IDFA is withheld until the next one (see routeFor).
+      // The stored value is the re-send's fixed event id, made once per grant.
+      this.idWithheldNoted = true;
+      const key = this.u.STORAGE_KEYS.ATT_ID_WITHHELD;
+      if (!(await this.u.Storage.getItem<string>(key))) {
+        await this.u.Storage.setItem(key, `att_resend_${this.u.generateUUID()}`);
+      }
+    }
+    return status;
+  }
+
+  private idWithheldNoted = false;
+
+  /**
+   * The previous launch allowed tracking mid-session, so its events reached the server
+   * without the IDFA. If tracking was authorized when this process started, send
+   * `$att_status` once: it carries the IDFA (to the tracking host) for the same device ids.
+   */
+  private async resendAttStatusIfIdWithheld(): Promise<void> {
+    if (Platform.OS !== 'ios') return;
+    const key = this.u.STORAGE_KEYS.ATT_ID_WITHHELD;
+    try {
+      const grantId = await this.u.Storage.getItem<string>(key);
+      if (!grantId) return;
+      const now = attStatusFrom(this.cachedAdvertiserInfo);
+      if (now === 3 && (await TrackingStartBridge.statusAtProcessStart()) === 3) {
+        // The flag is removed only after the event is queued (so it cannot be lost), and the
+        // event id is fixed per grant: if the app is killed in between, the next launch sends
+        // it again with the SAME id, which the server de-duplicates.
+        const eventId = typeof grantId === 'string' ? grantId : undefined;
+        await this.track('$att_status', { authorized: true, status: 3, status_name: ATT_STATUS_NAMES[3], att_status: 3, resent: true, ...(eventId ? { event_id: eventId } : {}) });
+        await this.u.Storage.removeItem(key);
+      } else if (now !== undefined && now !== 3) {
+        await this.u.Storage.removeItem(key); // no longer allowed: nothing to send
+      }
+    } catch (error) {
+      errorLog('Failed to re-send the ATT status:', error as Error);
+    }
   }
 
   /** Re-read IDFA/IDFV/ATT status from the native module into the cache. */

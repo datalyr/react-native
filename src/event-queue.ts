@@ -15,6 +15,18 @@ export const TRANSIENT_BACKOFF_BASE_MS = 5000;
 export const TRANSIENT_BACKOFF_MAX_MS = 5 * 60 * 1000;
 /** Longest Retry-After the queue honours; a larger value is treated as this. */
 export const MAX_RETRY_AFTER_MS = 10 * 60 * 1000;
+/**
+ * Network failures in a row on the tracking host (tracking.datalyr.com) before the event
+ * is also tried on the normal host without its IDFA, so a host that keeps failing cannot
+ * hold the queue. During a real outage that try fails too and the event keeps its IDFA.
+ */
+export const TRACKING_HOST_FALLBACK_AFTER = 2;
+
+/**
+ * After the tracking host failed and the normal host answered, IDFA events go straight to
+ * the normal host (without the IDFA) for this long; then the tracking host is tried again.
+ */
+export const TRACKING_HOST_COOL_DOWN_MS = 10 * 60 * 1000;
 
 interface QueueConfig {
   maxQueueSize: number;
@@ -258,7 +270,28 @@ export class EventQueue {
 
         for (const queuedEvent of eventsToProcess) {
           try {
-            const response = await this.httpClient.sendEvent(queuedEvent.payload);
+            let response = await this.httpClient.sendEvent(queuedEvent.payload);
+            if (!response.viaTrackingHost) {
+              // This attempt did not use the tracking host: the count is of failures in a row.
+              queuedEvent.trackingHostFailures = 0;
+            }
+            if (response.viaTrackingHost && !response.success && !response.authPending) {
+              // The tracking host failed: nothing answered (iOS blocks it unless tracking is
+              // authorized), or an HTTP error (a filter or proxy can answer for that host
+              // only). If it keeps failing, send to the normal host without the IDFA rather
+              // than hold every later event behind this one.
+              queuedEvent.trackingHostFailures = (queuedEvent.trackingHostFailures || 0) + 1;
+              if (queuedEvent.trackingHostFailures >= TRACKING_HOST_FALLBACK_AFTER) {
+                debugLog(`Tracking host keeps failing; sending without the IDFA to the normal host: ${queuedEvent.payload.eventName}`);
+                response = await this.httpClient.sendEvent(queuedEvent.payload, { avoidTrackingHost: true });
+                if (response.success) {
+                  // The normal host answered while the tracking host did not: send later IDFA
+                  // events straight to the normal host for a while instead of failing each one
+                  // twice first. Offline never gets here (the normal host must answer).
+                  this.httpClient.avoidTrackingHostFor(TRACKING_HOST_COOL_DOWN_MS);
+                }
+              }
+            }
 
             if (response.success) {
               debugLog(`Event sent successfully: ${queuedEvent.payload.eventName}`);

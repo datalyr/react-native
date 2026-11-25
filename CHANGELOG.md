@@ -5,9 +5,9 @@ All notable changes to the Datalyr React Native SDK will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [1.9.0] - 2026-11-25
 
-Ships as a minor version (1.9.0). Read the install change below before upgrading.
+Minor version. Read the install change below before upgrading.
 
 ### Added
 - `Datalyr.getPlayInstallReferrer()` on the bare React Native static facade (the instance and the Expo facade already had it).
@@ -15,7 +15,7 @@ Ships as a minor version (1.9.0). Read the install change below before upgrading
 
 ### Changed
 - `uuid` is now `^11.1.1` (was `^10.0.0`). This clears the one production advisory. The SDK only uses `v4()`; ids keep the same format. `@types/uuid` is gone, since uuid 11 ships its own types.
-- The Expo modules the SDK loads are now declared as optional peer dependencies: `expo-application`, `expo-device`, `expo-network`, `expo-router`, `expo` and `@expo/config-plugins` (Expo SDK 52 or later, the same floor as `expo-modules-core`). Your package manager now warns about a version it cannot work with. Nothing is installed for you. The unused `expo-tracking-transparency` entry is removed.
+- The Expo modules the SDK loads are now declared as optional peer dependencies: `expo-application`, `expo-device`, `expo-network`, `expo` and `@expo/config-plugins` (Expo SDK 52 or later, the same floor as `expo-modules-core`). Your package manager now warns about a version it cannot work with. Nothing is installed for you. The unused `expo-tracking-transparency` entry is removed. `expo-router` is not declared: npm checks an optional peer against its newest version even when it is not installed, and expo-router's own peers then conflict with an older Expo SDK (`ERESOLVE`). The SDK loads it only when you use the Expo Router screen-tracking hook.
 - `debug: true` now turns on the SDK's debug logs in a release build. Before, they printed only in a development build (`__DEV__`) and the option did nothing else.
 - SKAdNetwork and AdAttributionKit success messages, and failed Apple Search Ads, advertiser-info and Play Install Referrer lookups in the native bridge, now log only when debug logging is on (`__DEV__` or `debug: true`). Warnings for a missing native module and failed SKAdNetwork updates are unchanged.
 - iOS: `setPostbackEnvironment` no longer writes an `NSLog` line; the JS side logs the result when debug logging is on.
@@ -33,6 +33,10 @@ Ships as a minor version (1.9.0). Read the install change below before upgrading
 - Internal code that was never called: the private deferred deep link handlers in both entry points, the unused `src/utils-interface.ts` (not exported) and a commented-out AppState block.
 
 ### Fixed
+- Expo: an app without `expo-router` can now bundle `@datalyr/react-native/expo`. The entry's lazy `require('expo-router')` had no try/catch, so Metro could not treat it as optional and stopped with `Unable to resolve module expo-router` (also in 1.8.0). Now only `useDatalyrScreenTracking()` needs expo-router, and without it the hook throws a clear error.
+- iOS: the SDK now chooses the host for each event when it sends it, not when it builds it. An event goes to `tracking.datalyr.com` (the tracking domain in the SDK's privacy manifest) only when it carries the advertising id (IDFA) and tracking is allowed at send time (and was already allowed when the app started; see the next point). Otherwise it goes to the normal host, with `idfa` and `alart` removed and `att_status` / `advertiser_tracking_enabled` set to the status at send time. If the tracking host cannot be reached or answers an HTTP error twice in a row for one event, that event is sent to the normal host without its IDFA, and other IDFA events then skip the tracking host for 10 minutes. So an event built while tracking was allowed can no longer hold the queue after tracking is turned off. Android is unchanged.
+- iOS: after the user allows tracking, the advertising id is sent from the next app launch. In the launch where the user taps Allow, events go to the normal host at once without it (`att_status` still reads 3). On the next launch the SDK sends `$att_status` once (`resent: true`) with the IDFA, under one fixed event id per grant, so a kill during that launch cannot count it twice. `alart` without an IDFA follows the same rule: tracking host or removed, never on the normal host.
+- Why: in apps where iOS enforces tracking domains, requests to `tracking.datalyr.com` are refused until tracking is allowed and the app has started again. iOS enforces the list in the app's Info.plist. Xcode copies an SDK's list there for a Swift package. It does not copy this SDK's list, which CocoaPods installs as a resource bundle. So in a React Native or Expo app the host is refused only if the app lists it in its own Info.plist. The rules above deliver events in both cases.
 - Events are no longer dead-lettered by a server outage. A 5xx (503 included), 429, 408, a timeout or a network error keeps the event in the queue with the same `eventId`, uses none of its retry budget, and backs the whole queue off (5 s doubling to 5 minutes with 0.5x to 1.0x jitter; never sooner than the server's `Retry-After`, honoured up to 10 minutes, plus 0 to 25% jitter). Before, three failed flushes (about 1 to 2 minutes of 5xx or 429) moved events to the dead-letter store, and a timeout (`Aborted`) was not recognised as a connectivity failure.
 - `Retry-After` is now honoured on 5xx answers (ingest answers 503 with `Retry-After` when the fault is its own), not only on 429 and 408. A `Retry-After` longer than 30 s is no longer cut short in-request.
 - Any 2xx is a delivered event, whatever its body. Ingest answers 204 with no body for a filtered event; that used to count as a failed send and re-send the event.
@@ -41,11 +45,15 @@ Ships as a minor version (1.9.0). Read the install change below before upgrading
 - When a flush stops on a temporary failure, the events it already delivered are removed from disk at once.
 
 ### Install change
-- `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` are now peer dependencies, not dependencies. Install them in your app:
-    - Bare React Native: `npm install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage@^2 react-native-get-random-values` (pin `@^2`: an unpinned install takes 3.x, which is outside the peer range)
+- `@react-native-async-storage/async-storage` (1.17 or later, or 2.x) and `react-native-get-random-values` (1.11 or later, or 2.x) are now peer dependencies, not dependencies. Install them in your app:
+    - Bare React Native: `npx install-expo-modules@latest`, then `npx expo install @datalyr/react-native expo-modules-core @react-native-async-storage/async-storage react-native-get-random-values`, then `cd ios && pod install`. Run `install-expo-modules` first: it adds the Expo SDK that matches your React Native, and `npx expo install` then picks versions for it. A plain `npm install` takes the newest `expo-modules-core` (and AsyncStorage 3.x), which an older Expo SDK cannot use.
     - Expo: `npx expo install @datalyr/react-native expo-application expo-device expo-network @react-native-async-storage/async-storage react-native-get-random-values`
 
   Both are native modules. React Native CLI autolinking links only the packages listed in the app's own `package.json`, and Expo before SDK 54 does the same, so as nested dependencies they could load without their native code. An app that already lists both needs no change. AsyncStorage 3.x is not supported yet (it renames `multiRemove` to `removeMany`).
+
+  `react-native-get-random-values` 2.x works only on React Native 0.81 or later with the New Architecture on (Expo SDK 54 or later with it on). On an older React Native, or with the New Architecture off, install `react-native-get-random-values@^1`. On React Native older than 0.81, npm refuses 2.x (`ERESOLVE`); with the New Architecture off, 2.x installs without a warning, but its iOS native module is registered only for the New Architecture, so the SDK fails at start and sends no events. `npx expo install` picks the version your Expo SDK expects (1.11 for Expo SDK 52 to 57, 2.x for SDK 58).
+
+  Bare apps on Expo SDK 53 or 54 (React Native 0.78 to 0.81): `install-expo-modules` does not add `bindReactNativeFactory(factory)` to `AppDelegate.swift`, and the app crashes at start without it. Add it after `reactNativeFactory = factory` (Expo's manual installation steps show it).
 
 
 ## [1.8.0] - 2026-10-30
