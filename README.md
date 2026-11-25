@@ -31,7 +31,7 @@ npx install-expo-modules@latest
 cd ios && pod install
 ```
 
-The SDK is built on Expo Modules. You must install `expo-modules-core` in a bare app too. AsyncStorage and `react-native-get-random-values` are native modules: React Native links only the packages your app lists, so install them in your app.
+The SDK is built on Expo Modules. You must install `expo-modules-core` in a bare app too. AsyncStorage and `react-native-get-random-values` are native modules: React Native links only the packages your app lists, so install them in your app. On React Native older than 0.81, install `react-native-get-random-values@^1` (2.x needs React Native 0.81 or later).
 
 **Expo:**
 
