@@ -34,5 +34,27 @@ jobs:
         run: npm run build
       - run: npm run lint
       - run: npm test -- --ci
+      # Package tarball for publishing off a laptop: `npm pack` (no prepack
+      # script, so it packs the lib/ built above) plus its sha256. Not for
+      # fork PRs or the weekly schedule.
+      - name: Pack tarball and checksum
+        id: pack
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          mkdir -p pack-out
+          TARBALL="$(npm pack --pack-destination pack-out --silent | tail -n 1)"
+          (cd pack-out && sha256sum "$TARBALL" > SHA256SUMS.txt)
+          cat pack-out/SHA256SUMS.txt
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Upload package artifact
+        if: steps.pack.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: datalyr-react-native-${{ steps.pack.outputs.version }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: pack-out/
+          retention-days: 7
+          if-no-files-found: error
       # scripts/validate-ios.sh compiles the native module inside a local Expo
       # app; it stays a manual pre-release step.
