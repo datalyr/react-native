@@ -60,6 +60,8 @@ Add the config plugin to `app.json`:
 
 Use a development build (`npx expo run:ios` or EAS). Expo Go ignores the plugin and sends events only.
 
+iOS: after the user allows tracking, the advertising ID is sent from the next app launch. Events in the launch where the user taps Allow are sent at once without it.
+
 Find your API key in DATALYR under **Settings → API**. The key starts with `dk_`.
 
 ## Quick start

@@ -271,14 +271,14 @@ export class EventQueue {
         for (const queuedEvent of eventsToProcess) {
           try {
             let response = await this.httpClient.sendEvent(queuedEvent.payload);
-            if (response.viaTrackingHost && response.status !== 0) {
-              // The tracking host answered (even an error): the count is of failures in a row.
+            if (!response.viaTrackingHost) {
+              // This attempt did not use the tracking host: the count is of failures in a row.
               queuedEvent.trackingHostFailures = 0;
             }
-            if (response.viaTrackingHost && !response.success && response.transient && response.status === 0) {
-              // Nothing answered on the tracking host. iOS blocks it whenever tracking is
-              // not authorized; the status is read just before the send, but if the block
-              // or the host keeps failing, send to the normal host without the IDFA rather
+            if (response.viaTrackingHost && !response.success && !response.authPending) {
+              // The tracking host failed: nothing answered (iOS blocks it unless tracking is
+              // authorized), or an HTTP error (a filter or proxy can answer for that host
+              // only). If it keeps failing, send to the normal host without the IDFA rather
               // than hold every later event behind this one.
               queuedEvent.trackingHostFailures = (queuedEvent.trackingHostFailures || 0) + 1;
               if (queuedEvent.trackingHostFailures >= TRACKING_HOST_FALLBACK_AFTER) {

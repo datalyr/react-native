@@ -54,10 +54,12 @@ const installFetch = () => {
  * when the process started (this release's native code); false = an older native binary
  * (for example new JS through an over-the-air update), where the JS side reads it at load.
  */
-const startProcess = (opts: { nativeStartField?: boolean } = {}) => {
+const startProcess = (opts: { nativeStartField?: boolean; jsReloadOnly?: boolean } = {}) => {
   const nativeStartField = opts.nativeStartField !== false;
-  phone.startStatus = phone.status;
-  const startStatus = phone.status;
+  // A JS reload (over-the-air update, dev reload) restarts the JS side in the SAME process:
+  // iOS keeps the process's block, and the native module keeps its start value.
+  if (!opts.jsReloadOnly) phone.startStatus = phone.status;
+  const startStatus = phone.startStatus;
   const fakeNative: any = {
     getAdvertiserInfo: async () => {
       nativeReads++;
@@ -240,6 +242,155 @@ describe.each([
   });
 });
 
+describe('iOS: more launches', () => {
+  const resent = () => named('$att_status').filter((s) => s.body.properties.resent === true);
+
+  test('authorized at start (for example an upgrade): no re-send, no flag', async () => {
+    phone.status = 3;
+    for (let i = 0; i < 2; i++) {
+      const sdk = startProcess();
+      try {
+        await init(sdk);
+        await sdk.track('screen_viewed');
+        await flush(sdk);
+      } finally {
+        sdk.destroy();
+      }
+    }
+    expect(resent()).toHaveLength(0);
+    expect(await (AsyncStorageShared as any).getItem('@datalyr/att_id_withheld')).toBeNull();
+  });
+
+  test('flag cleared on a launch where tracking is no longer allowed; no re-send later', async () => {
+    const first = startProcess();
+    try {
+      await init(first);
+      phone.status = 3;
+      await first.updateTrackingAuthorization(true);
+      await flush(first);
+    } finally {
+      first.destroy();
+    }
+    expect(await (AsyncStorageShared as any).getItem('@datalyr/att_id_withheld')).not.toBeNull();
+
+    phone.status = 2; // turned off in Settings
+    const second = startProcess();
+    try {
+      await init(second);
+      await flush(second);
+    } finally {
+      second.destroy();
+    }
+    expect(await (AsyncStorageShared as any).getItem('@datalyr/att_id_withheld')).toBeNull();
+
+    phone.status = 3; // allowed again in Settings (iOS relaunches the app)
+    sent = [];
+    const third = startProcess();
+    try {
+      await init(third);
+      await flush(third);
+    } finally {
+      third.destroy();
+    }
+    expect(resent()).toHaveLength(0);
+  });
+
+  test('an IDFA event stored by an earlier launch, sent in a launch not authorized at start → ingest without it', async () => {
+    phone.status = 3;
+    const first = startProcess();
+    try {
+      await init(first);
+      first.eventQueue.isOnline = false;
+      await first.track('purchase', { value: 7 });
+    } finally {
+      first.destroy(); // killed with the event still queued
+    }
+    sent = [];
+    phone.status = 2;
+    const second = startProcess();
+    try {
+      await init(second);
+      phone.status = 3; // allowed again during this launch
+      await flush(second);
+    } finally {
+      second.destroy();
+    }
+    const purchase = named('purchase');
+    expect(purchase).toHaveLength(1);
+    expect(purchase[0].url).toBe(INGEST);
+    expect(purchase[0].body.properties.idfa).toBeUndefined();
+    expect(purchase[0].body.properties.value).toBe(7);
+    expect(sent.filter((s) => s.url === TRACKING)).toHaveLength(0);
+  });
+
+  test('killed between the re-send and clearing its flag: sent again with the SAME event id', async () => {
+    const first = startProcess();
+    try {
+      await init(first);
+      phone.status = 3;
+      await first.updateTrackingAuthorization(true);
+      await flush(first);
+    } finally {
+      first.destroy();
+    }
+    // Second launch: the re-send is queued, then the app dies before the flag is removed.
+    const realRemove = (AsyncStorageShared as any).removeItem;
+    (AsyncStorageShared as any).removeItem = async (k: string) => {
+      if (k === '@datalyr/att_id_withheld') throw new Error('killed (test)');
+      return realRemove(k);
+    };
+    const second = startProcess();
+    try {
+      await init(second);
+      await flush(second);
+    } finally {
+      second.destroy();
+      (AsyncStorageShared as any).removeItem = realRemove;
+    }
+    const third = startProcess();
+    try {
+      await init(third);
+      await flush(third);
+    } finally {
+      third.destroy();
+    }
+    const copies = resent();
+    expect(copies.length).toBe(2);
+    expect(new Set(copies.map((c) => c.body.eventId)).size).toBe(1);
+    expect(copies.every((c) => c.url === TRACKING && c.body.properties.idfa === IDFA)).toBe(true);
+    expect(await (AsyncStorageShared as any).getItem('@datalyr/att_id_withheld')).toBeNull();
+  });
+
+  test.each([
+    ['new native: still not authorized at start → ingest at once', true],
+    ['older native: reads authorized (wrong) → tracking host fails, falls back, then skips it', false],
+  ])('JS reload in the same process after Allow, %s', async (_name, nativeStartField) => {
+    const first = startProcess({ nativeStartField });
+    try {
+      await init(first);
+      phone.status = 3; // allowed, then the JS side reloads in the same process
+    } finally {
+      first.destroy();
+    }
+    sent = [];
+    const reloaded = startProcess({ nativeStartField, jsReloadOnly: true });
+    try {
+      await init(reloaded);
+      await reloaded.track('purchase', { value: 5 });
+      await flush(reloaded);
+      await reloaded.track('later');
+      await flush(reloaded);
+      expect(named('purchase').filter((s) => s.url === INGEST)).toHaveLength(1);
+      expect(named('later')).toEqual([expect.objectContaining({ url: INGEST })]);
+      expect(reloaded.eventQueue.getStats().queueSize).toBe(0);
+      if (nativeStartField) expect(sent.filter((s) => s.url === TRACKING)).toHaveLength(0);
+      expectNoIdOnIngest();
+    } finally {
+      reloaded.destroy();
+    }
+  });
+});
+
 test('iOS: status unreadable at start → treated as not authorized at start (ingest, IDFA removed)', async () => {
   phone.status = 3;
   phone.readable = false;
@@ -313,21 +464,60 @@ describe('tracking host unreachable while authorized', () => {
     phone.startStatus = 3;
   });
 
-  test('the counter is "two in a row": an answer from the tracking host resets it', async () => {
+  test('the counter is "two in a row": an attempt that did not use the tracking host resets it', async () => {
     const q = await newQueue(newClient());
     await enqueueQuiet(q, payload('purchase'));
-    const replies: Array<'fail' | number> = ['fail', 503, 'fail'];
     (globalThis as any).fetch = async (url: string, init: any) => {
       sent.push({ url: String(url), body: JSON.parse(init.body) });
-      if (String(url).startsWith(INGEST)) return ok();
-      const r = replies.shift() ?? 'fail';
-      return r === 'fail' ? Promise.reject(new TypeError('Network request failed')) : answer(r);
+      if (String(url).startsWith(INGEST)) return answer(503); // ingest busy for this test
+      return Promise.reject(new TypeError('Network request failed'));
     };
-    for (let i = 0; i < 3; i++) await flushNow(q);
-    // fail (1), 503 (host answered: reset), fail (1): no fallback yet, the IDFA is kept.
-    expect(sent.map((s) => s.url)).toEqual([TRACKING, TRACKING, TRACKING]);
+    await flushNow(q); // tracking host fails (1)
+    phone.status = 2; // briefly revoked: this attempt goes to ingest (503), the row is broken
+    await flushNow(q);
+    phone.status = 3;
+    await flushNow(q); // tracking host fails (1 again): no fallback yet
+    expect(sent.map((s) => s.url)).toEqual([TRACKING, INGEST, TRACKING]);
     expect(q.getStats().queueSize).toBe(1);
     expect((q as any).queue[0].payload.eventData.idfa).toBe(IDFA);
+  });
+
+  test.each([403, 503])('an HTTP %i from the tracking host counts too: fallback after two, then the cool-down', async (code) => {
+    const q = await newQueue(newClient());
+    await enqueueQuiet(q, payload('a'));
+    (globalThis as any).fetch = async (url: string, init: any) => {
+      sent.push({ url: String(url), body: JSON.parse(init.body) });
+      return String(url).startsWith(TRACKING) ? answer(code) : ok();
+    };
+    await flushNow(q);
+    await flushNow(q);
+    expect(sent.map((s) => [s.body.event, s.url])).toEqual([['a', TRACKING], ['a', TRACKING], ['a', INGEST]]);
+    expect(sent[2].body.properties.idfa).toBeUndefined();
+    expect(q.getStats().queueSize).toBe(0);
+    sent = [];
+    await enqueueQuiet(q, payload('b'));
+    await flushNow(q);
+    expect(sent.map((s) => [s.body.event, s.url])).toEqual([['b', INGEST]]);
+  });
+
+  test('a 2xx from the tracking host is sent once, with no fallback copy', async () => {
+    const q = await newQueue(newClient());
+    await enqueueQuiet(q, payload('a'));
+    await flushNow(q);
+    expect(sent.map((s) => [s.body.event, s.url])).toEqual([['a', TRACKING]]);
+    expect(q.getStats().queueSize).toBe(0);
+  });
+
+  test('alart only: tracking host when authorized at start and now; otherwise ingest without it', async () => {
+    const client = newClient();
+    const alartOnly = (name: string): EventPayload => ({ ...payload(name), eventData: { alart: 'applovin_user_1', att_status: 3, advertiser_tracking_enabled: true } });
+    await client.sendEvent(alartOnly('x'));
+    phone.startStatus = 0; // a launch that was not authorized at start
+    await client.sendEvent(alartOnly('y'));
+    expect(sent.map((s) => [s.body.event, s.url])).toEqual([['x', TRACKING], ['y', INGEST]]);
+    expect(sent[0].body.properties.alart).toBe('applovin_user_1');
+    expect(sent[1].body.properties.alart).toBeUndefined();
+    expect(sent[1].body.properties.att_status).toBe(3);
   });
 
   test('after one fallback, IDFA events go straight to ingest for a cool-down, then the tracking host is tried again', async () => {

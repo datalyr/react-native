@@ -181,7 +181,8 @@ export class HttpClient {
     } catch {
       status = undefined; // unknown can never read as authorized
     }
-    if (status === 3 && !hasIdfa) {
+    // Authorization-only fields (a real IDFA, `alart`) go only to the tracking host.
+    if (status === 3 && !hasIdfa && data.alart === undefined) {
       return { url: this.endpoint, payload, viaTrackingHost: false };
     }
     if (
