@@ -22,6 +22,12 @@ export const MAX_RETRY_AFTER_MS = 10 * 60 * 1000;
  */
 export const TRACKING_HOST_FALLBACK_AFTER = 2;
 
+/**
+ * After the tracking host failed and the normal host answered, IDFA events go straight to
+ * the normal host (without the IDFA) for this long; then the tracking host is tried again.
+ */
+export const TRACKING_HOST_COOL_DOWN_MS = 10 * 60 * 1000;
+
 interface QueueConfig {
   maxQueueSize: number;
   batchSize: number;
@@ -265,6 +271,10 @@ export class EventQueue {
         for (const queuedEvent of eventsToProcess) {
           try {
             let response = await this.httpClient.sendEvent(queuedEvent.payload);
+            if (response.viaTrackingHost && response.status !== 0) {
+              // The tracking host answered (even an error): the count is of failures in a row.
+              queuedEvent.trackingHostFailures = 0;
+            }
             if (response.viaTrackingHost && !response.success && response.transient && response.status === 0) {
               // Nothing answered on the tracking host. iOS blocks it whenever tracking is
               // not authorized; the status is read just before the send, but if the block
@@ -274,6 +284,12 @@ export class EventQueue {
               if (queuedEvent.trackingHostFailures >= TRACKING_HOST_FALLBACK_AFTER) {
                 debugLog(`Tracking host keeps failing; sending without the IDFA to the normal host: ${queuedEvent.payload.eventName}`);
                 response = await this.httpClient.sendEvent(queuedEvent.payload, { avoidTrackingHost: true });
+                if (response.success) {
+                  // The normal host answered while the tracking host did not: send later IDFA
+                  // events straight to the normal host for a while instead of failing each one
+                  // twice first. Offline never gets here (the normal host must answer).
+                  this.httpClient.avoidTrackingHostFor(TRACKING_HOST_COOL_DOWN_MS);
+                }
               }
             }
 

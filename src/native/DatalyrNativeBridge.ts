@@ -59,6 +59,8 @@ interface DatalyrNativeModule {
     gaid?: string;
     att_status: number;
     advertiser_tracking_enabled: boolean;
+    // iOS, 1.9.0+ native code: the status when this app process started.
+    att_status_at_process_start?: number;
   } | null>;
 
   // Apple Search Ads Methods (iOS only)
@@ -184,6 +186,45 @@ export const AdvertiserInfoBridge = {
     }
   },
 };
+
+// MARK: - ATT status at process start (iOS only)
+
+// iOS lifts its block on the privacy manifest's tracking domains only for app processes
+// started AFTER the user allowed tracking: in the launch where the user taps "Allow",
+// requests to tracking.datalyr.com still fail although the status reads authorized. So the
+// tracking host may be used only when tracking was already authorized at process start.
+// Kept in memory only, never stored: the next process reads its own.
+let processStartRead: Promise<number | undefined> | null = null;
+const asAttStatus = (v: unknown): number | undefined => (v === 0 || v === 1 || v === 2 || v === 3 ? v : undefined);
+
+export const TrackingStartBridge = {
+  /**
+   * The ATT status when this process started, or undefined when unknown (never authorized).
+   * Prefers the native module's own value (captured when the module was created at app
+   * start, and it survives JS reloads). An older native binary lacks it: then the first read
+   * this JS runtime made, started when this file was loaded.
+   */
+  statusAtProcessStart(): Promise<number | undefined> {
+    if (!processStartRead) {
+      processStartRead = (async () => {
+        if (Platform.OS !== 'ios' || !DatalyrNative) return undefined;
+        try {
+          const info: any = await DatalyrNative.getAdvertiserInfo();
+          if (!info) return undefined;
+          return info.att_status_at_process_start !== undefined
+            ? asAttStatus(info.att_status_at_process_start)
+            : asAttStatus(info.att_status);
+        } catch {
+          return undefined;
+        }
+      })();
+    }
+    return processStartRead;
+  },
+};
+
+// As early as the JS side can: when the SDK's code is first loaded.
+if (Platform.OS === 'ios') void TrackingStartBridge.statusAtProcessStart();
 
 // MARK: - Play Install Referrer Bridge (Android only)
 

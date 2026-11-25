@@ -106,7 +106,8 @@ export class HttpClient {
   // Apple privacy manifest: NSPrivacyTracking=true REQUIRES a non-empty
   // NSPrivacyTrackingDomains, and iOS fails every request to a listed host until the
   // user grants ATT. So the manifest lists ONLY tracking.datalyr.com, and only events
-  // that carry the IDFA while ATT is authorized AT SEND TIME are sent there (routeFor);
+  // that carry the IDFA while ATT is authorized AT SEND TIME, and was already authorized
+  // when the app process started, are sent there (routeFor);
   // all other events go to ingest.datalyr.com and are never blocked. Same backend handler.
   static readonly TRACKING_ENDPOINT = 'https://tracking.datalyr.com/track';
 
@@ -118,6 +119,33 @@ export class HttpClient {
     this.trackingAuthorizationProvider = provider;
   }
 
+  // iOS: the status when this app process started. iOS lifts the tracking-domain block only
+  // for processes started after tracking was allowed. Not set (or unknown) = not authorized
+  // at start, so the tracking host is never used.
+  private statusAtProcessStartProvider: TrackingAuthorizationProvider | null = null;
+
+  setTrackingStatusAtProcessStartProvider(provider: TrackingAuthorizationProvider | null): void {
+    this.statusAtProcessStartProvider = provider;
+  }
+
+  // While set and in the future, IDFA events skip the tracking host (sent to the normal host
+  // without the IDFA): it failed while the normal host answered (see avoidTrackingHostFor).
+  private trackingHostAvoidedUntil = 0;
+
+  /** The tracking host failed and the normal host answered: skip it for `ms`, then try again. */
+  avoidTrackingHostFor(ms: number): void {
+    this.trackingHostAvoidedUntil = Date.now() + ms;
+  }
+
+  private async authorizedAtProcessStart(): Promise<boolean> {
+    if (!this.statusAtProcessStartProvider) return false;
+    try {
+      return (await this.statusAtProcessStartProvider()) === 3;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Where to send `payload`, and what to send. iOS checks the tracking domain when the
    * request is SENT, but the IDFA was copied into the event when it was BUILT: an event
@@ -126,6 +154,12 @@ export class HttpClient {
    * live status is authorized (3); otherwise the event goes to the normal host with the
    * IDFA and the other tracking-only fields removed (from a copy; the queued event keeps
    * them for a later authorized send).
+   *
+   * iOS also keeps blocking the tracking host for the rest of the launch in which the user
+   * allowed tracking. So it is used only when tracking was ALREADY authorized when this
+   * process started; until the next launch an authorized event goes to the normal host
+   * without the IDFA (its status fields stay true). The same applies during the cool-down
+   * after the tracking host failed while the normal host answered.
    */
   private async routeFor(payload: EventPayload, options?: SendOptions): Promise<{ url: string; payload: EventPayload; viaTrackingHost: boolean }> {
     if (this.config.useServerTracking === false) return { url: this.endpoint, payload, viaTrackingHost: false };
@@ -147,10 +181,16 @@ export class HttpClient {
     } catch {
       status = undefined; // unknown can never read as authorized
     }
-    if (status === 3 && !options?.avoidTrackingHost) {
-      return hasIdfa
-        ? { url: HttpClient.TRACKING_ENDPOINT, payload, viaTrackingHost: true }
-        : { url: this.endpoint, payload, viaTrackingHost: false };
+    if (status === 3 && !hasIdfa) {
+      return { url: this.endpoint, payload, viaTrackingHost: false };
+    }
+    if (
+      status === 3 &&
+      !options?.avoidTrackingHost &&
+      Date.now() >= this.trackingHostAvoidedUntil &&
+      (await this.authorizedAtProcessStart())
+    ) {
+      return { url: HttpClient.TRACKING_ENDPOINT, payload, viaTrackingHost: true };
     }
     const stripped: Record<string, unknown> = { ...data };
     for (const key of TRACKING_ONLY_KEYS) delete stripped[key];
