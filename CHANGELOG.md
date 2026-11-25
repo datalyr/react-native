@@ -47,9 +47,9 @@ Minor version. Read the install change below before upgrading.
 
   Both are native modules. React Native CLI autolinking links only the packages listed in the app's own `package.json`, and Expo before SDK 54 does the same, so as nested dependencies they could load without their native code. An app that already lists both needs no change. AsyncStorage 3.x is not supported yet (it renames `multiRemove` to `removeMany`).
 
-  `react-native-get-random-values` 2.x works only on React Native 0.81 or later with the New Architecture on (Expo SDK 54 or later with it on). On an older React Native, or with the New Architecture off, install `react-native-get-random-values@^1`: 2.x installs there without a warning, but its iOS native module is registered only for the New Architecture, so the SDK fails at start and sends no events. `npx expo install` picks the version your Expo SDK expects (1.11 for Expo SDK 52 to 57, 2.x for SDK 58).
+  `react-native-get-random-values` 2.x works only on React Native 0.81 or later with the New Architecture on (Expo SDK 54 or later with it on). On an older React Native, or with the New Architecture off, install `react-native-get-random-values@^1`. On React Native older than 0.81, npm refuses 2.x (`ERESOLVE`); with the New Architecture off, 2.x installs without a warning, but its iOS native module is registered only for the New Architecture, so the SDK fails at start and sends no events. `npx expo install` picks the version your Expo SDK expects (1.11 for Expo SDK 52 to 57, 2.x for SDK 58).
 
-  Bare apps on Expo SDK 54: `install-expo-modules` does not add `bindReactNativeFactory(factory)` to `AppDelegate.swift`, and the app crashes at start without it. Add it after `reactNativeFactory = factory` (Expo's manual installation steps show it).
+  Bare apps on Expo SDK 53 or 54 (React Native 0.78 to 0.81): `install-expo-modules` does not add `bindReactNativeFactory(factory)` to `AppDelegate.swift`, and the app crashes at start without it. Add it after `reactNativeFactory = factory` (Expo's manual installation steps show it).
 
 
 ## [1.8.0] - 2026-10-30
